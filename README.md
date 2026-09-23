@@ -172,8 +172,9 @@ from the latest release (or build it: `python3 tools/package_skill.py` → `dist
 ## Usage
 
 ```
-ascii2svg [INPUT] [-o OUT.svg|OUT.html] [--html] [--json] [--color] [--theme light|dark|auto]
-          [--animate [draw|flow|scroll]] [--style glow|shadow|flat] [--square]
+ascii2svg [INPUT] [-o OUT.svg|OUT.html] [--preset NAME] [--json] [--check] [--describe] [--brief]
+          [--color] [--theme light|dark|auto] [--animate [draw|flow|scroll]] [--html]
+          [--style glow|shadow|flat] [--square] [--unescape] [--strict] [--schema]
           [--png [PATH]] [--strict] [--text TEXT] [--tab-size N] [--title TEXT]
 ```
 
@@ -206,64 +207,84 @@ character grid and compares it with the input, cell by cell. ASCII characters ma
 the line they stand for (`-`→`─`, `|`→`│`, `+`→corner or junction, `v`→`▼`). Any mismatch is
 exit code 2. This covers every look, including animated ones and the still frame used for PNGs.
 
-## JSON report
+## Built for agents
+
+Every outcome is machine-readable, nothing hangs, and every problem comes with a fix.
+
+**The loop:** draft the diagram, check it, fix what the hints say, then render.
+
+```bash
+ascii2svg draft.txt --check --describe      # validate + structure; writes nothing
+ascii2svg draft.txt -o out.svg --preset readme --json --brief
+```
+
+```json
+{"status": "warnings",
+ "summary": "Rendered 2 boxes and 0 arrows (8x8); 1:1 self-check exact. 1 warning, first: row 4 col 4 (dangling_line): the arrowhead 'v' at row 5 col 5 is one column right; move one of them so they line up",
+ "exit_code": 0, "...": "..."}
+```
+
+- **One JSON object on stdout for every outcome** with `--json` (or `--check`), including usage
+  errors: `{"status": "usage_error", "hint": "'--colour': did you mean --color?"}`. `status` and
+  `summary` come first, so a truncated report still says what happened. The JSON is ASCII-safe,
+  so any harness on any OS decodes it the same way.
+- **Warnings you can act on:** each has a stable `code`, a 1-based `row`/`col`, the source `line`,
+  and a `hint`. When a line misses its partner by one cell, the hint says where it is.
+- **Silently wrong input is caught:** one-line input with literal `\n` (`escaped_newlines`; fix it with
+  `--unescape`), and ASCII box pieces that never close (`no_structure`).
+- **`--describe`** adds what the diagram *says*: boxes (name, title, text, position, parent) and
+  edges (`Gateway → Orders`), so you can check that the picture means what you intended.
+- **`--preset readme|slides|chat|print|dark|page`** picks the look from the destination.
+  Explicit flags still win (`--preset readme --no-color`).
+- **`--brief`** never embeds the markup; without it, `--json` without `-o` returns the markup
+  inline, which can run to 150 KB for a large diagram.
+- **No hangs:** if you forget the input and stdin stays silent, it fails after 5 seconds with
+  `bad_input`. Pass `-` to wait for stdin on purpose.
+- **`--schema`** prints every option (kind, choices, default), preset, exit code, warning code and
+  report field as JSON: enough to build a correct tool definition without reading docs.
+
+### Report fields
 
 | Field | Meaning |
 |---|---|
-| `ok`, `exit_code` | Overall result (see exit codes) |
-| `roundtrip` | `exact`: the SVG was read back and matches the input cell for cell |
-| `rows`, `cols`, `boxes`, `arrowheads`, `text_cells` | What was found |
-| `flows` | Connectors animated with `--animate flow` (one per arrowhead route) |
-| `style`, `theme`, `color`, `animate` | The look that was rendered |
-| `ascii_drawn_as_lines` | ASCII characters drawn as lines |
-| `ascii_line_like_kept_as_text` | ASCII `- \| +` not drawn because they don't attach to anything |
-| `normalized` | Every clean-up applied (tabs, odd spaces, zero-width and control characters, colour codes, code fence, indentation, bad UTF-8) |
-| `warnings` | Line ends that meet nothing, with 1-based `row`/`col`. Usually a misaligned source |
-| `tips` | Suggestions, e.g. "tall diagram: use `--animate scroll`" when a timed animation would finish off-screen |
-| `svg` / `html`, `png` | Output paths (or the markup itself when no `-o` is given) |
+| `status` | `ok` · `warnings` · `self_check_failed` · `bad_input` · `usage_error` |
+| `summary` | One sentence to pass on to the user |
+| `exit_code`, `ok` | See exit codes; `ok` is false only when the self-check failed |
+| `roundtrip` | `exact`: the output was read back and matches the input cell for cell |
+| `warnings` | `{code, row, col, char, line, issue, hint}`; codes: `dangling_line`, `broken_join`, `escaped_newlines`, `no_structure` |
+| `diagram` | With `--describe`: `{boxes: [...], edges: [{from, to}]}`; an endpoint is `{box, name}`, `{text}` or `{cell}` |
+| `rows`, `cols`, `boxes`, `arrowheads`, `flows`, `text_cells` | What was found |
+| `style`, `theme`, `color`, `animate`, `html`, `preset` | The look that was rendered |
+| `ascii_drawn_as_lines`, `ascii_line_like_kept_as_text` | How ASCII `- \| + v ^ < >` were read |
+| `normalized` | Every clean-up applied (tabs, odd spaces, zero-width and control characters, colour codes, code fence, indentation, bad UTF-8, `--unescape`) |
+| `tips` | Suggestions, e.g. `--animate scroll` when a timed animation would finish off-screen |
+| `svg` / `html`, `png` | Output paths, or the markup itself when there is no `-o` (unless `--brief` / `--check`) |
 | `self_check_problems` | Only when `roundtrip` isn't exact |
 
-## Exit codes
+### Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | OK (warnings allowed) |
-| 1 | Bad input or usage (message in `error`) |
-| 2 | Self-check failed: the SVG is not 1:1. Don't use it |
+| 1 | Bad input or usage: read `error` and `hint` |
+| 2 | Self-check failed: the output is not 1:1. Don't use it |
 | 3 | `--strict` and there were warnings |
 
-## Using it from any agent framework
+### As a tool in any agent framework
 
-Expose it as one tool and run the CLI in the handler:
-
-```json
-{
-  "name": "render_ascii_diagram",
-  "description": "Render an ASCII/Unicode box diagram to an SVG file, keeping every character in place. Returns a JSON report; exit_code 0 means success.",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "diagram": {"type": "string", "description": "The diagram text (a markdown code block is fine)"},
-      "output_path": {"type": "string", "description": "Where to write the .svg"},
-      "color": {"type": "boolean", "description": "Tint boxes by group and colour the arrows"},
-      "theme": {"type": "string", "enum": ["light", "dark", "auto"]},
-      "animate": {"type": "string", "enum": ["none", "draw", "flow", "scroll"],
-                  "description": "scroll needs output_path ending in .html"}
-    },
-    "required": ["diagram", "output_path"]
-  }
-}
-```
+Pass the diagram on stdin (or as a file), never through `--text`: escaped newlines are the most
+common way agents break diagrams.
 
 ```python
-import json, subprocess, sys
+import json, subprocess
 
-def render_ascii_diagram(diagram, output_path, color=False, theme="light", animate="none"):
-    args = [sys.executable, "scripts/ascii2svg.py", "-o", output_path, "--json",
-            "--theme", theme, "--animate", animate] + (["--color"] if color else [])
-    p = subprocess.run(args, input=diagram.encode(), capture_output=True)
-    return json.loads(p.stdout)          # always JSON, including on errors
+def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
+    args = ["ascii2svg", "-", "-o", output_path, "--preset", preset, "--json", "--brief"]
+    p = subprocess.run(args + (["--describe"] if describe else []), input=diagram.encode(), capture_output=True)
+    return json.loads(p.stdout)          # always one JSON object, including on errors
 ```
+
+Or skip the subprocess and call the library: `svg, report = ascii2svg.render(diagram, preset="readme")`.
 
 ## Tests
 
@@ -272,7 +293,7 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-28 tests over 11 test diagrams:
+40 tests over 11 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
@@ -284,6 +305,9 @@ python3 docs/build.py                  # regenerate every image in this README
 - byte-identical repeat runs
 - width fallback vs `wcwidth`
 - CLI behaviour, including UTF-8 output on Windows consoles, and the `render()` library API
+- the agent contract: JSON usage errors (never exit 2), status and summary, near-miss hints,
+  escaped-newline and broken-box detection, `--describe` edges, presets, `--schema`, and no hang
+  on a forgotten input
 
 They pass with and without the optional packages.
 

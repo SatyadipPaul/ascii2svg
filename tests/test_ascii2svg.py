@@ -254,7 +254,7 @@ def test_glow_check_can_fail():
 # ── command line ─────────────────────────────────────────────────────────────
 def test_cli_stdin_text_and_inline_svg():
     code, out, err = cli(stdin=fx("ascii_basic.txt").encode())
-    assert code == 0 and out.startswith("<svg") and "round-trip=exact" in err
+    assert code == 0 and out.startswith("<svg") and "self-check exact" in err
     code, out, _ = cli("--text", fx("ascii_basic.txt"), "--json")
     r = json.loads(out)
     assert code == 0 and r["svg"].startswith("<svg") and r["boxes"] == 3
@@ -321,13 +321,131 @@ def test_cli_looks():
     r = json.loads(out)
     assert (code, r["animate"], r["color"], r["theme"], r["flows"], r["roundtrip"]) == (0, "flow", True, "auto", 4, "exact")
     assert "prefers-color-scheme:dark" in r["svg"] and "<animateMotion" in r["svg"]
-    assert cli("--text", "+--+", "--animate", "sideways")[0] == 2           # argparse rejects it
+    assert cli("--text", "+--+", "--animate", "sideways")[0] == 1           # usage error: 1, never 2
     assert cli("--text", "+--+", "--animate", "scroll")[0] == 1               # scroll needs a web page
     code, out, _ = cli(os.path.join(FX, "complex_unicode.txt"), "--json", "--html", "--animate", "scroll")
     r = json.loads(out)
     assert code == 0 and r["html"].startswith("<!doctype html>") and r["roundtrip"] == "exact" and not r["tips"]
     r = json.loads(cli(os.path.join(FX, "complex_unicode.txt"), "--json", "--animate")[1])
     assert r["tips"] and "scroll" in r["tips"][0]                             # tall + timed: suggest scroll
+
+
+# ── agent contract ───────────────────────────────────────────────────────────
+MISALIGNED = "+------+\n| api  |\n+--+---+\n   |\n    v\n+------+\n| db   |\n+------+\n"
+
+
+def test_usage_errors_are_json_and_never_exit_2():
+    code, out, _ = cli("--text", "+--+", "--animate", "sideways", "--json")
+    r = json.loads(out)
+    assert (code, r["status"], r["exit_code"]) == (1, "usage_error", 1) and "flow" in r["choices"], r
+    code, out, _ = cli("--text", "+--+", "--colour", "--json")
+    r = json.loads(out)
+    assert code == 1 and "--color" in r["hint"], r
+    code, out, err = cli("--text", "+--+", "--colour")                        # no --json: hint on stderr
+    assert code == 1 and out == "" and "hint:" in err and "--color" in err
+
+
+def test_json_is_ascii_safe():
+    code, out, _ = cli(os.path.join(FX, "complex_unicode.txt"), "--json")
+    assert out.isascii() and json.loads(out)["roundtrip"] == "exact"
+
+
+def test_status_and_summary_come_first():
+    code, out, _ = cli(os.path.join(FX, "ascii_fanout.txt"), "--json", "--brief")
+    r = json.loads(out)
+    assert list(r)[:3] == ["status", "summary", "exit_code"] and r["status"] == "ok"
+    assert "3 boxes and 4 arrows" in r["summary"] and "svg" not in r              # --brief: no markup
+
+
+def test_escaped_newlines_are_caught_and_can_be_fixed():
+    code, out, _ = cli("--text", r"+----+\n| hi |\n+----+", "--json", "--brief")
+    r = json.loads(out)
+    assert r["status"] == "warnings" and r["warnings"][0]["code"] == "escaped_newlines", r
+    code, out, _ = cli("--text", r"+----+\n| hi |\n+----+", "--json", "--brief", "--unescape")
+    r = json.loads(out)
+    assert (r["status"], r["boxes"], r["rows"]) == ("ok", 1, 3), r
+
+
+def test_near_miss_gets_a_concrete_fix():
+    code, out, _ = cli("-", "--json", "--brief", stdin=MISALIGNED.encode())
+    r = json.loads(out)
+    w = r["warnings"][0]
+    assert (r["status"], w["code"], w["row"], w["col"]) == ("warnings", "dangling_line", 4, 4), r
+    assert "row 5 col 5" in w["hint"] and "one column right" in w["hint"] and w["hint"] in r["summary"]
+    fixed = MISALIGNED.replace("    v", "   v")
+    r = json.loads(cli("-", "--json", "--brief", stdin=fixed.encode())[1])
+    assert (r["status"], r["arrowheads"]) == ("ok", 1), r
+
+
+def test_broken_join_names_the_right_character():
+    _, report = a2s.render("┌──┐\n│  │\n└──┘\n─│\n")
+    joins = [w for w in report["warnings"] if w["code"] == "broken_join"]
+    assert joins and "┤" in joins[0]["hint"], report["warnings"]
+
+
+def test_no_structure_only_for_broken_boxes():
+    _, report = a2s.render("+----+\n| hi |\n+---+\n")                          # bottom edge too short
+    assert [w["code"] for w in report["warnings"]] == ["no_structure"], report["warnings"]
+    for name in ("markdown_table.txt", "ascii_tree.txt", "ascii_labels.txt"):
+        assert not [w for w in a2s.render(fx(name))[1]["warnings"] if w["code"] == "no_structure"], name
+
+
+def test_check_validates_and_writes_nothing(tmp=os.path.join(HERE, "_tmp_check.svg")):
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    code, out, _ = cli(os.path.join(FX, "ascii_fanout.txt"), "-o", tmp, "--check")
+    r = json.loads(out)
+    assert code == 0 and r["status"] == "ok" and not os.path.exists(tmp) and "svg" not in r
+
+
+def test_describe_says_what_connects_to_what():
+    _, report = a2s.render(fx("ascii_fanout.txt"), describe=True)
+    d = report["diagram"]
+    assert [b["name"] for b in d["boxes"]] == ["Gateway", "Orders", "Payments"]
+    edges = {(e["from"].get("name") or e["from"].get("text"), e["to"].get("name") or e["to"].get("text"))
+             for e in d["edges"]}
+    assert edges == {("Gateway", "Orders"), ("Gateway", "Payments"), ("Payments", "Orders"),
+                     ("Orders", "audit.log")}, edges
+    _, report = a2s.render(fx("complex_unicode.txt"), describe=True)
+    names = {(e["from"].get("name"), e["to"].get("name")) for e in report["diagram"]["edges"]}
+    assert ("JWT AuthFilter", "RateLimiter") in names and ("RateLimiter", "Router") in names
+    byname = {b["name"]: b for b in report["diagram"]["boxes"]}
+    assert byname["TaxCalculator"]["parent"] == byname["PricingEngine"]["id"]
+
+
+def test_presets_and_explicit_flags():
+    _, r = a2s.render(fx("ascii_fanout.txt"), preset="readme")
+    assert (r["theme"], r["color"], r["animate"], r["preset"]) == ("auto", True, "flow", "readme")
+    _, r = a2s.render(fx("ascii_fanout.txt"), preset="readme", animate="draw", color=False)
+    assert (r["theme"], r["color"], r["animate"]) == ("auto", False, "draw")
+    page, r = a2s.render(fx("ascii_fanout.txt"), preset="page")
+    assert page.startswith("<!doctype html>") and r["html"] is True and r["animate"] == "scroll"
+    r = json.loads(cli(os.path.join(FX, "ascii_fanout.txt"), "--check", "--preset", "dark", "--no-color")[1])
+    assert (r["theme"], r["color"]) == ("dark", False)
+
+
+def test_schema_describes_every_option():
+    code, out, _ = cli("--schema")
+    s = json.loads(out)
+    listed = {f for o in s["options"] for f in o["flags"]}
+    real = {f for a in a2s.build_parser()._actions for f in a.option_strings} - {"-h", "--help", "--version"}
+    assert code == 0 and real <= listed and set(s["presets"]) == set(a2s.PRESETS)
+    assert set(s["exit_codes"]) == {"0", "1", "2", "3"}
+    assert {"dangling_line", "broken_join", "escaped_newlines", "no_structure"} <= set(s["warning_codes"])
+
+
+def test_forgotten_input_fails_instead_of_hanging():
+    env = {**os.environ, "ASCII2SVG_STDIN_WAIT": "0.5"}
+    p = subprocess.Popen([sys.executable, CLI, "--json"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env)
+    try:
+        code = p.wait(timeout=20)                                              # stdin stays open, never written
+        r = json.loads(p.stdout.read())
+    finally:
+        p.stdin.close()
+        p.stdout.close()
+        if p.poll() is None:
+            p.kill()
+    assert code == 1 and r["status"] == "bad_input" and "nothing arrived" in r["error"], r
 
 
 if __name__ == "__main__":

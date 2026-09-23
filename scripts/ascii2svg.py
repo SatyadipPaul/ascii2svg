@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -448,21 +448,25 @@ def head_geometry(r, c, d, line_like):
     return (x0 + CW, cy, tip + 6, cy), ((tip + 8, cy - 4), (tip + 8, cy + 4), (tip, cy)), (tip, cy)
 
 
-def flow_paths(get, heads, boxes, line_like, limit=200):
-    """Every route that ends in an arrowhead, as points from its source to the tip.
-
-    Walks backwards from each arrowhead along connector lines. A route starts at a box
-    edge (or where the line begins in open space); branches that lead into another
-    arrowhead are dropped. A ┼ / ╪ is a crossing: the route goes straight through,
-    which is also how a connector passes through a box edge."""
+def box_border(boxes):
     border = set()
     for r1, c1, r2, c2 in boxes:
         border.update((r, c) for r in (r1, r2) for c in range(c1, c2 + 1))
         border.update((r, c) for c in (c1, c2) for r in range(r1, r2 + 1))
-    centre = lambda r, c: (PAD + c * CW + CW / 2, PAD + r * CH + CH / 2)
+    return border
+
+
+def trace_routes(get, heads, boxes, limit=200):
+    """Every route that ends in an arrowhead: (head, cells from the head back to the source,
+    kind, last step). kind is "box" when the route starts on a box edge, "open" when the line
+    begins in open space.
+
+    Walks backwards from each arrowhead along connector lines; branches that lead into another
+    arrowhead are dropped. A ┼ / ╪ is a crossing: the route goes straight through, which is
+    also how a connector passes through a box edge."""
+    border = box_border(boxes)
     out = []
     for r, c, d in heads:
-        tip = head_geometry(r, c, d, line_like)[2]
         stack = [((r, c), OPP[d], [(r, c)])]
         while stack and len(out) < limit:
             (cr, cc), step, seq = stack.pop()
@@ -472,17 +476,29 @@ def flow_paths(get, heads, boxes, line_like, limit=200):
                 continue                                        # leads into another arrow: not a source
             if t not in ARMS or back not in ARMS[t] or n in seq:
                 if len(seq) > 1:                                # line starts in open space
-                    x, y = centre(*seq[-1])
-                    start = (x + DIRS[step][1] * CW / 2, y + DIRS[step][0] * CH / 2)
-                    out.append([start] + [centre(*k) for k in reversed(seq)] + [tip])
+                    out.append(((r, c, d), seq, "open", step))
                 continue
             seq = seq + [n]
             crossing = len(ARMS[t]) == 4                       # ┼ ╪: lines pass straight through
             if n in border and not crossing:
-                out.append([centre(*k) for k in reversed(seq)] + [tip])   # starts on a box edge
+                out.append(((r, c, d), seq, "box", step))       # starts on a box edge
                 continue
             for a in ([step] if crossing else sorted(ARMS[t] - {back}, reverse=True)):
                 stack.append((n, a, seq))
+    return out
+
+
+def flow_paths(get, heads, boxes, line_like, limit=200):
+    """Every route that ends in an arrowhead, as points from its source to the tip."""
+    centre = lambda r, c: (PAD + c * CW + CW / 2, PAD + r * CH + CH / 2)
+    out = []
+    for (r, c, d), seq, kind, step in trace_routes(get, heads, boxes, limit):
+        tip = head_geometry(r, c, d, line_like)[2]
+        pts = [centre(*k) for k in reversed(seq)] + [tip]
+        if kind == "open":
+            x, y = centre(*seq[-1])
+            pts.insert(0, (x + DIRS[step][1] * CW / 2, y + DIRS[step][0] * CH / 2))
+        out.append(pts)
     routes = []
     for pts in out:
         keep = [pts[0]]
@@ -887,9 +903,28 @@ def self_check(svg, drawn_cells, original_cells):
     return problems
 
 
+def _near_miss(get, r, c, a):
+    """A line at (r, c) runs toward a and hits empty space. Is its partner one cell off to the side?"""
+    dr, dc = DIRS[a]
+    nr, nc = r + dr, c + dc
+    want_head = {"D": "v▼", "U": "^▲", "R": ">▶", "L": "<◀"}[a]
+    for side, (sr, sc) in (("right", (0, 1)), ("left", (0, -1))) if a in "UD" else (("below", (1, 0)), ("above", (-1, 0))):
+        t = get(nr + sr, nc + sc)
+        if t in want_head or (t in ARMS and OPP[a] in ARMS[t]):
+            what = "the arrowhead" if t in want_head else "the line"
+            axis = "column" if a in "UD" else "row"
+            return (f"{what} '{t}' at row {nr + sr + 1} col {nc + sc + 1} is one {axis} {side}; "
+                    f"move one of them so they line up")
+    return None
+
+
 def connector_warnings(cells, nrows, ncols, limit=50):
-    """Line ends that don't meet anything - usually a misaligned diagram."""
+    """Line ends that don't meet anything - usually a misaligned diagram.
+
+    Each warning has a stable `code`, 1-based `row`/`col`, the source `line`, and a `hint`
+    (a concrete fix when the partner character is one cell off)."""
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    line = lambda r: "".join(cells[(r, c)][0] for c in range(ncols) if (r, c) in cells).rstrip()
     out = []
     for (r, c) in sorted(cells):
         t = get(r, c)
@@ -898,40 +933,187 @@ def connector_warnings(cells, nrows, ncols, limit=50):
         for a in sorted(ARMS[t]):
             dr, dc = DIRS[a]
             n, back = get(r + dr, c + dc), OPP[a]
+            w = {"row": r + 1, "col": c + 1, "char": t, "line": line(r)}
             if n in ARMS:
                 if back not in ARMS[n]:
-                    out.append({"row": r + 1, "col": c + 1, "char": t, "issue": f"line toward {a} meets '{n}' which doesn't connect back"})
+                    fixed = SINGLE_OF.get(ARMS[n] | {back}) if n not in DOUBLE else None
+                    w.update(code="broken_join", issue=f"line toward {a} meets '{n}' which doesn't connect back",
+                             hint=(f"use '{fixed}' instead of '{n}' at row {r + dr + 1} col {c + dc + 1}" if fixed
+                                   else f"'{n}' at row {r + dr + 1} col {c + dc + 1} has no arm toward this line"))
+                    out.append(w)
             elif n in HEADS:
                 continue
             elif t in "─═" or (a == "U" and n.strip()):
                 continue                                  # a line may end at text; a tree may hang from a label
             else:
-                out.append({"row": r + 1, "col": c + 1, "char": t, "issue": f"line toward {a} ends in empty space"})
+                w.update(code="dangling_line", issue=f"line toward {a} ends in empty space",
+                         hint=_near_miss(get, r, c, a) or "extend the line to a box or an arrowhead, or remove it")
+                out.append(w)
             if len(out) >= limit:
                 return out
     return out
 
 
+def input_warnings(raw, cells, info):
+    """Input that renders 'successfully' but not as intended."""
+    out = []
+    body = raw.strip("\r\n")
+    if "\n" not in body and "\\n" in body:
+        out.append({"code": "escaped_newlines", "row": 1, "col": body.index("\\n") + 1,
+                    "issue": "the input is one line containing literal \\n sequences",
+                    "hint": "pass real newlines (write the diagram to a file or stdin), or add --unescape"})
+    unicode_lines = any(t in ARMS or t in HEADS for t, _ in cells.values())
+    if not unicode_lines and not info["ascii_drawn_as_lines"] and re.search(r"\+-|-\+", raw):
+        out.append({"code": "no_structure", "row": 1, "col": 1,
+                    "issue": "ASCII box pieces (+-) were found but nothing was drawn as lines",
+                    "hint": "close every box: '+' at all four corners, '-' along the top and bottom, "
+                            "'|' down both sides, all in matching columns"})
+    return out
+
+
+def unescape(text):
+    r"""Turn literal \n, \t, \r, \" and \\ into the characters they stand for (for --unescape)."""
+    return re.sub(r'\\(n|t|r|"|\\)', lambda m: {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}[m.group(1)], text)
+
+
+# ─── structure: what the diagram says (--describe) ───────────────────────────
+def describe(cells, nrows, ncols):
+    """Boxes (with titles and text) and edges (which box each arrow connects), in reading order.
+
+    Lets an agent check that the picture means what it intended, e.g. that an arrow really
+    runs from "API" to "DB"."""
+    get = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    is_text = lambda t: t not in (" ", "") and t not in ARMS and t not in HEADS
+    boxes = sorted(find_boxes(get, nrows, ncols))
+    inside = lambda a, b: a != b and b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
+    ids = {b: f"b{i}" for i, b in enumerate(boxes, 1)}
+    squash = lambda s: " ".join(s.split())
+
+    def row_text(r, c1, c2, skip=()):
+        out = []
+        for c in range(c1, c2 + 1):
+            t = get(r, c)
+            if t == "":
+                continue                                  # second half of a wide character
+            hidden = any(k[0] <= r <= k[2] and k[1] <= c <= k[3] for k in skip)
+            out.append(t if is_text(t) and not hidden else " ")
+        return squash("".join(out))
+
+    def text_run(r, c):
+        """The words around (r, c) on one row, allowing single spaces between them."""
+        a = b = c
+        while is_text(get(r, a - 1)) or (get(r, a - 1) == " " and is_text(get(r, a - 2))):
+            a -= 1
+        while is_text(get(r, b + 1)) or (get(r, b + 1) == " " and is_text(get(r, b + 2))):
+            b += 1
+        return squash("".join(get(r, x) for x in range(a, b + 1)))
+
+    info = {}
+    for b in boxes:
+        r1, c1, r2, c2 = b
+        kids = [k for k in boxes if inside(k, b)]
+        title = row_text(r1, c1 + 1, c2 - 1)
+        text = [t for t in (row_text(r, c1 + 1, c2 - 1, kids) for r in range(r1 + 1, r2)) if t]
+        parents = [p for p in boxes if inside(b, p)]
+        parent = min(parents, key=lambda p: (p[2] - p[0]) * (p[3] - p[1])) if parents else None
+        info[b] = {"id": ids[b], "name": title or (text[0] if text else ""), "title": title or None,
+                   "text": text, "row": r1 + 1, "col": c1 + 1, "rows": r2 - r1 + 1, "cols": c2 - c1 + 1,
+                   "parent": ids[parent] if parent else None}
+
+    def on_border(cell):
+        hits = [b for b in boxes if cell in box_border([b])]
+        return min(hits, key=lambda b: (b[2] - b[0]) * (b[3] - b[1])) if hits else None
+
+    def endpoint(cell, step):
+        """What sits at `cell` (or one blank cell further along `step`)."""
+        for k in (0, 1):
+            r, c = cell[0] + k * DIRS[step][0], cell[1] + k * DIRS[step][1]
+            b = on_border((r, c))
+            if b:
+                return {"box": ids[b], "name": info[b]["name"]}
+            if is_text(get(r, c)):
+                return {"text": text_run(r, c)}
+            if get(r, c) != " ":
+                break
+        return {"cell": [cell[0] + 1, cell[1] + 1]}
+
+    heads = [(r, c, HEADS[t]) for (r, c), (t, _) in sorted(cells.items()) if t in HEADS]
+    edges, seen = [], set()
+    for (r, c, d), seq, kind, step in trace_routes(get, heads, boxes):
+        src = seq[-1]
+        if kind == "box":
+            b = on_border(src)
+            frm = {"box": ids[b], "name": info[b]["name"]} if b else {"cell": [src[0] + 1, src[1] + 1]}
+        else:
+            frm = endpoint((src[0] + DIRS[step][0], src[1] + DIRS[step][1]), step)
+        to = endpoint((r + DIRS[d][0], c + DIRS[d][1]), d)
+        key = json.dumps([frm, to], sort_keys=True)
+        if key not in seen:
+            seen.add(key)
+            edges.append({"from": frm, "to": to})
+    return {"boxes": [info[b] for b in boxes], "edges": edges}
+
+
 # ─── command line ────────────────────────────────────────────────────────────
+PRESETS = {                                 # destination -> look; explicit flags still win
+    "readme": {"theme": "auto", "color": True, "animate": "flow"},
+    "slides": {"color": True, "animate": "draw"},
+    "chat": {"color": True},
+    "print": {"style": "flat", "square": True},
+    "dark": {"theme": "dark", "color": True},
+    "page": {"theme": "auto", "color": True, "animate": "scroll", "html": True},
+}
+LOOK_DEFAULTS = {"style": "glow", "square": False, "theme": "light", "color": False, "animate": "none",
+                 "html": False}
+EXIT_CODES = {0: "ok (warnings allowed)", 1: "bad input or usage (see error and hint)",
+              2: "self-check failed: the output is not 1:1, do not use it",
+              3: "--strict was given and there were warnings"}
+WARNING_CODES = {
+    "dangling_line": "a line ends in empty space; hint says where its partner is when it is one cell off",
+    "broken_join": "a line meets a line character that has no arm toward it; hint names the right character",
+    "escaped_newlines": "one-line input containing literal \\n; pass real newlines or add --unescape",
+    "no_structure": "ASCII box pieces were found but no closed box, so everything stayed text",
+}
+REPORT_FIELDS = {
+    "status": "ok | warnings | self_check_failed | bad_input | usage_error",
+    "summary": "one sentence to pass on to the user",
+    "exit_code": "see exit_codes",
+    "ok": "true unless the self-check failed",
+    "roundtrip": "exact when the output was read back and matches the input cell for cell",
+    "warnings": "list of {code, row, col, issue, hint, ...}; row/col are 1-based",
+    "tips": "suggestions, e.g. to use --animate scroll for a tall diagram",
+    "normalized": "every clean-up applied to the input (tabs, odd spaces, code fence, indentation, ...)",
+    "rows, cols, boxes, arrowheads, flows, text_cells": "what was found",
+    "ascii_drawn_as_lines, ascii_line_like_kept_as_text": "how ASCII - | + v ^ < > were read",
+    "style, theme, color, animate, html, preset": "the look that was rendered",
+    "diagram": "with --describe: {boxes: [{id, name, title, text, row, col, rows, cols, parent}], "
+               "edges: [{from, to}]}; an endpoint is {box, name}, {text} or {cell}",
+    "svg / html, png": "output paths, or the markup itself when there is no -o (unless --brief or --check)",
+    "self_check_problems": "only when roundtrip is not exact",
+}
+STDIN_WAIT = 5.0                            # seconds to wait for implicit stdin before giving up
+
 HELP_EPILOG = """\
 examples:
-  cat diagram.txt | ascii2svg -o diagram.svg --json
-  ascii2svg notes.md -o out.svg            # a ```fenced``` block is unwrapped automatically
-  ascii2svg --text "$(cat d.txt)" --json   # no -o: the SVG markup is returned inside the JSON
-  ascii2svg d.txt -o d.svg --png           # also writes d.png (needs: pip install cairosvg)
-  ascii2svg d.txt -o d.svg --theme auto --color --animate flow   # for a GitHub README
-  ascii2svg d.txt -o d.html --color --animate scroll            # a page that reveals as you scroll
+  ascii2svg diagram.txt -o diagram.svg --json
+  ascii2svg diagram.txt --check --describe  # validate + list boxes and arrows; writes nothing
+  ascii2svg notes.md -o out.svg --preset readme   # a ```fenced``` block is unwrapped automatically
+  ascii2svg d.txt -o d.html --preset page         # a page that reveals as you scroll
+  ascii2svg --schema                        # every option, preset, report field as JSON
+
+presets (pick the destination; explicit flags still win):
+  readme  --theme auto --color --animate flow     slides  --color --animate draw
+  chat    --color (add --png for apps without SVG) print   --style flat --square
+  dark    --theme dark --color                    page    --html --theme auto --color --animate scroll
 
 looks (all optional, and all keep the 1:1 guarantee):
   --theme light|dark|auto   auto follows the viewer's light/dark setting
   --color                   tint boxes by group, colour the arrows
   --animate draw            the diagram draws itself once, top to bottom
   --animate flow            ...then pulses keep travelling along every arrow
-  --animate scroll          web page only: parts appear as the reader scrolls to them,
-                            long connectors grow with the scroll (best for tall diagrams)
+  --animate scroll          web page only: parts appear as the reader scrolls to them
   --html / -o NAME.html     write a standalone web page with the diagram inline
-  Viewers without animation support show the finished drawing. PNG output is
-  always the finished drawing (auto theme -> light).
+  PNG output is always the finished drawing (auto theme -> light).
 
 what gets drawn:
   Unicode lines ─│┌┐└┘├┤┬┴┼╭╮╰╯═║╔╗╚╝╪ and arrows ▼▲▶◀ are drawn as lines.
@@ -939,41 +1121,128 @@ what gets drawn:
   Everything else (hyphens in words, a->b, user_id, markdown tables) stays text,
   in exactly the same cell. When unsure, it stays text.
 
+for agents:
+  Pass the diagram as a file (or '-' for stdin); --text breaks on escaped newlines.
+  With --json every outcome is JSON on stdout, including usage errors. Read
+  "status" and "summary" first; warnings carry a code and a concrete hint.
+
 exit codes:
-  0 ok (warnings allowed)   1 bad input or usage   2 self-check failed (SVG not 1:1)
+  0 ok (warnings allowed)   1 bad input or usage   2 self-check failed (output not 1:1)
   3 --strict was given and there were warnings
 """
 
 
+class UsageError(Exception):
+    pass
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message):                   # never exit 2 (that means "self-check failed")
+        raise UsageError(message)
+
+
 def build_parser():
-    p = argparse.ArgumentParser(
+    p = _Parser(
         prog="ascii2svg", formatter_class=argparse.RawDescriptionHelpFormatter, epilog=HELP_EPILOG,
         description="Render an ASCII/Unicode box diagram as SVG. Every character keeps its exact "
                     "position (1:1); a built-in check verifies this on every run.")
-    p.add_argument("input", nargs="?", help="diagram file, or '-' for stdin (default: stdin)")
+    p.add_argument("input", nargs="?", help="diagram file, or '-' for stdin")
     p.add_argument("--text", help="the diagram itself, instead of a file or stdin")
-    p.add_argument("-o", "--output", help="write the SVG here (default: stdout, or inside the JSON)")
-    p.add_argument("--style", choices=["glow", "shadow", "flat"], default="glow",
-                   help="box depth effect (default: glow)")
-    p.add_argument("--square", action="store_true", help="keep box corners square")
-    p.add_argument("--theme", choices=["light", "dark", "auto"], default="light",
+    p.add_argument("-o", "--output", help="write the SVG (or .html page) here (default: stdout, or inside the JSON)")
+    p.add_argument("--preset", choices=list(PRESETS), help="a look for a destination; explicit flags still win")
+    p.add_argument("--style", choices=["glow", "shadow", "flat"], help="box depth effect (default: glow)")
+    p.add_argument("--square", action=argparse.BooleanOptionalAction, help="keep box corners square")
+    p.add_argument("--theme", choices=["light", "dark", "auto"],
                    help="colours; auto follows the viewer's light/dark setting (default: light)")
-    p.add_argument("--color", action="store_true", help="tint boxes by group and colour the arrows")
-    p.add_argument("--animate", nargs="?", const="flow", choices=list(ANIMATIONS), default="none",
+    p.add_argument("--color", action=argparse.BooleanOptionalAction, help="tint boxes by group and colour the arrows")
+    p.add_argument("--animate", nargs="?", const="flow", choices=list(ANIMATIONS),
                    help="draw: the diagram draws itself; flow: draw, then pulses travel along the "
                         "arrows (bare --animate = flow); scroll: web page that reveals as you scroll")
+    p.add_argument("--html", action=argparse.BooleanOptionalAction,
+                   help="write a standalone web page (implied by -o NAME.html); needed for --animate scroll")
     p.add_argument("--png", nargs="?", const="", metavar="PATH",
                    help="also write a PNG (default path: next to -o). Needs cairosvg")
-    p.add_argument("--html", action="store_true",
-                   help="write a standalone web page (implied by -o NAME.html); needed for --animate scroll")
     p.add_argument("--json", action="store_true", help="print a machine-readable report on stdout")
-    p.add_argument("--strict", action="store_true", help="exit 3 if there are connector warnings")
+    p.add_argument("--check", action="store_true", help="validate only: print the JSON report, write nothing")
+    p.add_argument("--describe", action="store_true",
+                   help="add the diagram's structure to the report: boxes, and which box each arrow connects")
+    p.add_argument("--brief", action="store_true", help="keep the JSON small: never embed the markup")
+    p.add_argument("--strict", action="store_true", help="exit 3 if there are warnings")
+    p.add_argument("--unescape", action="store_true", help=r"turn literal \n, \t, \" and \\ in the input into real characters")
     p.add_argument("--tab-size", type=int, default=4, help="tab stops for tab characters (default: 4)")
     p.add_argument("--title", default="ASCII diagram", help="accessible title stored in the SVG")
-    p.add_argument("--max-rows", type=int, default=1000)
-    p.add_argument("--max-cols", type=int, default=400)
+    p.add_argument("--max-rows", type=int, default=1000, help="refuse larger input (default: 1000)")
+    p.add_argument("--max-cols", type=int, default=400, help="refuse wider input (default: 400)")
+    p.add_argument("--schema", action="store_true", help="print every option, preset and report field as JSON, then exit")
     p.add_argument("--version", action="version", version=f"ascii2svg {__version__}")
     return p
+
+
+def resolve_look(args):
+    """Fill the look options: explicit flag, else the preset, else the default."""
+    preset = PRESETS.get(args.preset or "", {})
+    if args.html is None:
+        args.html = preset.get("html", False) or bool(args.output and args.output.lower().endswith((".html", ".htm")))
+    for k, v in LOOK_DEFAULTS.items():
+        if getattr(args, k) is None:
+            setattr(args, k, preset.get(k, v))
+    return args
+
+
+def schema():
+    """Everything an agent needs to call the CLI correctly, as data."""
+    opts = []
+    for a in build_parser()._actions:
+        if a.dest in ("help", "version"):
+            continue
+        if isinstance(a, argparse.BooleanOptionalAction):
+            kind = "boolean"
+        elif a.nargs == 0:
+            kind = "flag"
+        elif a.choices:
+            kind = "choice"
+        elif a.type is int:
+            kind = "integer"
+        else:
+            kind = "string"
+        default = LOOK_DEFAULTS.get(a.dest, a.default)
+        opts.append({"flags": a.option_strings or [a.dest], "dest": a.dest, "kind": kind,
+                     "choices": list(a.choices) if a.choices else None, "default": default,
+                     "optional_value": a.const if a.nargs == "?" and a.option_strings else None,
+                     "help": a.help})
+    return {"name": "ascii2svg", "version": __version__,
+            "input": "a file path, '-' for stdin, or --text (a markdown file: its first code block is used)",
+            "options": opts, "presets": PRESETS, "exit_codes": {str(k): v for k, v in EXIT_CODES.items()},
+            "warning_codes": WARNING_CODES, "report_fields": REPORT_FIELDS,
+            "library": "ascii2svg.render(text, **options) -> (markup, report)"}
+
+
+def _read_stdin(explicit):
+    """Read stdin. Implicit stdin (no input argument) gives up if nothing arrives within
+    STDIN_WAIT seconds, so an agent that forgot the file gets an error instead of a hang."""
+    if sys.stdin is None or sys.stdin.isatty():
+        raise ValueError("no diagram given: pass a file path, '-' with stdin, or --text")
+    if explicit:
+        return sys.stdin.buffer.read()
+    import os
+    import threading
+    got, parts, fd = threading.Event(), [], sys.stdin.fileno()
+
+    def pull():                                  # raw fd reads: no buffer lock left held at exit
+        chunk = os.read(fd, 65536)
+        parts.append(chunk)
+        got.set()
+        while chunk:
+            chunk = os.read(fd, 65536)
+            parts.append(chunk)
+
+    t = threading.Thread(target=pull, daemon=True)
+    t.start()
+    if not got.wait(float(os.environ.get("ASCII2SVG_STDIN_WAIT", STDIN_WAIT))):
+        raise ValueError("no diagram given: nothing arrived on stdin. Pass a file path, "
+                         "'-' to wait for stdin, or --text")
+    t.join()
+    return b"".join(parts)
 
 
 def _read(args) -> tuple[str, list[dict]]:
@@ -986,19 +1255,22 @@ def _read(args) -> tuple[str, list[dict]]:
         except OSError as e:
             raise ValueError(f"cannot read {args.input}: {e.strerror}")
     else:
-        if sys.stdin is None or sys.stdin.isatty():
-            raise ValueError("no diagram given: pass a file, '-' with stdin, or --text")
-        data = sys.stdin.buffer.read()
+        data = _read_stdin(explicit=args.input == "-")
     text = data.decode("utf-8", errors="replace")
-    if "\ufffd" in text and b"\xef\xbf\xbd" not in data:
-        notes.append({"change": "invalid UTF-8 bytes replaced with \ufffd"})
+    if "�" in text and b"\xef\xbf\xbd" not in data:
+        notes.append({"change": "invalid UTF-8 bytes replaced with �"})
     return text, notes
 
 
 def run(args) -> tuple[int, dict, str, str]:
     """Core pipeline. Returns (exit_code, report, svg, static_svg_for_png)."""
-    text, notes = _read(args)
-    lines, more = prepare(text, args.tab_size)
+    raw, notes = _read(args)
+    if args.unescape:
+        new = unescape(raw)
+        if new != raw:
+            raw = new
+            notes.append({"change": "unescaped \\n, \\t, \\\" and \\\\ sequences"})
+    lines, more = prepare(raw, args.tab_size)
     notes += more
     if not lines:
         raise ValueError("the diagram is empty")
@@ -1016,9 +1288,9 @@ def run(args) -> tuple[int, dict, str, str]:
         still = render_svg(draw_cells, nrows, ncols, args.style, args.square, args.title,
                            "light" if args.theme == "auto" else args.theme, args.color)[0]
         problems += self_check(still, draw_cells, cells)
-    warnings = connector_warnings(draw_cells, nrows, ncols)
+    warnings = input_warnings(raw, cells, info) + connector_warnings(draw_cells, nrows, ncols)
     report = {"ok": not problems, "rows": nrows, "cols": ncols, "style": args.style, "theme": args.theme,
-              "color": args.color, "animate": args.animate,
+              "color": args.color, "animate": args.animate, "html": args.html, "preset": args.preset,
               "boxes": stats["boxes"], "arrowheads": stats["arrowheads"], "flows": stats["flows"],
               "text_cells": stats["text_cells"],
               **info, "roundtrip": "exact" if not problems else "MISMATCH",
@@ -1026,88 +1298,146 @@ def run(args) -> tuple[int, dict, str, str]:
               "version": __version__}
     if nrows > 45 and args.animate in ("draw", "flow") and not args.html:
         report["tips"].append("tall diagram: the lower part finishes drawing before the reader scrolls "
-                              "to it; for a web page use --animate scroll -o NAME.html")
+                              "to it; for a web page use --animate scroll -o NAME.html (or --preset page)")
+    if args.describe:
+        report["diagram"] = describe(draw_cells, nrows, ncols)
     if problems:
         report["self_check_problems"] = problems[:50]
         return 2, report, svg, still
     return (3 if args.strict and warnings else 0), report, svg, still
 
 
-def render(text: str, *, style: str = "glow", square: bool = False, theme: str = "light",
-           color: bool = False, animate: str = "none", html: bool = False,
-           title: str = "ASCII diagram", tab_size: int = 4) -> tuple[str, dict]:
+def _finish(report, code, where=None):
+    """Put status, summary and exit_code first, so a truncated report still says what happened."""
+    w = report["warnings"]
+    status = "self_check_failed" if code == 2 else "warnings" if w else "ok"
+    what = (f"{report['boxes']} box{'es' if report['boxes'] != 1 else ''} and "
+            f"{report['arrowheads']} arrow{'s' if report['arrowheads'] != 1 else ''} "
+            f"({report['rows']}x{report['cols']})")
+    if code == 2:
+        summary = f"Self-check FAILED: the output does not match the input 1:1; do not use it. Found {what}."
+    else:
+        summary = f"Rendered {what}{' to ' + where if where else ''}; 1:1 self-check exact."
+        if w:
+            summary += (f" {len(w)} warning{'s' if len(w) != 1 else ''}, first: row {w[0]['row']} col {w[0]['col']}"
+                        f" ({w[0]['code']}): {w[0]['hint']}")
+    return {"status": status, "summary": summary, "exit_code": code, **report}
+
+
+def render(text: str, *, preset: str | None = None, style: str | None = None, square: bool | None = None,
+           theme: str | None = None, color: bool | None = None, animate: str | None = None,
+           html: bool | None = None, title: str = "ASCII diagram", tab_size: int = 4,
+           describe: bool = False, unescape: bool = False, strict: bool = False) -> tuple[str, dict]:
     """Render a diagram. Returns (markup, report): an SVG, or a web page with html=True.
 
-    The report is the same dict the CLI prints with --json. Check report["roundtrip"] ==
-    "exact" (report["exit_code"] == 2 means the 1:1 self-check failed). Raises ValueError
-    for empty or oversized input, and for animate="scroll" without html=True.
+    Options match the CLI; unset look options come from `preset`, then the defaults
+    (glow, light, no colour, no animation). The report is what the CLI prints with --json:
+    check report["status"] ("ok" / "warnings"; "self_check_failed" means do not use the output).
+    Raises ValueError for empty or oversized input and for invalid options.
     """
     args = build_parser().parse_args([])
-    for name, value in (("style", style), ("theme", theme), ("animate", animate)):
-        allowed = {"style": ("glow", "shadow", "flat"), "theme": ("light", "dark", "auto"),
-                   "animate": ANIMATIONS}[name]
-        if value not in allowed:
-            raise ValueError(f"{name} must be one of {', '.join(allowed)}")
-    if animate == "scroll" and not html:
+    looks = {"preset": preset, "style": style, "square": square, "theme": theme, "color": color,
+             "animate": animate, "html": html}
+    allowed = {"preset": tuple(PRESETS), "style": ("glow", "shadow", "flat"), "theme": ("light", "dark", "auto"),
+               "animate": ANIMATIONS}
+    for name, value in looks.items():
+        if value is not None and name in allowed and value not in allowed[name]:
+            raise ValueError(f"{name} must be one of {', '.join(allowed[name])}")
+        setattr(args, name, value)
+    args.text, args.title, args.tab_size = text, title, tab_size
+    args.describe, args.unescape, args.strict = describe, unescape, strict
+    resolve_look(args)
+    if args.animate == "scroll" and not args.html:
         raise ValueError("animate='scroll' needs html=True (an SVG shown as an image can't see the page scroll)")
-    args.text, args.square, args.color, args.html, args.title, args.tab_size = text, square, color, html, title, tab_size
-    args.style, args.theme, args.animate = style, theme, animate
     code, report, svg, _ = run(args)
-    report["exit_code"] = code
-    return (to_html(svg, title, theme) if html else svg), report
+    return (to_html(svg, args.title, args.theme) if args.html else svg), _finish(report, code)
+
+
+def _usage_hint(message):
+    """A concrete suggestion for an argparse error, plus the valid choices when there are some."""
+    import difflib
+    flags = sorted({f for a in build_parser()._actions for f in a.option_strings})
+    m = re.search(r"invalid choice: '([^']*)' \(choose from (.*)\)", message)
+    if m:
+        choices = [c.strip(" '") for c in m.group(2).split(",")]
+        close = difflib.get_close_matches(m.group(1), choices, n=1)
+        return (f"did you mean '{close[0]}'?" if close else f"use one of: {', '.join(choices)}"), choices
+    m = re.search(r"unrecognized arguments: (.*)", message)
+    if m:
+        tips = []
+        for tok in m.group(1).split():
+            close = difflib.get_close_matches(tok.split("=")[0], flags, n=1, cutoff=0.6) if tok.startswith("-") else []
+            tips.append(f"'{tok}': did you mean {close[0]}?" if close else f"'{tok}' is not an option")
+        return "; ".join(tips) + " (ascii2svg --schema lists every option)", None
+    return "run ascii2svg --schema (JSON) or --help for the options", None
 
 
 def main(argv=None) -> int:
     for stream in (sys.stdout, sys.stderr):              # Windows consoles default to cp1252
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
-    args = build_parser().parse_args(argv)
-    args.html = args.html or bool(args.output and args.output.lower().endswith((".html", ".htm")))
+    argv = sys.argv[1:] if argv is None else list(argv)
+    wants_json = any(a in ("--json", "--check") for a in argv)
 
-    def fail(code, msg):
-        if args.json:
-            print(json.dumps({"ok": False, "error": msg, "exit_code": code}))
+    def emit(obj):
+        print(json.dumps(obj))                            # ASCII-safe: decodes the same everywhere
+
+    def fail(code, status, msg, hint=None, choices=None):
+        if wants_json:
+            err = {"status": status, "summary": f"Nothing rendered: {msg}", "exit_code": code,
+                   "ok": False, "error": msg}
+            if hint:
+                err["hint"] = hint
+            if choices:
+                err["choices"] = choices
+            emit(err)
         else:
-            print(f"ascii2svg: error: {msg}", file=sys.stderr)
+            print(f"ascii2svg: error: {msg}" + (f"\nascii2svg: hint: {hint}" if hint else ""), file=sys.stderr)
         return code
 
+    try:
+        args = build_parser().parse_args(argv)
+    except UsageError as e:
+        return fail(1, "usage_error", str(e), *_usage_hint(str(e)))
+    if args.schema:
+        emit(schema())
+        return 0
+    args.json = args.json or args.check
+    resolve_look(args)
     if args.animate == "scroll" and not args.html:
-        return fail(1, "--animate scroll needs a web page: add --html or use -o NAME.html "
-                       "(an SVG shown as an image can't see the page scroll)")
+        return fail(1, "usage_error", "--animate scroll needs a web page",
+                    "add --html or use -o NAME.html (an SVG shown as an image can't see the page scroll)")
     try:
         code, report, svg, still = run(args)
     except ValueError as e:
-        return fail(1, str(e))
-    if args.png is not None:
+        return fail(1, "bad_input", str(e))
+    writes = not args.check
+    if writes and args.png is not None:
         if not args.output and not args.png:
-            return fail(1, "--png needs a path when -o is not given")
+            return fail(1, "usage_error", "--png needs a path when -o is not given", "add -o NAME.svg or --png NAME.png")
         try:
             import cairosvg
         except ImportError:
-            return fail(1, "--png needs cairosvg: pip install cairosvg")
+            return fail(1, "usage_error", "--png needs cairosvg", "pip install cairosvg")
     kind = "html" if args.html else "svg"
     out = to_html(svg, args.title, args.theme) if args.html else svg
-    if args.output:
+    if writes and args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as f:   # same bytes on every OS
             f.write(out)
         report[kind] = args.output
-    if args.png is not None:
+    if writes and args.png is not None:
         png = args.png or re.sub(r"\.(svg|html?)$", "", args.output, flags=re.I) + ".png"
         cairosvg.svg2png(bytestring=still.encode(), write_to=png, scale=2)
         report["png"] = png
-    report["exit_code"] = code
+    report = _finish(report, code, args.output if writes else None)
     if args.json:
-        if not args.output:
+        if writes and not args.output and not args.brief:
             report[kind] = out
-        print(json.dumps(report, ensure_ascii=False))
+        emit(report)
     else:
         if not args.output:
             sys.stdout.write(out)
-        where = args.output or "stdout"
-        print(f"ascii2svg: {where}  {report['rows']}x{report['cols']}  {report['boxes']} boxes  "
-              f"style={report['style']}  theme={report['theme']}  animate={report['animate']}  "
-              f"round-trip={report['roundtrip']}  "
-              f"warnings={len(report['warnings'])}", file=sys.stderr)
+        print(f"ascii2svg: {report['summary']}", file=sys.stderr)
         if code == 2:
             print("ascii2svg: SELF-CHECK FAILED - the SVG does not match the input 1:1", file=sys.stderr)
     return code

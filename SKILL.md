@@ -12,26 +12,40 @@ Each run reads the SVG back and checks it against the input, cell by cell, in ev
 ## Run it
 
 ```bash
-python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --json
+python3 scripts/ascii2svg.py diagram.txt --check --describe          # 1. validate; writes nothing
+python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --preset readme --json --brief   # 2. render
 ```
 
 - `scripts/` is inside this skill's folder; use the full path to it if you are elsewhere.
-  On Windows, `python` instead of `python3`. No packages are needed.
-- Write the diagram to a file (or pipe it on stdin) rather than using `--text`: long
-  multi-line arguments break in shells.
+  On Windows, `python` instead of `python3`. No packages are needed. If `ascii2svg` is on
+  PATH (`pip install ascii2svg`), you can call that instead.
+- **Write the diagram to a file** (or pipe it with `-`). Don't use `--text`: tool-call arguments
+  turn newlines into literal `\n`, and the diagram collapses into one line of text.
 - A markdown file is fine: the first ```` ``` ```` code block is used automatically.
-- Add `--png` to also get `diagram.png` (needs `pip install cairosvg`), useful where SVG
-  isn't shown (e.g. email).
+- Always pass `--json`, or `--check`, which implies it. Every outcome is then one JSON object on
+  stdout, usage errors included. Add `--brief` so the report doesn't embed the markup.
 
-## Read the JSON report before you reply
+## Check, fix, render
 
-| Field | What to do with it |
+1. Run `--check --describe` on your draft.
+2. Read `status` and `summary`. They come first in the report.
+3. For each warning, apply its `hint`: it names the character and the row/col to move or
+   change (`dangling_line`, `broken_join`). Re-run until `status` is `ok`.
+4. Read `diagram.edges` (`{"from": {"name": "API"}, "to": {"name": "DB"}}`). Confirm every
+   arrow connects what you meant; a missing edge usually means a misaligned arrow.
+5. Render with the preset for the destination (below), then tell the user the `summary`.
+
+| `status` | What to do |
 |---|---|
-| `exit_code` / `ok` | `0` = done. `1` = bad input (read `error`). `2` = self-check failed: **do not share the SVG**; tell the user. `3` = only with `--strict`: warnings present |
-| `roundtrip` | `"exact"` means the SVG matches the input cell for cell |
-| `warnings` | Line ends that meet nothing (row/col are 1-based). Usually a misaligned source diagram: move the character to the right column, then re-run |
-| `normalized` | What was cleaned up (tabs, odd spaces, code fence, colour codes). Mention it if it matters |
-| `ascii_line_like_kept_as_text` | ASCII `- \| +` that were **not** drawn as lines because they don't attach to a box. If the user expected lines there, see below |
+| `ok` | Done. Share the file |
+| `warnings` | Rendered, but likely misaligned: apply the hints (you can still share it if the user is happy) |
+| `self_check_failed` | **Do not share the output.** Tell the user; it is a bug in the tool |
+| `bad_input` / `usage_error` | Nothing rendered: read `error` and `hint`, fix the call |
+
+- `escaped_newlines`: your input arrived as one line with literal `\n`. Write it to a file instead
+  (or add `--unescape`).
+- `no_structure`: ASCII boxes that never close; every box needs `+` at all four corners.
+- `normalized`: what was cleaned up (tabs, odd spaces, code fence). Mention it if it matters.
 
 ## What gets drawn
 
@@ -47,40 +61,36 @@ python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --json
 - Use `+` where a connector meets a box edge or branches; end arrows with `v ^ < >`
   (or `▼ ▲ ▶ ◀`) touching, or one space from, the target box.
 - A title can sit on a box's top edge: `+-- Title ---+`.
+- Keep a connector's column (or row) identical from start to arrowhead. Off-by-one is the
+  most common mistake, and the `dangling_line` hint will point at it.
 
-## Pick the look from where the diagram is going
+## Pick the preset from where the diagram is going
 
-Most people won't name options. Infer them from the destination; if it isn't clear, use
-`--color` alone.
+Most people won't name options. Choose from the destination; if it isn't clear, use `chat`.
 
-| Destination | Options |
-|---|---|
-| GitHub README, docs site, wiki that shows SVG | `--theme auto --color --animate` |
-| Tall diagram (≈45+ rows) someone will scroll through, or "a page I can share" | `-o NAME.html --theme auto --color --animate scroll` |
-| Slides | `--color --animate draw` (or `--color --png` for a still) |
-| Slack, email, Jira, chat apps, anything that won't show SVG | `--color --png` |
-| Print, PDF, formal docs | `--style flat --square` |
-| Dark-mode page or app | `--theme dark --color` |
-| The user wants it plain | no options |
+| Destination | Preset | Same as |
+|---|---|---|
+| GitHub README, docs site, wiki that shows SVG | `--preset readme` | `--theme auto --color --animate flow` |
+| Tall diagram (≈45+ rows) to scroll through, or "a page I can share" | `--preset page` + `-o NAME.html` | `--html --theme auto --color --animate scroll` |
+| Slides | `--preset slides` | `--color --animate draw` |
+| Slack, email, Jira, chat apps | `--preset chat --png` | `--color` (+ PNG, needs `pip install cairosvg`) |
+| Print, PDF, formal docs | `--preset print` | `--style flat --square` |
+| Dark-mode page or app | `--preset dark` | `--theme dark --color` |
+| The user wants it plain | no preset | |
 
-- `--animate` (= `flow`): the diagram draws itself, then pulses travel along every arrow.
-  `draw` does the drawing only. Animation never changes the final picture, stops under
-  *reduce motion*, and needs no JavaScript (it plays in a plain `<img>`).
-- `--animate scroll` writes a web page (`-o NAME.html` or `--html`): parts appear as the reader
-  scrolls to them and long connectors grow with the scroll. It only works as a page — an SVG
-  shown as an image can't see the scroll — so it is refused for `.svg` output. For a tall
-  diagram going into a README, use `--animate` there and offer the `.html` page as well.
-- The report's `tips` suggests `scroll` when a timed animation would finish off-screen. Pass
-  it on to the user rather than silently switching formats.
-- `--color`: each group of boxes gets its own soft hue; arrows turn accent blue.
-- `--theme auto` follows the reader's light/dark setting.
-- PNGs are always the finished, still drawing (the `auto` theme becomes light).
+- Explicit flags override a preset: `--preset readme --no-color`, `--preset slides --theme dark`.
+- `scroll` only works as a web page (an SVG shown as an image can't see the page scroll), so
+  it is refused for `.svg` output. For a tall diagram going into a README, use `readme` there
+  and offer the `page` version as well. The report's `tips` suggests this; pass it on.
+- Animation never changes the final picture, stops under *reduce motion*, and PNGs are always
+  the finished still drawing.
 - Tell the user what you picked in one line, e.g. "animated, colour, follows dark mode",
   so they can ask for something else.
 
 ## Options
 
-`--color` · `--theme light|dark|auto` · `--animate [draw|flow|scroll]` · `--html` ·
-`--style glow|shadow|flat` (default glow) · `--square` (square corners) · `--png [PATH]` ·
-`--strict` · `--tab-size N` (default 4) · `--title TEXT` · `--max-rows` / `--max-cols`
-(default 1000 × 400)
+`--preset readme|slides|chat|print|dark|page` · `--check` · `--describe` · `--brief` · `--json` ·
+`--color / --no-color` · `--theme light|dark|auto` · `--animate [draw|flow|scroll]` · `--html` ·
+`--style glow|shadow|flat` · `--square` · `--png [PATH]` · `--strict` · `--unescape` ·
+`--tab-size N` · `--title TEXT` · `--max-rows` / `--max-cols` (default 1000 × 400).
+`--schema` prints all of this, and the report fields, as JSON.
