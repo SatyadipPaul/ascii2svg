@@ -9,6 +9,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLI = os.path.join(ROOT, "scripts", "ascii2svg.py")
 LIVE = ["--theme", "auto", "--color", "--animate", "flow"]
 IMAGES = [
+    ("docs/examples/banner.txt", "docs/banner.svg", LIVE + ["--title", "ascii2svg"]),     # docs/make_banner.py writes it
     ("docs/examples/how-it-works.txt", "docs/how-it-works.svg", LIVE),
     ("docs/examples/workflow.txt", "docs/workflow.svg", LIVE),
     ("tests/fixtures/complex_unicode.txt", "docs/architecture.svg", LIVE),
@@ -24,6 +25,10 @@ IMAGES = [
      ["--theme", "auto", "--color", "--animate", "draw", "--title", "Release plan"]),
     ("docs/examples/mermaid/class.txt", "docs/uml-class.svg", ["--theme", "auto", "--color", "--title", "Class diagram"]),
     ("tests/fixtures/er_crowsfoot.txt", "docs/er.svg", ["--theme", "auto", "--color", "--title", "Orders ER diagram"]),
+    ("docs/examples/mermaid/c4-dashed-boundary.txt", "docs/c4.svg", LIVE + ["--title", "C4 container view"]),
+    ("docs/examples/mermaid/state.txt", "docs/state.svg", LIVE + ["--title", "Publishing states"]),
+    ("docs/examples/cache-sequence.txt", "docs/cache-sequence.svg", LIVE + ["--title", "Cache lookup"]),
+    ("docs/examples/mermaid/sequence.txt", "docs/sequence.svg", LIVE + ["--title", "Create an order"]),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/default.svg", []),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/color.svg", ["--color"]),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/dark.svg", ["--theme", "dark", "--color"]),
