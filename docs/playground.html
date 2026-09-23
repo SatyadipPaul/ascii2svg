@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ascii2svg playground</title>
+<meta name="description" content="Paste an ASCII or Unicode box diagram and get a clean, animated SVG. Runs ascii2svg in your browser; nothing is uploaded.">
+<style>
+  :root { --ink: #1f2328; --muted: #59636e; --bg: #ffffff; --card: #f6f8fa; --line: #d1d9e0; --accent: #0969da;
+          --ok: #1a7f37; --warn: #9a6700; --bad: #cf222e; --field: #ffffff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #e6edf3; --muted: #9198a1; --bg: #0d1117; --card: #151b23; --line: #3d444d; --accent: #58a6ff;
+            --ok: #3fb950; --warn: #d29922; --bad: #f85149; --field: #0d1117; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { max-width: 1280px; margin: 0 auto; padding: 20px 16px 8px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+  header h1 { font: 700 24px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0; }
+  header p { margin: 0; color: var(--muted); flex: 1 1 320px; }
+  header nav { display: flex; gap: 14px; font-size: 14px; }
+  a { color: var(--accent); }
+  main { max-width: 1280px; margin: 0 auto; padding: 8px 16px 48px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; background: var(--card);
+             border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+  .toolbar label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  select, input[type=color] { font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+  input[type=color] { width: 36px; height: 26px; padding: 1px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .panel { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; min-height: 420px; }
+  .panel h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--muted); padding: 8px 12px;
+              border-bottom: 1px solid var(--line); background: var(--card); display: flex; justify-content: space-between; gap: 8px; }
+  textarea { flex: 1; width: 100%; min-height: 420px; border: 0; resize: vertical; padding: 12px; background: var(--field); color: var(--ink);
+             font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; white-space: pre; overflow: auto; tab-size: 4; }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .preview { flex: 1; position: relative; overflow: auto; background: var(--field); display: flex; align-items: flex-start; justify-content: center; padding: 12px; min-height: 300px; }
+  .preview img { max-width: 100%; height: auto; display: block; }
+  .preview iframe { width: 100%; height: 520px; border: 0; background: transparent; }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+             background: var(--field); color: var(--muted); font-size: 14px; text-align: center; padding: 16px; }
+  #loadmsg[data-secs]::after { content: " (" attr(data-secs) ")"; }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+  button { font: inherit; font-size: 13px; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .report { padding: 10px 12px; border-top: 1px solid var(--line); font-size: 14px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; margin-right: 6px; color: #fff; }
+  .pill.ok { background: var(--ok); } .pill.warnings { background: var(--warn); } .pill.bad { background: var(--bad); }
+  .report ul { margin: 8px 0 0; padding-left: 18px; }
+  .report li { margin: 2px 0; }
+  .report li button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 13px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 6px 14px;
+           border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ascii2svg</h1>
+  <p>Paste a text diagram and get a clean SVG, with every character in its exact place. It runs in your browser; nothing is uploaded.</p>
+  <nav><a href="./">Home</a><a href="https://github.com/SatyadipPaul/ascii2svg">GitHub</a><a href="https://pypi.org/project/ascii2svg/">PyPI</a></nav>
+</header>
+<main>
+  <div class="toolbar" role="group" aria-label="Options">
+    <label>Example <select id="example"></select></label>
+    <label>For <select id="preset">
+      <option value="">custom</option><option value="readme">README / docs</option><option value="slides">slides</option>
+      <option value="chat">chat / email</option><option value="print">print</option><option value="dark">dark page</option>
+      <option value="page">scroll page</option></select></label>
+    <label>Theme <select id="theme"><option>light</option><option>dark</option><option>auto</option></select></label>
+    <label>Animate <select id="animate"><option>none</option><option>draw</option><option>flow</option><option>scroll</option></select></label>
+    <label>Depth <select id="style"><option>glow</option><option>shadow</option><option>flat</option></select></label>
+    <label><input type="checkbox" id="color"> Colour</label>
+    <label><input type="checkbox" id="square"> Square corners</label>
+    <label>Accent <input type="color" id="accent" value="#0969da"></label>
+  </div>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="in-h">
+      <h2 id="in-h"><span>Your diagram</span><span class="muted" id="pos"></span></h2>
+      <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Diagram text"></textarea>
+    </section>
+    <section class="panel" aria-labelledby="out-h">
+      <h2 id="out-h"><span>Result</span><span class="muted" id="timing"></span></h2>
+      <div class="preview" id="preview">
+        <div class="overlay" id="overlay"><div class="spinner"></div><div id="loadmsg">Starting…</div></div>
+      </div>
+      <div class="report" id="report" aria-live="polite"></div>
+      <div class="actions">
+        <button id="replay" title="Play the animation again">Replay</button>
+        <button id="dl-svg" class="primary">Download SVG</button>
+        <button id="dl-html">Download page</button>
+        <button id="dl-png">Download PNG</button>
+        <button id="copy-svg">Copy SVG</button>
+        <button id="share">Copy share link</button>
+      </div>
+    </section>
+  </div>
+  <p class="muted">Boxes: <code>+--+</code> / <code>|  |</code> / <code>+--+</code> or <code>┌─┐ │ │ └─┘</code>. Arrows end in <code>v ^ &lt; &gt;</code> or
+    <code>▼ ▲ ▶ ◀</code>, touching (or one space from) the box they point at. Warnings say exactly what to move; click one to jump there.
+    Runs <a href="https://github.com/SatyadipPaul/ascii2svg">ascii2svg</a> <span id="ver"></span> with <a href="https://pyodide.org">Pyodide</a>.</p>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const PRESETS = {
+    readme: { theme: "auto", color: true, animate: "flow" }, slides: { color: true, animate: "draw" },
+    chat: { color: true }, print: { style: "flat", square: true }, dark: { theme: "dark", color: true },
+    page: { theme: "auto", color: true, animate: "scroll" },
+  };
+  const DEFAULTS = { theme: "light", animate: "none", style: "glow", color: false, square: false };
+  const controls = ["theme", "animate", "style", "color", "square", "accent"];
+  const src = $("src"), preview = $("preview");
+  let examples = {}, current = null, url = null, seq = 0, busy = false, queued = false, timer = null;
+  const pending = new Map();
+
+  const worker = new Worker("playground/worker.js", { type: "module" });
+  const started = performance.now();
+  const ticker = setInterval(() => {                     // a slow first download should not look frozen
+    const s = Math.round((performance.now() - started) / 1000);
+    if (s >= 3) $("loadmsg").dataset.secs = s + " s";
+  }, 1000);
+  worker.onmessage = ({ data }) => {
+    if (data.type === "status") $("loadmsg").textContent = data.text;
+    else if (data.type === "ready") clearInterval(ticker);
+    else if (data.type === "fatal") $("loadmsg").textContent = "Could not start Python: " + data.error;
+    if (data.type === "ready") { $("ver").textContent = data.version; schedule(0); }
+    else if (data.type === "result") { const done = pending.get(data.id); pending.delete(data.id); done && done(data); }
+  };
+  worker.onerror = (e) => {
+    $("loadmsg").textContent = "Could not load Python in this browser (" + (e.message || "worker error") +
+      "). Check your connection, or use the command line: pip install ascii2svg";
+    document.querySelector("#overlay .spinner").style.display = "none";
+  };
+  const call = (text, opts) => new Promise((resolve) => { const id = ++seq; pending.set(id, resolve); worker.postMessage({ id, text, opts }); });
+
+  function options() {
+    const o = { theme: $("theme").value, animate: $("animate").value, style: $("style").value,
+                color: $("color").checked, square: $("square").checked, describe: true, title: "Diagram" };
+    const acc = $("accent").value.toLowerCase();
+    if (acc !== "#0969da") o.accent = acc;
+    o.html = o.animate === "scroll";
+    return o;
+  }
+
+  function applyPreset(name) {
+    const p = { ...DEFAULTS, ...(PRESETS[name] || {}) };
+    $("theme").value = p.theme; $("animate").value = p.animate; $("style").value = p.style;
+    $("color").checked = p.color; $("square").checked = p.square;
+  }
+
+  function schedule(delay = 350) {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (busy) { queued = true; return; }
+      busy = true;
+      const res = await call(src.value, options());
+      busy = false;
+      show(res);
+      if (queued) { queued = false; schedule(0); }
+    }, delay);
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+  function show(res) {
+    $("overlay").style.display = "none";
+    $("timing").textContent = res.ms != null ? `rendered in ${res.ms} ms` : "";
+    const r = res.report;
+    if (res.error || !r) {
+      current = null;
+      $("report").innerHTML = `<span class="pill bad">error</span>${esc(res.error || "no result")}`;
+      preview.querySelectorAll("img,iframe").forEach((n) => n.remove());
+      return;
+    }
+    current = res;
+    if (url) URL.revokeObjectURL(url);
+    preview.querySelectorAll("img,iframe").forEach((n) => n.remove());
+    if (r.html) {
+      const f = document.createElement("iframe");
+      f.setAttribute("sandbox", "allow-scripts");
+      f.setAttribute("title", "Scroll-reveal page preview");
+      f.srcdoc = res.markup;
+      preview.appendChild(f);
+    } else {
+      url = URL.createObjectURL(new Blob([res.markup], { type: "image/svg+xml" }));
+      const img = new Image();
+      img.alt = "Rendered diagram";
+      img.src = url;
+      preview.appendChild(img);
+    }
+    const cls = r.status === "ok" ? "ok" : r.status === "warnings" ? "warnings" : "bad";
+    let html = `<span class="pill ${cls}">${esc(r.status.replace("_", " "))}</span>${esc(r.summary)}`;
+    if (r.warnings.length) {
+      html += "<ul>" + r.warnings.slice(0, 8).map((w, i) =>
+        `<li><button data-w="${i}">line ${w.source_line}, col ${w.source_col}</button>: ${esc(w.hint)}</li>`).join("") + "</ul>";
+    }
+    const edges = (r.diagram && r.diagram.edges) || [];
+    if (edges.length) {
+      const n = (e) => e.name || e.text || (e.cell ? `line ${e.cell[0]}` : "?");
+      html += `<div class="muted" style="margin-top:8px">Connections: ${edges.slice(0, 24).map((e) => esc(n(e.from)) + " → " + esc(n(e.to))).join(" · ")}${edges.length > 24 ? " …" : ""}</div>`;
+    }
+    $("report").innerHTML = html;
+    $("report").querySelectorAll("button[data-w]").forEach((b) => b.onclick = () => jump(r.warnings[+b.dataset.w]));
+  }
+
+  function jump(w) {
+    const lines = src.value.split("\n");
+    let pos = 0;
+    for (let i = 0; i < w.source_line - 1 && i < lines.length; i++) pos += lines[i].length + 1;
+    pos += Math.max(0, w.source_col - 1);
+    src.focus();
+    src.setSelectionRange(pos, pos + 1);
+    const lh = parseFloat(getComputedStyle(src).lineHeight) || 19;
+    src.scrollTop = Math.max(0, (w.source_line - 4) * lh);
+  }
+
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 1600); }
+
+  function save(name, data, type) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type }));
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  async function variant(overrides) {
+    const res = await call(src.value, { ...options(), ...overrides });
+    if (res.error) { toast(res.error); return null; }
+    return res.markup;
+  }
+
+  $("dl-svg").onclick = async () => {
+    const o = options();
+    const svg = await variant({ html: false, animate: o.animate === "scroll" ? "none" : o.animate });
+    if (svg) save("diagram.svg", svg, "image/svg+xml");
+  };
+  $("dl-html").onclick = async () => {
+    const o = options();
+    const page = await variant({ html: true, animate: o.animate === "none" ? "scroll" : o.animate });
+    if (page) save("diagram.html", page, "text/html");
+  };
+  $("dl-png").onclick = async () => {
+    const o = options();                                  // PNG = the finished, still frame
+    const svg = await variant({ html: false, animate: "none", theme: o.theme === "auto" ? "light" : o.theme });
+    if (!svg) return;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth * 2; c.height = img.naturalHeight * 2;
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob((b) => save("diagram.png", b), "image/png");
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  };
+  $("copy-svg").onclick = async () => {
+    const o = options();
+    const svg = await variant({ html: false, animate: o.animate === "scroll" ? "none" : o.animate });
+    if (svg) { await navigator.clipboard.writeText(svg); toast("SVG copied"); }
+  };
+  $("replay").onclick = () => current && show(current);
+
+  // share links: the diagram and options live in the URL's #fragment, never sent to a server
+  const b64 = (u8) => btoa(String.fromCharCode(...u8)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  async function pack(text) {
+    const bytes = new TextEncoder().encode(text);
+    if (!("CompressionStream" in window)) return "0" + b64(bytes);
+    const z = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return "1" + b64(new Uint8Array(await new Response(z).arrayBuffer()));
+  }
+  async function unpack(s) {
+    const bytes = unb64(s.slice(1));
+    if (s[0] === "0") return new TextDecoder().decode(bytes);
+    const z = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return await new Response(z).text();
+  }
+  $("share").onclick = async () => {
+    const o = options(), q = new URLSearchParams();
+    q.set("d", await pack(src.value));
+    if ($("preset").value) q.set("p", $("preset").value);
+    for (const k of ["theme", "animate", "style"]) q.set(k, o[k]);
+    q.set("color", o.color ? 1 : 0); q.set("square", o.square ? 1 : 0);
+    if (o.accent) q.set("accent", o.accent.slice(1));
+    const link = location.href.split("#")[0] + "#" + q.toString();
+    history.replaceState(null, "", link);
+    await navigator.clipboard.writeText(link);
+    toast("Share link copied");
+  };
+
+  src.addEventListener("input", () => schedule());
+  src.addEventListener("keydown", (e) => {                 // Tab inserts spaces instead of leaving the editor
+    if (e.key !== "Tab" || e.shiftKey) return;
+    e.preventDefault();
+    src.setRangeText("  ", src.selectionStart, src.selectionEnd, "end");
+    schedule();
+  });
+  const where = () => {
+    const before = src.value.slice(0, src.selectionStart).split("\n");
+    $("pos").textContent = `line ${before.length}, col ${before[before.length - 1].length + 1}`;
+  };
+  ["keyup", "click", "select"].forEach((ev) => src.addEventListener(ev, where));
+  $("preset").onchange = () => { applyPreset($("preset").value); schedule(0); };
+  controls.forEach((id) => $(id).addEventListener("change", () => { $("preset").value = ""; schedule(0); }));
+  $("example").onchange = () => { src.value = examples[$("example").value] || ""; schedule(0); };
+
+  (async () => {
+    examples = await (await fetch("playground/examples.json")).json();
+    $("example").innerHTML = Object.keys(examples).map((k) => `<option>${esc(k)}</option>`).join("");
+    const q = new URLSearchParams(location.hash.slice(1));
+    if (q.get("d")) {
+      try { src.value = await unpack(q.get("d")); } catch { src.value = examples[Object.keys(examples)[0]]; }
+      $("preset").value = q.get("p") || "";
+      for (const k of ["theme", "animate", "style"]) if (q.get(k)) $(k).value = q.get(k);
+      $("color").checked = q.get("color") === "1"; $("square").checked = q.get("square") === "1";
+      if (q.get("accent")) $("accent").value = "#" + q.get("accent");
+    } else {
+      $("example").value = Object.keys(examples)[0];
+      src.value = examples[$("example").value];
+      $("preset").value = "readme"; applyPreset("readme");
+    }
+    schedule(0);
+  })();
+})();
+</script>
+</body>
+</html>

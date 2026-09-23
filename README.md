@@ -2,7 +2,7 @@
 
 **Your text diagrams, drawn properly. Every character stays exactly where you put it.**
 
-[Live demo](https://satyadippaul.github.io/ascii2svg/) · [Scroll demo](https://satyadippaul.github.io/ascii2svg/architecture.html) · [Download the Claude skill](https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill)
+[**Try it in your browser**](https://satyadippaul.github.io/ascii2svg/playground.html) · [Live demo](https://satyadippaul.github.io/ascii2svg/) · [Scroll demo](https://satyadippaul.github.io/ascii2svg/architecture.html) · [Download the Claude skill](https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill)
 
 <p align="center">
   <img src="https://satyadippaul.github.io/ascii2svg/how-it-works.svg" alt="ascii2svg pipeline: your diagram, find boxes and arrows, draw, read the SVG back, compare cell by cell, ready to share" width="640">
@@ -41,7 +41,7 @@ It works just as well with Unicode box characters (`┌─┐ │ └─┘ ╭�
 
 ## Who it's for
 
-**If you don't write code:** ask Claude. With this repo installed as a skill, say
+**If you don't write code:** open the [playground](https://satyadippaul.github.io/ascii2svg/playground.html), paste your diagram, pick where it's going, and download the SVG, PNG or a web page. It runs entirely in your browser (Python compiled to WebAssembly via Pyodide); nothing is uploaded. Or ask Claude. With this repo installed as a skill, say
 *"turn this diagram into an image for my slides"* or *"make this look nice for our wiki"*,
 and it picks the options for where the diagram is going, checks the result, and hands you the file.
 Nothing to learn.
@@ -327,7 +327,7 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-44 tests over 11 test diagrams:
+45 tests over 11 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
@@ -344,6 +344,7 @@ python3 docs/build.py                  # regenerate every image in this README
   on a forgotten input
 - every diagram in a markdown file, several inputs, positions mapped back to the file, style
   options, and the MCP server's protocol
+- the browser playground runs exactly this module, and every playground example round-trips
 
 They pass with and without the optional packages.
 

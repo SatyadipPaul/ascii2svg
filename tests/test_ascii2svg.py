@@ -571,6 +571,17 @@ def test_mcp_server_speaks_the_protocol():
     assert code == 0 and err == "", err                                        # stdout carried only protocol
 
 
+def test_playground_runs_the_released_module():
+    """docs/playground/ascii2svg.py is what the browser runs; it must be this exact module."""
+    play = os.path.join(os.path.dirname(HERE), "docs", "playground")
+    if not os.path.isdir(play):                                   # the sdist ships without docs/
+        return
+    assert open(os.path.join(play, "ascii2svg.py"), "rb").read() == open(CLI, "rb").read(),         "run python3 docs/build.py to refresh the playground's copy"
+    examples = json.load(open(os.path.join(play, "examples.json"), encoding="utf-8"))
+    for name, text in examples.items():
+        assert a2s.render(text)[1]["roundtrip"] == "exact", name
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0

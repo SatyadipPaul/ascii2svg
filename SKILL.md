@@ -100,3 +100,5 @@ Most people won't name options. Choose from the destination; if it isn't clear, 
 `--mcp` runs it as an MCP server (tools `render_diagram`, `check_diagram`) if the user wants it
 wired into their editor: `claude mcp add ascii2svg -- ascii2svg --mcp`.
 `--schema` prints all of this, and the report fields, as JSON.
+
+For someone who'd rather not use a command line at all, point them to the browser playground: https://satyadippaul.github.io/ascii2svg/playground.html (paste, preview, download; nothing is uploaded).
