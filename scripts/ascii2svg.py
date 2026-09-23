@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -164,8 +164,12 @@ def build_grid(lines: list[str]):
 ARMS = {k: frozenset(v) for k, v in {
     "─": "LR", "│": "UD", "┌": "RD", "┐": "LD", "└": "UR", "┘": "UL", "├": "UDR", "┤": "UDL",
     "┬": "LRD", "┴": "LRU", "┼": "UDLR", "╭": "RD", "╮": "LD", "╰": "UR", "╯": "UL",
-    "═": "LR", "║": "UD", "╔": "RD", "╗": "LD", "╚": "UR", "╝": "UL", "╪": "UDLR"}.items()}
+    "═": "LR", "║": "UD", "╔": "RD", "╗": "LD", "╚": "UR", "╝": "UL", "╪": "UDLR",
+    "╌": "LR", "╎": "UD", "┄": "LR", "┆": "UD", "┈": "LR", "┊": "UD"}.items()}
 DOUBLE = set("═║╔╗╚╝")
+# dashed lines join like any other line; they're drawn dashed, 2, 3 or 4 dashes per cell
+DASHED = {"╌": "2", "╎": "2", "┄": "3", "┆": "3", "┈": "4", "┊": "4"}
+DASH_OF = {(n, ARMS[ch]): ch for ch, n in DASHED.items()}
 ROUNDED = set("╭╮╰╯")
 HEADS = {"▼": "D", "▲": "U", "▶": "R", "◀": "L"}      # direction the arrow points
 TAIL = {"▼": "U", "▲": "D", "▶": "L", "◀": "R"}       # side the shaft comes from
@@ -436,7 +440,7 @@ GLOW_R, GLOW_N, GLOW_DY = 7.0, 14, 1.5
 SHADOW = ((1.5, 0.18), (3.0, 0.13), (4.2, 0.09))
 RADIUS = 4.0
 TL, TR, BL, BR = set("┌╭╔"), set("┐╮╗"), set("└╰╚"), set("┘╯╝")
-BOTTOM_OK = set("─┬┴┼═╪")
+BOTTOM_OK = set("─┬┴┼═╪╌┄┈")
 
 # hues: (tint for a box that contains boxes, tint for a leaf box)
 THEMES = {
@@ -460,7 +464,7 @@ def find_boxes(get, nrows, ncols):
             t = get(r, c)
             if t not in TL:
                 continue
-            side = set("║╟╢╪") if t == "╔" else set("│├┤┼")
+            side = set("║╟╢╪") if t == "╔" else set("│├┤┼╎┆┊")
             c2 = None
             for x in range(c + 1, ncols):
                 tx = get(r, x)
@@ -592,6 +596,7 @@ def _layout_css(mode, font=None):
            ".head{stroke-width:1;stroke-linejoin:round}"
            f"text{{font:{FS}px {font_stack(font)}ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono',monospace;"
            "text-anchor:middle;white-space:pre}"
+           ".dash.n2{stroke-dasharray:4.2 4.8}.dash.n3{stroke-dasharray:2.6 3.4}.dash.n4{stroke-dasharray:1.4 3.1}"
            ".blk{shape-rendering:crispEdges}.k3{fill-opacity:.75}.k2{fill-opacity:.5}.k1{fill-opacity:.28}"
            ".fill{transition:fill .25s}text,line,path,polygon,.blk{pointer-events:none}")
     if mode == "none":
@@ -608,7 +613,7 @@ def _layout_css(mode, font=None):
             ".blk{transform-box:fill-box;transform-origin:left}"
             f"{sel('.sgl', '.dbl')}{{animation:a2s-draw .6s {ease} backwards}}"
             f"{sel('.dbl-gap')}{{animation:a2s-gap .6s {ease} backwards}}"
-            f"{sel('.sgl.shaft')}{{animation:a2s-fade .3s ease-out backwards}}"
+            f"{sel('.sgl.shaft', '.sgl.dash')}{{animation:a2s-fade .3s ease-out backwards}}"
             f"{sel('.head')}{{animation:a2s-pop .45s cubic-bezier(.3,1.6,.5,1) backwards}}"
             ".head{transform-box:fill-box;transform-origin:center}"
             f"{sel('text')}{{animation:a2s-fade .5s ease-out backwards}}"
@@ -665,7 +670,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     Animation only ever starts from an earlier state and ends on the static drawing, so a
     renderer that ignores CSS/SMIL animation shows exactly what the self-check verified."""
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
-    segs = {"s": {"h": {}, "v": {}}, "d": {"h": {}, "v": {}}}
+    segs = {st: {"h": {}, "v": {}} for st in ("s", "d", "2", "3", "4")}      # single, double, dashed x2/x3/x4
     curves, heads, texts, blocks = [], [], [], []
     diag = {"/": set(), "\\": set()}
     round_ok = not square and not any(t in ROUNDED for t, _ in cells.values())
@@ -699,8 +704,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         cx, cy = x0 + CW / 2, y0 + CH / 2
         if t in ARMS:
             arms = ARMS[t]
-            st_h = "d" if (t in DOUBLE or t == "╪") else "s"
-            st_v = "d" if t in DOUBLE else "s"
+            st_h = "d" if (t in DOUBLE or t == "╪") else DASHED.get(t, "s")
+            st_v = "d" if t in DOUBLE else DASHED.get(t, "s")
             corner = len(arms) == 2 and arms not in (frozenset("LR"), frozenset("UD"))
             if corner and (t in ROUNDED or round_ok):
                 hx = cx + (RADIUS if "R" in arms else -RADIUS)
@@ -748,11 +753,12 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         return out
 
     def lines(st, cls):
-        o = [f'<path d="{d}" class="{cls}"{grow}{timing(y, 0.25)}/>' for s, d, y in curves if s == st]
-        o += [f'<line x1="{a:g}" y1="{k:g}" x2="{b:g}" y2="{k:g}" class="{cls}"{grow}'
+        g = "" if "dash" in cls else grow                  # pathLength would stretch the dashes too
+        o = [f'<path d="{d}" class="{cls}"{g}{timing(y, 0.25)}/>' for s, d, y in curves if s == st]
+        o += [f'<line x1="{a:g}" y1="{k:g}" x2="{b:g}" y2="{k:g}" class="{cls}"{g}'
               f'{timing(k - CH / 2, min(max((b - a) / (1.5 * speed), 0.25), 0.8))}/>'
               for k, a, b in merged(segs[st]["h"])]
-        o += [f'<line x1="{k:g}" y1="{a:g}" x2="{k:g}" y2="{b:g}" class="{cls}"{grow}'
+        o += [f'<line x1="{k:g}" y1="{a:g}" x2="{k:g}" y2="{b:g}" class="{cls}"{g}'
               f'{timing(a, max((b - a) / speed, 0.25))}/>' for k, a, b in merged(segs[st]["v"])]
         return o
 
@@ -862,6 +868,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         return o
 
     body = under + block_rects() + lines("d", "dbl") + lines("d", "dbl-gap") + lines("s", "sgl") + diagonals()
+    body += [ln for n in "234" for ln in lines(n, f"sgl dash n{n}")]
     line_like = lambda r, c: get(r, c) in ARMS
     for r, c, d in heads:
         sh, pts, _ = head_geometry(r, c, d, line_like)
@@ -915,8 +922,8 @@ REVEAL_JS = r"""(() => {
   const svg = document.querySelector('svg[data-reveal="scroll"]');
   if (!svg || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const q = s => [...svg.querySelectorAll(s)], n = (el, a) => +el.getAttribute(a);
-  const grow = [], show = q('path.sgl,path.dbl,path.dbl-gap,.shaft,.head,text,.glow,.shadow,.fill,.plate,.blk');
-  for (const el of q('line.sgl:not(.shaft),line.dbl,line.dbl-gap')) {
+  const grow = [], show = q('path.sgl,path.dbl,path.dbl-gap,.shaft,.dash,.head,text,.glow,.shadow,.fill,.plate,.blk');
+  for (const el of q('line.sgl:not(.shaft):not(.dash),line.dbl,line.dbl-gap')) {
     if (n(el, 'x1') === n(el, 'x2') && n(el, 'y2') - n(el, 'y1') > 72) grow.push({el, y1: n(el, 'y1'), y2: n(el, 'y2'), f: 0});
     else show.push(el);
   }
@@ -998,7 +1005,7 @@ def read_back(svg: str) -> dict:
     pieces: dict = {}
 
     def arm(r, c, st, a):
-        arms.setdefault((r, c), {"s": set(), "d": set()})[st].add(a)
+        arms.setdefault((r, c), {}).setdefault(st, set()).add(a)
 
     for hx, cy, qx, qy, vx, vy, cls in re.findall(
             r'<path d="M([\d.]+) ([\d.]+)Q([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)" class="([^"]+)"[^>]*/>', svg):
@@ -1029,7 +1036,7 @@ def read_back(svg: str) -> dict:
                 cell = (r0 + k, c0 + n - 1 - k) if s == "/" else (r0 + k, c0 + k)
                 slopes[cell] = slopes.get(cell, "") + s
             continue
-        st = "d" if cls == "dbl" else "s"
+        st = "d" if cls == "dbl" else cls[-1] if cls.startswith("sgl dash n") else "s"
         if y1 == y2:
             r = int((y1 - pad) // chh)
             for c in range(int((x1 - pad) // cw) - 1, int((x2 - pad) // cw) + 2):
@@ -1049,8 +1056,12 @@ def read_back(svg: str) -> dict:
                     if y2 > ccy + 0.01:
                         arm(r, c, st, "D")
     for k, v in arms.items():
-        s, d = frozenset(v["s"]), frozenset(v["d"])
-        if d and s:
+        s, d = frozenset(v.get("s", ())), frozenset(v.get("d", ()))
+        dashed = [n for n in "234" if v.get(n)]
+        if dashed:
+            only = len(v) == 1                             # a cell is one character: never dashed and solid
+            out[k] = DASH_OF.get((dashed[0], frozenset(v[dashed[0]])), "?") if only else "?"
+        elif d and s:
             out[k] = "╪" if (d, s) == (frozenset("LR"), frozenset("UD")) else "?"
         elif d:
             out[k] = next((ch for ch in DOUBLE if ARMS[ch] == d), "?")
@@ -1154,7 +1165,7 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
             if n in ARMS:
                 if back in ARMS[n] or touches(a, n):
                     continue
-                fixed = SINGLE_OF.get(ARMS[n] | {back}) if n not in DOUBLE else None
+                fixed = SINGLE_OF.get(ARMS[n] | {back}) if n not in DOUBLE and n not in DASHED else None
                 code, issue = "broken_join", f"line toward {a} meets '{n}' which doesn't connect back"
                 hint = (f"use '{fixed}' instead of '{n}' at {at(r + dr, c + dc)}" if fixed
                         else f"'{n}' at {at(r + dr, c + dc)} has no arm toward this line")

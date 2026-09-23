@@ -258,6 +258,7 @@ summary goes to stderr.
 | Source | Drawn as lines when… | Otherwise |
 |---|---|---|
 | `─│┌┐└┘├┤┬┴┼╭╮╰╯═║╔╗╚╝╪`, `▼▲▶◀` | always | – |
+| Dashed `╌╎ ┄┆ ┈┊` | always, dashed with 2, 3 or 4 dashes per cell; they join, box and carry arrows like any line (C4 boundaries, async calls) | – |
 | ASCII `+` `-` `\|` | they form a closed box, or attach to one directly or through `+` junctions | stay text |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
 | `╱╲╳` | always, corner to corner | – |
@@ -399,7 +400,7 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-54 tests over 23 test diagrams:
+55 tests over 24 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
@@ -423,6 +424,8 @@ python3 docs/build.py                  # regenerate every image in this README
   well-formed diagrams untouched
 - block elements drawn as exact rectangles (no glyphs, runs merged), and `/ \` drawn only as runs,
   never inside words like `yes/no` or `C:\Users`
+- dashed lines keep their dash count through the round trip, form boxes (a dashed C4 boundary
+  holds its three boxes) and carry arrows and flow pulses
 
 They pass with and without the optional packages.
 

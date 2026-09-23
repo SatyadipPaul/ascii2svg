@@ -693,6 +693,21 @@ def test_diagonals_draw_only_as_runs():
     assert a2s.self_check(svg, draw, cells) == [] and "<text" not in svg
 
 
+def test_dashed_lines_join_like_lines_and_keep_their_dash_count():
+    cells, draw, svg, stats, _ = pipeline(fx("dashed.txt"), color=True, animate="flow")
+    assert a2s.self_check(svg, draw, cells) == []
+    assert stats["boxes"] == 4 and stats["flows"] == 3                # dashed boxes, pulses along dashed arrows
+    for n in "234":
+        assert f'class="sgl dash n{n}"' in svg, n
+    assert not re.search(r'class="sgl dash[^"]*" pathLength', svg)    # pathLength would stretch the dashes
+    swapped = fx("dashed.txt").replace("╌", "┄", 1)                  # the dash count is part of the read-back
+    cells, draw, svg, _, _ = pipeline(swapped)
+    assert a2s.self_check(svg, draw, cells) == [] and "sgl dash n3" in svg
+    d = a2s.describe(*a2s.build_grid(fx("c4_dashed.txt").split("\n")))
+    boundary = next(b for b in d["boxes"] if b["name"].startswith("Internet Banking"))
+    assert sum(b["parent"] == boundary["id"] for b in d["boxes"]) == 3, d["boxes"]
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0
