@@ -52,9 +52,10 @@ It never guesses: a character it isn't sure about stays text.
 
 Same diagram, same guarantee, five ways:
 
-| default | `--color` | `--theme dark --color` | `--style flat --square` | `--animate` |
+| Default | Colour | Dark | Print | Alive |
 |:-:|:-:|:-:|:-:|:-:|
-| <img src="docs/looks/default.svg" width="150"> | <img src="docs/looks/color.svg" width="150"> | <img src="docs/looks/dark.svg" width="150"> | <img src="docs/looks/flat.svg" width="150"> | <img src="docs/looks/flow.svg" width="150"> |
+| <img src="docs/looks/default.svg" width="150" alt="default look"> | <img src="docs/looks/color.svg" width="150" alt="colour look"> | <img src="docs/looks/dark.svg" width="150" alt="dark look"> | <img src="docs/looks/flat.svg" width="150" alt="flat print look"> | <img src="docs/looks/flow.svg" width="150" alt="animated look"> |
+| *(no options)* | `--color` | `--theme dark`<br>`--color` | `--style flat`<br>`--square` | `--animate`<br>`--color`<br>`--theme auto` |
 
 | Option | What it does |
 |---|---|
