@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ascii2svg"
+version = "1.0.0"
+description = "Render ASCII/Unicode box diagrams as SVG, 1:1 - built for LLM agents"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[project.optional-dependencies]
+width = ["wcwidth>=0.2.6"]
+png = ["cairosvg>=2.5"]
+
+[project.scripts]
+ascii2svg = "ascii2svg:main"
+
+[tool.setuptools]
+py-modules = ["ascii2svg"]
+package-dir = {"" = "scripts"}

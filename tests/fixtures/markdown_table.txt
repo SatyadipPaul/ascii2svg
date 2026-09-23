@@ -1,0 +1,4 @@
+| Service  | Port | Owner      |
+|----------|------|------------|
+| orders   | 8080 | team-a     |
+| payments | 8443 | team-b     |
