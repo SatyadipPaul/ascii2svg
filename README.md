@@ -223,7 +223,7 @@ ascii2svg focuses on box diagrams, a verified 1:1 result, and agent workflows.
 
 | Source | Drawn as lines when… | Otherwise |
 |---|---|---|
-| ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ╭ ╮ ╰ ╯ ═ ║ ╔ ╗ ╚ ╝ ╪ ▼ ▲ ▶ ◀ | always | – |
+| ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ╭ ╮ ╰ ╯ ═ ║ ╔ ╗ ╚ ╝ ╪ ▼ ▲ ▶︎ ◀︎ | always | – |
 | Dashed ╌ ╎ ┄ ┆ ┈ ┊ | always, with 2, 3 or 4 dashes per cell; they join, box and carry arrows like any line | – |
 | ASCII `+` `-` `\|` | they form a closed box, or attach to one directly or through `+` junctions | stay text |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
