@@ -614,6 +614,60 @@ def test_playground_runs_the_released_module():
         assert a2s.render(text)[1]["roundtrip"] == "exact", name
 
 
+# ── repair ───────────────────────────────────────────────────────────────────
+LLM_FIXTURES = ["llm_output.txt", "llm_ascii_ragged.txt", "llm_side_by_side.txt", "llm_arrow_short.txt",
+                "broken_misaligned.txt"]
+LINE_CHARS = set("─│┌┐└┘├┤┬┴┼╭╮╰╯═║╔╗╚╝╪▼▲▶◀|+-v^<> ")
+
+
+def _words(lines):
+    """Each row with every line character and space removed: what repair must never change."""
+    return ["".join(ch for ch in line if ch not in LINE_CHARS) for line in lines]
+
+
+def test_repair_fixes_llm_style_misalignment():
+    for name in LLM_FIXTURES:
+        before = a2s.render(fx(name))[1]
+        svg, after = a2s.render(fx(name), repair=True, describe=True)
+        assert before["status"] == "warnings" and after["status"] == "ok", (name, after["warnings"])
+        assert after["roundtrip"] == "exact" and after["repair"]["edits"] and after["repair"]["text"], name
+        assert after["boxes"] >= before["boxes"], name
+    _, r = a2s.render(fx("llm_output.txt"), repair=True, describe=True)
+    edges = {(e["from"].get("name"), e["to"].get("name")) for e in r["diagram"]["edges"]}
+    assert r["boxes"] == 5 and edges == {("📱 Mobile app", "API Gateway"), ("API Gateway", "Auth service"),
+                                         ("API Gateway", "Orders service")}, edges
+    _, r = a2s.render(fx("llm_ascii_ragged.txt"), repair=True, describe=True)
+    edges = {(e["from"].get("name"), e["to"].get("name")) for e in r["diagram"]["edges"]}
+    assert r["boxes"] == 3 and edges == {("Client", "Server"), ("Server", "Database")}, edges
+
+
+def test_repair_never_changes_text():
+    for name in LLM_FIXTURES:
+        original = a2s.prepare(fx(name))[0]
+        repaired = a2s.render(fx(name), repair=True)[1]["repair"]["text"].split("\n")
+        assert len(repaired) == len(original), name
+        assert _words(repaired) == _words(original), name
+
+
+def test_repair_leaves_good_diagrams_alone():
+    for name in FIXTURES:
+        if name in LLM_FIXTURES:
+            continue
+        r = a2s.render(fx(name), repair=True)[1]
+        assert r["repair"]["edits"] == [] and "text" not in r["repair"], (name, r["repair"]["edits"][:3])
+
+
+def test_repair_result_is_exact_and_positions_point_into_the_input():
+    _, r = a2s.render(fx("broken_misaligned.txt"), repair=True)
+    assert r["repair"]["text"] == ("┌──────────────┐\n│ Order service│\n│ 🚀 fast path │\n└─────┬────────┘\n"
+                                   "      │\n┌─────▼────────┐\n│ Kafka topic  │\n└──────────────┘")
+    fixes = {(e["line"], e["col"]): e["fix"] for e in r["repair"]["edits"]}
+    assert fixes[(5, 7)] == "moved '│' 2 col right to line it up", fixes
+    code, out, _ = cli(os.path.join(FX, "llm_output.txt"), "--check", "--repair")
+    j = json.loads(out)
+    assert j["status"] == "ok" and j["summary"].startswith("Repaired 5 misalignments. Rendered 5 boxes"), j["summary"]
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0

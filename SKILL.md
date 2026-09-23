@@ -38,6 +38,11 @@ python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --preset readme --json -
    arrow connects what you meant; a missing edge usually means a misaligned arrow.
 5. Render with the preset for the destination (below), then tell the user the `summary`.
 
+**If a model drew the diagram (including you), add `--repair`.** It fixes ragged walls, emoji
+width drift, connectors a column or two off and arrows that stop short, without changing any
+words. `repair.edits` lists every change and `repair.text` is the corrected diagram: offer to
+put it back in the user's file, so their source matches the picture.
+
 | `status` | What to do |
 |---|---|
 | `ok` | Done. Share the file |
@@ -98,7 +103,7 @@ Most people won't name options. Choose from the destination; if it isn't clear, 
 `--preset readme|slides|chat|print|dark|page` · `--check` · `--describe` · `--brief` · `--json` ·
 `--color / --no-color` · `--theme light|dark|auto` · `--animate [draw|flow|scroll]` · `--html` ·
 `--style glow|shadow|flat` · `--square` · `--png [PATH]` · `--strict` · `--unescape` ·
-`--all-blocks` · `--block N` · `--accent #HEX` · `--font NAME` · `--width PX` ·
+`--repair` · `--all-blocks` · `--block N` · `--accent #HEX` · `--font NAME` · `--width PX` ·
 `--tab-size N` · `--title TEXT` · `--max-rows` / `--max-cols` (default 1000 × 400).
 `--mcp` runs it as an MCP server (tools `render_diagram`, `check_diagram`) if the user wants it
 wired into their editor: `claude mcp add ascii2svg -- ascii2svg --mcp`.

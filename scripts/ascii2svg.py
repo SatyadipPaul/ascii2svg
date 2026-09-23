@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.4.1"
+__version__ = "1.5.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -495,13 +495,17 @@ def trace_routes(get, heads, boxes, limit=200):
 
     Walks backwards from each arrowhead along connector lines; branches that lead into another
     arrowhead are dropped. A ┼ / ╪ is a crossing: the route goes straight through, which is
-    also how a connector passes through a box edge."""
+    also how a connector passes through a box edge. Walking backwards, a route never steps down
+    after stepping up: flow that climbs and then drops back down is a misreading of two branches
+    of a fork (a loop that drops and then climbs, like a 'changes requested' arrow, is fine)."""
     border = box_border(boxes)
     out = []
     for r, c, d in heads:
-        stack = [((r, c), OPP[d], [(r, c)])]
+        stack = [((r, c), OPP[d], [(r, c)], OPP[d] == "U")]
         while stack and len(out) < limit:
-            (cr, cc), step, seq = stack.pop()
+            (cr, cc), step, seq, climbed = stack.pop()
+            if climbed and step == "D":
+                continue
             n = (cr + DIRS[step][0], cc + DIRS[step][1])
             t, back = get(*n), OPP[step]
             if t in HEADS:
@@ -516,7 +520,7 @@ def trace_routes(get, heads, boxes, limit=200):
                 out.append(((r, c, d), seq, "box", step))       # starts on a box edge
                 continue
             for a in ([step] if crossing else sorted(ARMS[t] - {back}, reverse=True)):
-                stack.append((n, a, seq))
+                stack.append((n, a, seq, climbed or a == "U"))
     return out
 
 
@@ -1104,6 +1108,252 @@ def input_warnings(raw, cells, info, drawn=None, origin=(0, 0)):
     return out
 
 
+# ─── repair (--repair): fix the misalignments LLM-drawn diagrams typically have ─
+# Only line characters and spaces move or appear, and only into empty cells: text never changes.
+# Every edit is reported, and the repaired text is returned so it can replace the original.
+_VWALL = set("│║|├┤┼╟╢╪")
+_TL, _TR, _BL, _BR = set("┌╭╔"), set("┐╮╗"), set("└╰╚"), set("┘╯╝")
+
+
+class _Grid:
+    def __init__(self, cells):
+        self.cells = dict(cells)
+        self.edits = []
+
+    def ch(self, r, c):
+        return self.cells.get((r, c), (" ", 1))[0]
+
+    def free(self, r, c):
+        return self.cells.get((r, c), (" ", 1)) == (" ", 1)
+
+    def put(self, r, c, t):
+        self.cells[(r, c)] = (t, 1)
+
+    def note(self, r, c, fix):
+        self.edits.append({"row": r + 1, "col": c + 1, "fix": fix})
+
+    @property
+    def nrows(self):
+        return max((r for r, _ in self.cells), default=-1) + 1
+
+    @property
+    def ncols(self):
+        return max((c + max(w, 1) for (_, c), (_, w) in self.cells.items()), default=0)
+
+
+def _box_candidates(g):
+    """Every box outline that starts cleanly (a top edge and a left wall down to a bottom-left
+    corner), whatever state its right side is in: (top, left, top-right col, bottom, ascii)."""
+    out = []
+    for (r, c) in sorted(g.cells):
+        t = g.ch(r, c)
+        ascii_box = t == "+" and g.ch(r, c + 1) == "-" and g.ch(r, c - 1) != "-"
+        if not (t in _TL or ascii_box):
+            continue
+        ct, x = None, c + 1
+        while x < c + 400:
+            tx = g.ch(r, x)
+            if tx in _TL or tx in "│║|" or (tx == " " and g.ch(r, x + 1) == " " and g.ch(r, x + 2) == " "):
+                break                                       # another box, a wall, or open space: no top edge
+            if (not ascii_box and tx in _TR) or (ascii_box and tx == "+" and g.ch(r, x + 1) != "-"):
+                ct = x
+                break
+            x += 1
+        if ct is None or ct - c < 2:
+            continue
+        rb, drift = None, []
+        wall = (lambda t: t in "|+") if ascii_box else (lambda t: t in _VWALL)
+        for rr in range(r + 1, g.nrows + 1):
+            lw = g.ch(rr, c)
+            if (not ascii_box and lw in _BL) or (ascii_box and lw == "+" and g.ch(rr, c + 1) == "-"
+                                                 and g.ch(rr + 1, c) not in "|+"):
+                rb = rr
+                break
+            if not wall(lw):
+                p = next((x for x in (c + 1, c - 1, c + 2, c - 2) if g.ch(rr, x) in ("|" if ascii_box else "│║")), None)
+                if p is None:
+                    break
+                drift.append((rr, p))                       # the left wall drifted on this row
+        if rb is not None and rb > r + 1 and len(drift) < (rb - r - 1):
+            out.append((r, c, ct, rb, ascii_box, drift))
+    return out
+
+
+def _fix_edge(g, row, cur, target, corner, edge):
+    """Move an edge's end corner from `cur` to `target`, extending or trimming the edge."""
+    if target > cur:
+        if not all(g.free(row, x) for x in range(cur + 1, target + 1)):
+            return False
+        for x in range(cur, target):
+            g.put(row, x, edge)
+        g.put(row, target, corner)
+        g.note(row, target, f"extended the edge by {target - cur} so its corner '{corner}' lines up")
+        return True
+    if not all(g.ch(row, x) in "─═-" for x in range(target, cur)):
+        return False
+    g.put(row, target, corner)
+    for x in range(target + 1, cur + 1):
+        g.put(row, x, " ")
+    g.note(row, target, f"shortened the edge by {cur - target} so its corner '{corner}' lines up")
+    return True
+
+
+def _repair_box_once(g):
+    """Right side of one box: the top corner, each row's wall and the bottom corner vote on the
+    column; the majority wins and the stragglers move. Returns True if something changed."""
+    boxes = _box_candidates(g)
+    claimed = {}                                            # (row, col) -> box, for every box's own walls
+    for b in boxes:
+        r, c, ct, rb = b[:4]
+        for rr in range(r, rb + 1):
+            claimed.setdefault((rr, c), b)
+            claimed.setdefault((rr, ct), b)
+    for b in boxes:
+        r, c, ct, rb, ascii_box, drift = b
+        wall_ok = (lambda t: t in "|+") if ascii_box else (lambda t: t in _VWALL)
+        corner_ok = (lambda t: t == "+") if ascii_box else (lambda t: t in _BR)
+        near = [ct - 1, ct + 1, ct - 2, ct + 2, ct - 3, ct + 3]
+        rows = {}
+        for rr in range(r + 1, rb):
+            if wall_ok(g.ch(rr, ct)):
+                rows[rr] = ct
+                continue
+            rows[rr] = next((p for p in near if wall_ok(g.ch(rr, p)) and claimed.get((rr, p), b) is b), None)
+        pb = ct if corner_ok(g.ch(rb, ct)) else next((p for p in near if corner_ok(g.ch(rb, p))), None)
+        votes = {}
+        for p in [ct] + [p for p in rows.values() if p is not None] + ([pb] if pb is not None else []):
+            votes[p] = votes.get(p, 0) + 1
+        target = max(votes, key=lambda k: (votes[k], k == ct))
+        changed = False
+        for rr, p in drift:                                 # left walls first: they anchor the row
+            lo, hi = sorted((p, c))
+            if g.free(rr, c) and all(g.free(rr, x) for x in range(lo + 1, hi)):
+                t = g.ch(rr, p)
+                g.put(rr, p, " ")
+                g.put(rr, c, t)
+                g.note(rr, c, f"moved the left wall '{t}' {abs(c - p)} col {'right' if c > p else 'left'}")
+                changed = True
+        edge = "-" if ascii_box else ("═" if g.ch(r, c) == "╔" else "─")
+        if ct != target:
+            changed |= _fix_edge(g, r, ct, target, g.ch(r, ct), edge)
+        for rr, p in rows.items():
+            if p is None:
+                if g.free(rr, target) and g.ch(rr, target - 1) == " ":
+                    wall = "|" if ascii_box else ("║" if edge == "═" else "│")
+                    g.put(rr, target, wall)
+                    g.note(rr, target, f"added the missing right wall '{wall}'")
+                    changed = True
+            elif p != target:
+                lo, hi = sorted((p, target))
+                if g.free(rr, target) and all(g.free(rr, x) for x in range(lo + 1, hi)):
+                    t = g.ch(rr, p)
+                    g.put(rr, p, " ")
+                    g.put(rr, target, t)
+                    g.note(rr, target, f"moved the right wall '{t}' {abs(target - p)} col {'right' if target > p else 'left'}")
+                    changed = True
+        if pb is not None and pb != target:
+            changed |= _fix_edge(g, rb, pb, target, g.ch(rb, pb), edge)
+        if changed:
+            return True
+    return False
+
+
+def _repair_connector_once(g):
+    """One connector fix, then the caller re-analyses: a piece one cell off moves into line,
+    a short gap before a line or box is filled, an arrowhead one cell short moves to touch."""
+    cells, nrows, ncols = g.cells, g.nrows, g.ncols
+    drawn, _ = interpret(cells, nrows, ncols)
+    get = lambda r, c: drawn.get((r, c), cells.get((r, c), (" ", 1))[0])
+    border = box_border(find_boxes(get, nrows, ncols))
+    is_text = lambda t: t not in (" ", "") and t not in ARMS and t not in HEADS
+    axis = {"U": "│", "D": "│", "L": "─", "R": "─"}
+    for (r, c) in sorted(cells):
+        t = get(r, c)
+        if t not in ARMS:
+            continue
+        raw = g.ch(r, c)
+        for a in sorted(ARMS[t]):
+            dr, dc = DIRS[a]
+            nr, nc = r + dr, c + dc
+            if get(nr, nc) != " " or is_text(get(r + 2 * dr, c + 2 * dc)):
+                continue
+            # a piece one cell to the side that continues this line: move it into line
+            want = {"D": "▼v", "U": "▲^", "R": "▶>", "L": "◀<"}[a]
+            sides = (((0, 1), (0, -1), (0, 2), (0, -2)) if a in "UD"          # nearest first
+                     else ((1, 0), (-1, 0), (2, 0), (-2, 0)))
+            for sr, sc in sides:
+                pr, pc = nr + sr, nc + sc
+                p = get(pr, pc)
+                straight = (p in ARMS and ARMS[p] == (frozenset("UD") if a in "UD" else frozenset("LR"))) \
+                    or p == ("|" if a in "UD" else "-")
+                if (p in want or straight) and (pr, pc) not in border and g.free(nr, nc) \
+                        and g.cells.get((pr, pc), (" ", 1))[1] == 1:
+                    q = g.ch(pr, pc)
+                    g.put(pr, pc, " ")
+                    g.put(nr, nc, q)
+                    g.note(nr, nc, f"moved '{q}' {abs(sc)} col {'left' if sc > 0 else 'right'} to line it up"
+                           if sr == 0 else f"moved '{q}' {abs(sr)} line {'up' if sr > 0 else 'down'} to line it up")
+                    return True
+            # a gap of one or two cells before a line, a box or an arrowhead: fill it
+            for k in (2, 3):
+                ahead = get(r + k * dr, c + k * dc)
+                if ahead == " ":
+                    continue
+                if (ahead in ARMS or ahead in HEADS) and all(g.free(r + j * dr, c + j * dc) for j in range(1, k)):
+                    fill = ("|" if a in "UD" else "-") if raw in "|-+" else \
+                           (("║" if a in "UD" else "═") if t in DOUBLE else axis[a])
+                    for j in range(1, k):
+                        g.put(r + j * dr, c + j * dc, fill)
+                    g.note(nr, nc, f"filled a {k - 1}-cell gap in the line with '{fill}'")
+                    return True
+                break
+    for (r, c) in sorted(cells):                            # an arrowhead one cell short of its target
+        t = get(r, c)
+        if t not in HEADS:
+            continue
+        d = HEADS[t]
+        dr, dc = DIRS[d]
+        n1, n2 = (r + dr, c + dc), (r + 2 * dr, c + 2 * dc)
+        tail = get(r - dr, c - dc)
+        if g.free(*n1) and (get(*n2) in ARMS or n2 in border) and tail in ARMS and d in ARMS[tail]:
+            raw = g.ch(r, c)
+            shaft = ("|" if d in "UD" else "-") if raw in "v^<>" else ("│" if d in "UD" else "─")
+            g.put(r, c, shaft)
+            g.put(*n1, raw)
+            g.note(n1[0], n1[1], f"moved '{raw}' one cell so it touches what it points at")
+            return True
+    return False
+
+
+def grid_text(cells):
+    """The text of a grid, one line per row (wide characters count once)."""
+    rows = {}
+    for (r, c), tw in cells.items():
+        rows.setdefault(r, {})[c] = tw
+    out = []
+    for r in range(max(rows, default=-1) + 1):
+        row, s, c = rows.get(r, {}), [], 0
+        end = max(row, default=-1)
+        while c <= end:
+            t, w = row.get(c, (" ", 1))
+            if w == 0:
+                c += 1
+                continue
+            s.append(t)
+            c += w
+        out.append("".join(s).rstrip())
+    return "\n".join(out)
+
+
+def repair(cells, limit=200):
+    """Fix typical misalignment. Returns (cells, edits); edits carry 1-based grid row/col."""
+    g = _Grid(cells)
+    for _ in range(limit):
+        if not (_repair_box_once(g) or _repair_connector_once(g)):
+            break
+    return g.cells, g.edits
+
+
 def unescape(text):
     r"""Turn literal \n, \t, \r, \" and \\ into the characters they stand for (for --unescape)."""
     return re.sub(r'\\(n|t|r|"|\\)', lambda m: {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}[m.group(1)], text)
@@ -1229,6 +1479,8 @@ REPORT_FIELDS = {
     "diagrams, skipped": "with several inputs or --all-blocks: one report per diagram, and the code blocks "
                          "skipped because they had no lines or boxes; status/summary/exit_code aggregate them",
     "self_check_problems": "only when roundtrip is not exact",
+    "repair": "with --repair: {edits: [{line, col, fix}], text}; text is the corrected diagram (only when "
+              "something changed); the 1:1 check then holds against that text",
 }
 STDIN_WAIT = 5.0                            # seconds to wait for implicit stdin before giving up
 
@@ -1318,6 +1570,9 @@ def build_parser():
                    help="add the diagram's structure to the report: boxes, and which box each arrow connects")
     p.add_argument("--brief", action="store_true", help="keep the JSON small: never embed the markup")
     p.add_argument("--strict", action="store_true", help="exit 3 if there are warnings")
+    p.add_argument("--repair", action="store_true",
+                   help="fix typical misalignment first (ragged walls, drifting connectors, short arrows); "
+                        "only line characters move, text never changes; edits and fixed text are in the report")
     p.add_argument("--unescape", action="store_true", help=r"turn literal \n, \t, \" and \\ in the input into real characters")
     p.add_argument("--tab-size", type=int, default=4, help="tab stops for tab characters (default: 4)")
     p.add_argument("--title", default="ASCII diagram", help="accessible title stored in the SVG")
@@ -1471,6 +1726,15 @@ def run_one(args, raw, notes, base=0):
     if nrows > args.max_rows or ncols > args.max_cols:
         raise ValueError(f"diagram is {nrows} rows x {ncols} columns; limit is {args.max_rows} x "
                          f"{args.max_cols} (raise with --max-rows / --max-cols)")
+    fixes = None
+    if args.repair:
+        fixed, edits = repair(cells)
+        if edits:
+            cells, nrows, ncols = build_grid(grid_text(fixed).split("\n"))
+        fixes = {"edits": [{"line": base + origin["line"] + e["row"], "col": origin["col"] + e["col"],
+                            "fix": e["fix"]} for e in edits]}
+        if edits:
+            fixes["text"] = grid_text(cells)
     drawn, info = interpret(cells, nrows, ncols)
     draw_cells = {k: ((drawn[k], w) if k in drawn else (t, w)) for k, (t, w) in cells.items()}
     style = dict(accent=args.accent, font=args.font, width=args.width)
@@ -1498,6 +1762,8 @@ def run_one(args, raw, notes, base=0):
     if nrows > 45 and args.animate in ("draw", "flow") and not args.html:
         report["tips"].append("tall diagram: the lower part finishes drawing before the reader scrolls "
                               "to it; for a web page use --animate scroll -o NAME.html (or --preset page)")
+    if fixes is not None:
+        report["repair"] = fixes
     if args.describe:
         report["diagram"] = describe(draw_cells, nrows, ncols)
     is_diagram = any(t in ARMS or t in HEADS for t, _ in draw_cells.values())
@@ -1521,10 +1787,12 @@ def _finish(report, code, where=None):
     what = (f"{report['boxes']} box{'es' if report['boxes'] != 1 else ''} and "
             f"{report['arrowheads']} arrow{'s' if report['arrowheads'] != 1 else ''} "
             f"({report['rows']}x{report['cols']})")
+    fixed = len(report.get("repair", {}).get("edits", []))
+    repaired = f"Repaired {fixed} misalignment{'s' if fixed != 1 else ''}. " if fixed else ""
     if code == 2:
         summary = f"Self-check FAILED: the output does not match the input 1:1; do not use it. Found {what}."
     else:
-        summary = f"Rendered {what}{' to ' + where if where else ''}; 1:1 self-check exact."
+        summary = f"{repaired}Rendered {what}{' to ' + where if where else ''}; 1:1 self-check exact."
         if w:
             at = f"line {w[0]['source_line']} col {w[0]['source_col']}" if "source_line" in w[0] \
                 else f"row {w[0]['row']} col {w[0]['col']}"
@@ -1542,7 +1810,8 @@ def render(text: str, *, preset: str | None = None, style: str | None = None, sq
            theme: str | None = None, color: bool | None = None, animate: str | None = None,
            html: bool | None = None, accent: str | None = None, font: str | None = None,
            width: int | None = None, title: str = "ASCII diagram", tab_size: int = 4,
-           describe: bool = False, unescape: bool = False, strict: bool = False) -> tuple[str, dict]:
+           describe: bool = False, unescape: bool = False, strict: bool = False,
+           repair: bool = False) -> tuple[str, dict]:
     """Render a diagram. Returns (markup, report): an SVG, or a web page with html=True.
 
     Options match the CLI; unset look options come from `preset`, then the defaults
@@ -1562,7 +1831,7 @@ def render(text: str, *, preset: str | None = None, style: str | None = None, sq
     check_style(accent, font, width)
     args.accent, args.font, args.width = accent, font, width
     args.text, args.title, args.tab_size = text, title, tab_size
-    args.describe, args.unescape, args.strict = describe, unescape, strict
+    args.describe, args.unescape, args.strict, args.repair = describe, unescape, strict, repair
     resolve_look(args)
     if args.animate == "scroll" and not args.html:
         raise ValueError("animate='scroll' needs html=True (an SVG shown as an image can't see the page scroll)")
@@ -1602,6 +1871,8 @@ MCP_TOOLS = [
          "width": {"type": "integer", "description": "Scale the output to this width in pixels"},
          "title": {"type": "string", "description": "Accessible title stored in the output"},
          "describe": {"type": "boolean", "description": "Also return boxes and edges (which box each arrow connects)"},
+         "repair": {"type": "boolean", "description": "Fix typical misalignment first (ragged walls, drifting "
+                                                      "connectors, short arrows); the fixed text is in report.repair.text"},
      }}},
     {"name": "check_diagram",
      "description": "Validate an ASCII/Unicode box diagram without writing anything. Returns 'status', "
@@ -1611,6 +1882,8 @@ MCP_TOOLS = [
      "inputSchema": {"type": "object", "required": ["diagram"], "properties": {
          "diagram": _DIAGRAM,
          "describe": {"type": "boolean", "description": "Include boxes and edges (default true)"},
+         "repair": {"type": "boolean", "description": "Also fix typical misalignment; report.repair lists the "
+                                                      "edits and report.repair.text is the corrected diagram"},
      }}},
 ]
 
@@ -1623,11 +1896,11 @@ def _mcp_call(name, a):
         return _failed({"input": "diagram"}, "'diagram' must be a string with the diagram text")
     try:
         if name == "check_diagram":
-            _, report = render(diagram, describe=a.get("describe", True))
+            _, report = render(diagram, describe=a.get("describe", True), repair=bool(a.get("repair")))
             return report
         path = a.get("output_path")
         kw = {k: a[k] for k in ("preset", "style", "square", "theme", "color", "animate", "accent", "font",
-                                "width", "title", "describe") if a.get(k) is not None}
+                                "width", "title", "describe", "repair") if a.get(k) is not None}
         html_out = bool(path and path.lower().endswith((".html", ".htm")))
         if html_out or kw.get("preset") == "page" or kw.get("animate") == "scroll":
             kw["html"] = True

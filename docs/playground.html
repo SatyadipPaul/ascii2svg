@@ -202,6 +202,7 @@
       html += "<ul>" + r.warnings.map((w, i) =>
         `<li${i >= 8 ? " hidden" : ""}><button data-w="${i}">line ${w.source_line}, col ${w.source_col}</button>: ${esc(w.hint)}</li>`).join("") + "</ul>";
       if (r.warnings.length > 8) html += `<button id="more-w">Show ${r.warnings.length - 8} more</button>`;
+      html += ` <button id="fix-btn" class="primary" title="Move misaligned walls, connectors and arrowheads into line. Your text is never changed.">Fix alignment</button>`;
     }
     const edges = (r.diagram && r.diagram.edges) || [];
     if (edges.length) {
@@ -212,6 +213,21 @@
     $("report").querySelectorAll("button[data-w]").forEach((b) => b.onclick = () => jump(r.warnings[+b.dataset.w]));
     const more = $("more-w");
     if (more) more.onclick = () => { $("report").querySelectorAll("li[hidden]").forEach((li) => li.hidden = false); more.remove(); };
+    const fix = $("fix-btn");
+    if (fix) fix.onclick = async () => {                   // repair, then show the fixed text in the editor
+      fix.disabled = true;
+      const res = await call(src.value, { ...options(), repair: true });
+      const edits = (res.report && res.report.repair && res.report.repair.edits) || [];
+      if (res.report && res.report.repair && res.report.repair.text) {
+        src.value = res.report.repair.text;
+        $("example").value = "";
+        toast(`Fixed ${edits.length} misalignment${edits.length === 1 ? "" : "s"}`);
+        schedule(0);
+      } else {
+        fix.disabled = false;
+        toast("Nothing to fix automatically: see the hints");
+      }
+    };
   }
 
   function jump(w) {
@@ -300,7 +316,7 @@
     toast("Share link copied");
   };
 
-  src.addEventListener("input", () => schedule());
+  src.addEventListener("input", () => { $("example").value = ""; schedule(); });   // it is your diagram now
   src.addEventListener("keydown", (e) => {                 // Tab inserts spaces instead of leaving the editor
     if (e.key !== "Tab" || e.shiftKey) return;
     e.preventDefault();
@@ -314,11 +330,12 @@
   ["keyup", "click", "select"].forEach((ev) => src.addEventListener(ev, where));
   $("preset").onchange = () => { applyPreset($("preset").value); schedule(0); };
   controls.forEach((id) => $(id).addEventListener("change", () => { $("preset").value = ""; schedule(0); }));
-  $("example").onchange = () => { src.value = examples[$("example").value] || ""; schedule(0); };
+  $("example").onchange = () => { if ($("example").value) { src.value = examples[$("example").value]; schedule(0); } };
 
   (async () => {
     examples = await (await fetch("playground/examples.json")).json();
-    $("example").innerHTML = Object.keys(examples).map((k) => `<option>${esc(k)}</option>`).join("");
+    $("example").innerHTML = `<option value="">(your diagram)</option>` +
+      Object.keys(examples).map((k) => `<option>${esc(k)}</option>`).join("");
     const q = new URLSearchParams(location.hash.slice(1));
     if (q.get("d")) {
       try { src.value = await unpack(q.get("d")); } catch { src.value = examples[Object.keys(examples)[0]]; }

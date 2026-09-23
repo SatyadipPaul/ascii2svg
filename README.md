@@ -50,6 +50,55 @@ Nothing to learn.
 writes an SVG plus a JSON report that an agent or a CI job can check (`exit_code`, `roundtrip`, `warnings`).
 It never guesses: a character it isn't sure about stays text.
 
+## LLM diagrams, fixed
+
+Ask any chat model for an architecture diagram and the boxes rarely line up: an emoji counted
+as one column instead of two, a wall one space short, a connector that drifts sideways
+between rows. `--repair` puts them back:
+
+| As the model wrote it | `--repair` |
+|:-:|:-:|
+| <img src="https://satyadippaul.github.io/ascii2svg/llm-before.svg" width="400" alt="An LLM-drawn diagram rendered as-is: three of five boxes not recognised, broken walls, a stray line"> | <img src="https://satyadippaul.github.io/ascii2svg/llm-after.svg" width="400" alt="The same diagram after --repair: five tinted boxes, clean connectors"> |
+| 2 of 5 boxes recognised, 10 warnings | 5 boxes, 0 warnings, 5 fixes |
+
+```bash
+ascii2svg diagram.txt -o diagram.svg --repair --json
+```
+
+```json
+{"status": "ok", "summary": "Repaired 5 misalignments. Rendered 5 boxes and 3 arrows (22x51); 1:1 self-check exact.",
+ "repair": {"edits": [{"line": 2, "col": 23, "fix": "moved the right wall '│' 1 col left"},
+                      {"line": 6, "col": 12, "fix": "moved '│' 1 col left to line it up"}, "..."],
+            "text": "┌─────────────────────┐\n│  📱 Mobile app      │\n..."}}
+```
+
+- **What it fixes:** ragged right walls (the top corner, every row and the bottom corner vote on
+  where the wall belongs), drifted left walls, edges one character too long or short,
+  connector pieces and arrowheads one or two columns off, arrowheads that stop a cell short,
+  and gaps of one or two cells before a box.
+- **What it never does:** change your words. Only line characters and spaces move or appear,
+  and only into empty cells. A test strips every line character from each row, before and
+  after, and checks that what remains is identical.
+- **What you get back:** every edit with its line and column, and the corrected text in
+  `repair.text`, ready to paste back where the diagram came from. The 1:1 guarantee then holds
+  against that text. Diagrams that were already right come back untouched.
+
+In the [playground](https://satyadippaul.github.io/ascii2svg/playground.html), a diagram with
+warnings shows a **Fix alignment** button. It rewrites the editor text, so you see exactly what moved.
+
+## Beyond boxes
+
+Flows that branch and merge, tables with callouts, swimlanes: all plain text, all 1:1.
+
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/decision-flow.svg" width="820" alt="A checkout flow that fans out into a fraud-score decision tree and converges back into fulfilment"></p>
+
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/pivot-table.svg" width="760" alt="A revenue pivot table by region, country and quarter, with subtotals and a callout on a Q3 spike"></p>
+
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/swimlanes.svg" width="700" alt="Incident-response swimlanes with arrows crossing lanes"></p>
+
+The sources are in [`docs/examples/`](https://github.com/SatyadipPaul/ascii2svg/tree/main/docs/examples),
+and all of them are in the playground's example picker.
+
 ## Pick a look
 
 Same diagram, same guarantee, five ways:
@@ -69,6 +118,7 @@ Same diagram, same guarantee, five ways:
 | `-o page.html` (or `--html`) | A standalone web page with the diagram inline. Double-click to open, or email it. |
 | `--style glow\|shadow\|flat` | Depth under the boxes. The glow shrinks automatically so it never sits behind a label. |
 | `--square` | Keep corners square (they are rounded by default). |
+| `--repair` | Fix typical misalignment first (see [LLM diagrams, fixed](#llm-diagrams-fixed)). Only line characters move; your text never changes. |
 | `--accent #hex` · `--font NAME` · `--width PX` | Your brand colour for arrows and animation, a font to try first (e.g. `JetBrains Mono`), and the output width. None of them affect the 1:1 check. |
 
 The animation is careful about where it runs:
@@ -332,7 +382,7 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-48 tests over 17 test diagrams:
+52 tests over 21 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
@@ -352,6 +402,8 @@ python3 docs/build.py                  # regenerate every image in this README
 - the browser playground runs exactly this module, and every playground example round-trips
 - no false alarms on sequence diagrams, timelines, charts with ticks and dashed boundaries, while
   real mistakes (a gap before a box, a broken wall) still warn; touching lines are drawn touching
+- `--repair` on LLM-style misalignment: every fixture repaired to `ok`, text provably unchanged,
+  well-formed diagrams untouched
 
 They pass with and without the optional packages.
 
@@ -361,7 +413,8 @@ They pass with and without the optional packages.
 
 ## Not yet
 
-- **Auto-repair of misaligned diagrams.** It warns with row/column instead.
+- **Repairing bigger misalignments.** `--repair` fixes pieces up to two cells off and walls up to
+  three; anything further is left alone and warned, since guessing would risk a wrong picture.
 - **ASCII rounded corners (`.-'`) and diagonals (`/ \`).** These stay text.
 - **Free-floating ASCII connectors that touch no box** (e.g. `A ---> B` between plain words). These stay text.
 - **An MCP server and a JS/npm port.**

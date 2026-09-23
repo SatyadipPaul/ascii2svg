@@ -14,6 +14,11 @@ IMAGES = [
     ("tests/fixtures/complex_unicode.txt", "docs/architecture.svg", LIVE),
     ("tests/fixtures/complex_unicode.txt", "docs/architecture.html",
      ["--theme", "auto", "--color", "--animate", "scroll", "--title", "Order platform architecture"]),
+    ("docs/examples/llm-output.txt", "docs/llm-before.svg", ["--theme", "auto", "--color"]),
+    ("docs/examples/llm-output.txt", "docs/llm-after.svg", ["--theme", "auto", "--color", "--repair"]),
+    ("docs/examples/decision-flow.txt", "docs/decision-flow.svg", LIVE + ["--title", "Checkout decision flow"]),
+    ("docs/examples/pivot-table.txt", "docs/pivot-table.svg", ["--theme", "auto", "--color", "--title", "Revenue pivot"]),
+    ("docs/examples/swimlanes.txt", "docs/swimlanes.svg", LIVE + ["--title", "Incident response swimlanes"]),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/default.svg", []),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/color.svg", ["--color"]),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/dark.svg", ["--theme", "dark", "--color"]),
@@ -22,6 +27,10 @@ IMAGES = [
 ]
 # playground: name shown in the picker -> source file (or the text itself)
 EXAMPLES = [
+    ("LLM output: press Fix alignment", "docs/examples/llm-output.txt"),
+    ("Checkout: flow, decision tree, flow", "docs/examples/decision-flow.txt"),
+    ("Pivot table with a callout", "docs/examples/pivot-table.txt"),
+    ("Incident swimlanes", "docs/examples/swimlanes.txt"),
     ("Workflow (plain ASCII)", "docs/examples/workflow.txt"),
     ("How ascii2svg works", "docs/examples/how-it-works.txt"),
     ("Fan-out (plain ASCII)", "tests/fixtures/ascii_fanout.txt"),
