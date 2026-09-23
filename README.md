@@ -5,7 +5,7 @@
 [Live demo](https://satyadippaul.github.io/ascii2svg/) · [Scroll demo](https://satyadippaul.github.io/ascii2svg/architecture.html) · [Download the Claude skill](https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill)
 
 <p align="center">
-  <img src="docs/how-it-works.svg" alt="ascii2svg pipeline: your diagram, find boxes and arrows, draw, read the SVG back, compare cell by cell, ready to share" width="640">
+  <img src="https://satyadippaul.github.io/ascii2svg/how-it-works.svg" alt="ascii2svg pipeline: your diagram, find boxes and arrows, draw, read the SVG back, compare cell by cell, ready to share" width="640">
 </p>
 
 You sketch a diagram in plain text, in a README, a code comment, a chat with an AI, or a
@@ -30,7 +30,7 @@ own SVG back and checks it against your text, cell by cell. If anything moved, i
 
 ## …get this
 
-<p align="center"><img src="docs/workflow.svg" alt="The same workflow rendered: four tinted boxes, arrows, and a feedback loop from Review back to Draft" width="720"></p>
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/workflow.svg" alt="The same workflow rendered: four tinted boxes, arrows, and a feedback loop from Review back to Draft" width="720"></p>
 
 ```bash
 python3 scripts/ascii2svg.py workflow.txt -o workflow.svg --color --theme auto --animate
@@ -56,7 +56,7 @@ Same diagram, same guarantee, five ways:
 
 | Default | Colour | Dark | Print | Alive |
 |:-:|:-:|:-:|:-:|:-:|
-| <img src="docs/looks/default.svg" width="150" alt="default look"> | <img src="docs/looks/color.svg" width="150" alt="colour look"> | <img src="docs/looks/dark.svg" width="150" alt="dark look"> | <img src="docs/looks/flat.svg" width="150" alt="flat print look"> | <img src="docs/looks/flow.svg" width="150" alt="animated look"> |
+| <img src="https://satyadippaul.github.io/ascii2svg/looks/default.svg" width="150" alt="default look"> | <img src="https://satyadippaul.github.io/ascii2svg/looks/color.svg" width="150" alt="colour look"> | <img src="https://satyadippaul.github.io/ascii2svg/looks/dark.svg" width="150" alt="dark look"> | <img src="https://satyadippaul.github.io/ascii2svg/looks/flat.svg" width="150" alt="flat print look"> | <img src="https://satyadippaul.github.io/ascii2svg/looks/flow.svg" width="150" alt="animated look"> |
 | *(no options)* | `--color` | `--theme dark`<br>`--color` | `--style flat`<br>`--square` | `--animate`<br>`--color`<br>`--theme auto` |
 
 | Option | What it does |
@@ -105,7 +105,7 @@ is refused with an explanation. The SVG inside the page is the same self-checked
 script only decides *when* each part appears.
 
 **Try it:** [open the scroll demo](https://satyadippaul.github.io/ascii2svg/architecture.html) and scroll.
-It's [`docs/architecture.html`](docs/architecture.html), served by GitHub Pages.
+It's [`docs/architecture.html`](https://github.com/SatyadipPaul/ascii2svg/blob/main/docs/architecture.html), served by GitHub Pages.
 
 ## Where is it going?
 
@@ -123,23 +123,42 @@ It's [`docs/architecture.html`](docs/architecture.html), served by GitHub Pages.
 The flows follow the real wiring: through junctions, down to both branches of a fan-out, and
 across the edge of a container.
 
-<p align="center"><img src="docs/architecture.svg" alt="A 72 by 96 character architecture diagram of an order platform, rendered with colour and flow animation" width="760"></p>
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/architecture.svg" alt="A 72 by 96 character architecture diagram of an order platform, rendered with colour and flow animation" width="760"></p>
 
 <details><summary>The text it came from (72 × 96 characters)</summary>
 
-See [`tests/fixtures/complex_unicode.txt`](tests/fixtures/complex_unicode.txt). 28 boxes, 18 arrows, a
+See [`tests/fixtures/complex_unicode.txt`](https://github.com/SatyadipPaul/ascii2svg/blob/main/tests/fixtures/complex_unicode.txt). 28 boxes, 18 arrows, a
 call tree and double-line borders, all drawn from plain text.
 
 </details>
 
 ## Install
 
-Python 3.8+ and nothing else. Copy `scripts/ascii2svg.py` anywhere, or:
+Python 3.9+ and nothing else:
 
 ```bash
-pip install .                # adds the `ascii2svg` command
-pip install ".[width,png]"   # optional: wcwidth (character widths) + cairosvg (--png)
+pip install ascii2svg                 # adds the `ascii2svg` command and the `ascii2svg` module
+pip install "ascii2svg[width,png]"    # optional: wcwidth (character widths) + cairosvg (--png)
 ```
+
+It is a single file with no dependencies, so you can also just copy
+[`scripts/ascii2svg.py`](https://github.com/SatyadipPaul/ascii2svg/blob/main/scripts/ascii2svg.py) into your project.
+
+**As a Python library:**
+
+```python
+import ascii2svg
+
+svg, report = ascii2svg.render(open("diagram.txt").read(), color=True, theme="auto", animate="flow")
+assert report["roundtrip"] == "exact"          # the 1:1 self-check passed
+open("diagram.svg", "w", encoding="utf-8").write(svg)
+
+page, report = ascii2svg.render(text, color=True, animate="scroll", html=True)   # a scroll-reveal page
+```
+
+`render()` takes the same options as the CLI (`style`, `square`, `theme`, `color`, `animate`, `html`,
+`title`, `tab_size`) and returns the markup plus the same report as `--json`. It raises `ValueError`
+for empty or oversized input and for unknown options.
 
 **As a Claude skill:** download [`ascii2svg.skill`](https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill)
 from the latest release (or build it: `python3 tools/package_skill.py` → `dist/ascii2svg.skill`), then:
@@ -147,7 +166,7 @@ from the latest release (or build it: `python3 tools/package_skill.py` → `dist
 - **claude.ai / Claude desktop:** Customize → Skills → upload `ascii2svg.skill`.
 - **Claude Code:** unzip it into `~/.claude/skills/` (you get `~/.claude/skills/ascii2svg/`).
 
-[`SKILL.md`](SKILL.md) tells Claude when to use it, which look fits which destination (including
+[`SKILL.md`](https://github.com/SatyadipPaul/ascii2svg/blob/main/SKILL.md) tells Claude when to use it, which look fits which destination (including
 `scroll` pages for tall diagrams), and how to read the report before handing you the file.
 
 ## Usage
@@ -253,7 +272,7 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-27 tests over 11 test diagrams:
+28 tests over 11 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
@@ -264,9 +283,13 @@ python3 docs/build.py                  # regenerate every image in this README
 - planted faults that must be caught
 - byte-identical repeat runs
 - width fallback vs `wcwidth`
-- CLI behaviour, including UTF-8 output on Windows consoles
+- CLI behaviour, including UTF-8 output on Windows consoles, and the `render()` library API
 
 They pass with and without the optional packages.
+
+## License
+
+[MIT](https://github.com/SatyadipPaul/ascii2svg/blob/main/LICENSE). Use it, change it and ship it, commercially too; keep the copyright notice.
 
 ## Not yet
 

@@ -6,6 +6,7 @@ Every character keeps its exact grid cell. Box-drawing characters, and ASCII
 Everything else is drawn as the same text in the same place.
 
 Built for LLM agents:   cat diagram.txt | ascii2svg -o diagram.svg --json
+As a library:           svg, report = ascii2svg.render(text, color=True, animate="flow")
 No required dependencies (uses `wcwidth` for character widths if installed).
 """
 from __future__ import annotations
@@ -17,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -1029,6 +1030,30 @@ def run(args) -> tuple[int, dict, str, str]:
         report["self_check_problems"] = problems[:50]
         return 2, report, svg, still
     return (3 if args.strict and warnings else 0), report, svg, still
+
+
+def render(text: str, *, style: str = "glow", square: bool = False, theme: str = "light",
+           color: bool = False, animate: str = "none", html: bool = False,
+           title: str = "ASCII diagram", tab_size: int = 4) -> tuple[str, dict]:
+    """Render a diagram. Returns (markup, report): an SVG, or a web page with html=True.
+
+    The report is the same dict the CLI prints with --json. Check report["roundtrip"] ==
+    "exact" (report["exit_code"] == 2 means the 1:1 self-check failed). Raises ValueError
+    for empty or oversized input, and for animate="scroll" without html=True.
+    """
+    args = build_parser().parse_args([])
+    for name, value in (("style", style), ("theme", theme), ("animate", animate)):
+        allowed = {"style": ("glow", "shadow", "flat"), "theme": ("light", "dark", "auto"),
+                   "animate": ANIMATIONS}[name]
+        if value not in allowed:
+            raise ValueError(f"{name} must be one of {', '.join(allowed)}")
+    if animate == "scroll" and not html:
+        raise ValueError("animate='scroll' needs html=True (an SVG shown as an image can't see the page scroll)")
+    args.text, args.square, args.color, args.html, args.title, args.tab_size = text, square, color, html, title, tab_size
+    args.style, args.theme, args.animate = style, theme, animate
+    code, report, svg, _ = run(args)
+    report["exit_code"] = code
+    return (to_html(svg, title, theme) if html else svg), report
 
 
 def main(argv=None) -> int:

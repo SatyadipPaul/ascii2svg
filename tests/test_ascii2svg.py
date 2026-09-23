@@ -297,6 +297,20 @@ def test_cli_output_is_utf8_on_any_console():
     assert code == 0 and ">🚀</text>" in out and ">数</text>" in out, err
 
 
+def test_library_api():
+    svg, report = a2s.render(fx("ascii_fanout.txt"), color=True, animate="flow")
+    assert svg.startswith("<svg") and report["roundtrip"] == "exact" and report["exit_code"] == 0
+    assert report["flows"] == 4 and report["color"] is True
+    page, report = a2s.render(fx("complex_unicode.txt"), animate="scroll", html=True, theme="auto")
+    assert page.startswith("<!doctype html>") and report["roundtrip"] == "exact"
+    for bad in (dict(animate="scroll"), dict(theme="sepia"), dict(style="neon")):
+        try:
+            a2s.render("+--+\n|  |\n+--+", **bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad} should be rejected")
+
+
 def test_help_is_written_for_models():
     out = cli("--help")[1]
     assert "exit codes" in out and "--json" in out and "stays text" in out and "--animate" in out
