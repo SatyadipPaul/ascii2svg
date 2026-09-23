@@ -117,9 +117,10 @@ Any mismatch means exit code 2.
 python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 ```
 
-20 tests over 11 test diagrams: round-trip in every style, the ASCII traps, glow never behind
+21 tests over 11 test diagrams: round-trip in every style, the ASCII traps, glow never behind
 a label, planted faults that must be caught, byte-identical repeat runs, width fallback vs
-`wcwidth`, and CLI behaviour. They pass with and without the optional packages.
+`wcwidth`, CLI behaviour, and UTF-8 output on non-UTF-8 consoles (Windows). They pass with and
+without the optional packages.
 
 ## Not in v1
 

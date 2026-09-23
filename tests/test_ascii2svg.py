@@ -23,8 +23,8 @@ def fx(name):
     return open(os.path.join(FX, name), encoding="utf-8").read()
 
 
-def cli(*args, stdin=None):
-    p = subprocess.run([sys.executable, CLI, *args], input=stdin, capture_output=True)
+def cli(*args, stdin=None, env=None):
+    p = subprocess.run([sys.executable, CLI, *args], input=stdin, capture_output=True, env=env)
     return p.returncode, p.stdout.decode("utf-8"), p.stderr.decode("utf-8")
 
 
@@ -219,6 +219,17 @@ def test_cli_png(tmp=os.path.join(HERE, "_tmp_out")):
     code, out, _ = cli(os.path.join(FX, "ascii_fanout.txt"), "-o", svg, "--png", "--json")
     r = json.loads(out)
     assert code == 0 and os.path.getsize(r["png"]) > 1000 and open(svg).read().startswith("<svg")
+
+
+def test_cli_output_is_utf8_on_any_console():
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}     # what a Windows console gives by default
+    env.pop("PYTHONUTF8", None)
+    code, out, err = cli(os.path.join(FX, "broken_misaligned.txt"), "--json", env=env)
+    assert code == 0 and json.loads(out)["warnings"], err
+    code, out, err = cli("--help", env=env)
+    assert code == 0 and "─│┌┐" in out, err
+    code, out, err = cli(os.path.join(FX, "wide_chars.txt"), env=env)      # SVG with emoji/CJK on stdout
+    assert code == 0 and ">🚀</text>" in out and ">数</text>" in out, err
 
 
 def test_help_is_written_for_models():

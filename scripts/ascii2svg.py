@@ -743,6 +743,9 @@ def run(args) -> tuple[int, dict, str]:
 
 
 def main(argv=None) -> int:
+    for stream in (sys.stdout, sys.stderr):              # Windows consoles default to cp1252
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
 
     def fail(code, msg):
