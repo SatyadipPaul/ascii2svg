@@ -371,7 +371,7 @@ def test_near_miss_gets_a_concrete_fix():
     r = json.loads(out)
     w = r["warnings"][0]
     assert (r["status"], w["code"], w["row"], w["col"]) == ("warnings", "dangling_line", 4, 4), r
-    assert "row 5 col 5" in w["hint"] and "one column right" in w["hint"] and w["hint"] in r["summary"]
+    assert "line 5 col 5" in w["hint"] and "one column right" in w["hint"] and w["hint"] in r["summary"]
     fixed = MISALIGNED.replace("    v", "   v")
     r = json.loads(cli("-", "--json", "--brief", stdin=fixed.encode())[1])
     assert (r["status"], r["arrowheads"]) == ("ok", 1), r
@@ -446,6 +446,129 @@ def test_forgotten_input_fails_instead_of_hanging():
         if p.poll() is None:
             p.kill()
     assert code == 1 and r["status"] == "bad_input" and "nothing arrived" in r["error"], r
+
+
+# ── many diagrams, style, MCP ────────────────────────────────────────────────
+README_MD = """# Service
+
+```bash
+pip install thing
+```
+
+```
++-------+     +-------+
+| api   |---->| cache |
++---+---+     +-------+
+    |
+     v
++-------+
+| db    |
++-------+
+```
+
+```text
+┌───────┐    ┌────────┐
+│ build ├───▶│ deploy │
+└───────┘    └────────┘
+```
+"""
+
+
+def _tmpdir(name):
+    import shutil
+    d = os.path.join(HERE, name)
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d)
+    return d
+
+
+def test_all_blocks_renders_every_diagram_and_skips_code():
+    import shutil
+    d = _tmpdir("_tmp_blocks")
+    try:
+        md = os.path.join(d, "README.md")
+        open(md, "w", encoding="utf-8").write(README_MD)
+        code, out, _ = cli(md, "--all-blocks", "-o", os.path.join(d, "out") + "/", "--json")
+        r = json.loads(out)
+        assert code == 0 and r["status"] == "warnings" and len(r["diagrams"]) == 2, r["summary"]
+        assert [s["source"]["info"] for s in r["skipped"]] == ["bash"]
+        assert sorted(os.listdir(os.path.join(d, "out"))) == ["README-2.svg", "README-3.svg"]
+        w = r["diagrams"][0]["warnings"][0]                        # the off-by-one v, in file coordinates
+        assert (w["code"], w["source_line"], w["source_col"]) == ("dangling_line", 11, 5), w
+        assert README_MD.split("\n")[w["source_line"] - 1][w["source_col"] - 1] == "|"
+        assert "line 12 col 6" in w["hint"], w["hint"]
+        assert README_MD.split("\n")[11][5] == "v"
+        code, out, _ = cli(md, "--block", "3", "--check")
+        r = json.loads(out)
+        assert (r["status"], r["source"]["block"], r["boxes"]) == ("ok", 3, 2)
+        assert json.loads(cli(md, "--block", "9", "--check")[1])["status"] == "bad_input"
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def test_several_inputs_one_report_each():
+    code, out, _ = cli(os.path.join(FX, "ascii_fanout.txt"), os.path.join(FX, "wide_chars.txt"),
+                       os.path.join(FX, "no_such_file.txt"), "--check")
+    r = json.loads(out)
+    assert (code, r["status"]) == (1, "bad_input") and [d["status"] for d in r["diagrams"]] == ["ok", "ok", "bad_input"]
+    assert "3 diagrams" in r["summary"] and "1 bad input" in r["summary"]
+    code, out, _ = cli(os.path.join(FX, "ascii_fanout.txt"), os.path.join(FX, "wide_chars.txt"), "-o", "one.svg", "--json")
+    assert code == 1 and "directory" in json.loads(out)["error"]            # -o must be a directory for several
+
+
+def test_style_options():
+    svg, r = a2s.render(fx("ascii_fanout.txt"), color=True, accent="#e8590c", font="JetBrains Mono", width=570)
+    assert r["roundtrip"] == "exact" and "#e8590c" in svg and "'JetBrains Mono',ui-monospace" in svg
+    assert re.search(r'viewBox="0 0 285 240" width="570" height="480"', svg)
+    for bad in (dict(accent="orange"), dict(font="x;}</style>"), dict(width=3)):
+        try:
+            a2s.render(fx("ascii_fanout.txt"), **bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad} should be rejected")
+    code, out, _ = cli(os.path.join(FX, "ascii_fanout.txt"), "--accent", "blue", "--json")
+    assert code == 1 and json.loads(out)["status"] == "usage_error"
+
+
+def test_mcp_server_speaks_the_protocol():
+    import shutil
+    d = _tmpdir("_tmp_mcp")
+    p = subprocess.Popen([sys.executable, CLI, "--mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, text=True, encoding="utf-8")
+
+    def rpc(i, method, params=None):
+        p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params or {}}) + "\n")
+        p.stdin.flush()
+        return json.loads(p.stdout.readline())
+
+    try:
+        init = rpc(1, "initialize", {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "t"}})
+        assert init["result"]["protocolVersion"] == "2025-03-26" and "tools" in init["result"]["capabilities"]
+        p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
+        tools = rpc(2, "tools/list")["result"]["tools"]
+        assert {t["name"] for t in tools} == {"render_diagram", "check_diagram"}
+        assert all(t["inputSchema"]["required"] == ["diagram"] for t in tools)
+        res = rpc(3, "tools/call", {"name": "check_diagram", "arguments": {"diagram": fx("ascii_fanout.txt")}})["result"]
+        rep = json.loads(res["content"][0]["text"])
+        assert res["isError"] is False and rep["status"] == "ok" and len(rep["diagram"]["edges"]) == 4
+        out = os.path.join(d, "nested", "fan.svg")
+        res = rpc(4, "tools/call", {"name": "render_diagram",
+                                    "arguments": {"diagram": fx("ascii_fanout.txt"), "output_path": out, "preset": "readme"}})["result"]
+        rep = json.loads(res["content"][0]["text"])
+        assert rep["status"] == "ok" and os.path.getsize(out) > 1000 and rep["svg"] == os.path.abspath(out)
+        res = rpc(5, "tools/call", {"name": "render_diagram", "arguments": {"diagram": 42}})["result"]
+        assert res["isError"] is True
+        assert rpc(6, "tools/call", {"name": "nope"})["error"]["code"] == -32602
+        assert rpc(7, "no/such/method")["error"]["code"] == -32601
+        assert rpc(8, "ping")["result"] == {}
+    finally:
+        p.stdin.close()
+        code = p.wait(timeout=20)
+        p.stdout.close()
+        err = p.stderr.read()
+        p.stderr.close()
+        shutil.rmtree(d, ignore_errors=True)
+    assert code == 0 and err == "", err                                        # stdout carried only protocol
 
 
 if __name__ == "__main__":

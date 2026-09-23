@@ -21,7 +21,10 @@ python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --preset readme --json -
   PATH (`pip install ascii2svg`), you can call that instead.
 - **Write the diagram to a file** (or pipe it with `-`). Don't use `--text`: tool-call arguments
   turn newlines into literal `\n`, and the diagram collapses into one line of text.
-- A markdown file is fine: the first ```` ``` ```` code block is used automatically.
+- A markdown file is fine: the first ```` ``` ```` code block is used automatically. Add
+  `--all-blocks -o DIR/` to render every diagram in it (other code blocks are skipped), or
+  `--block N` for one. Several input files work the same way. Each warning's
+  `source_line`/`source_col` points into the file you passed, and so does its hint.
 - Always pass `--json`, or `--check`, which implies it. Every outcome is then one JSON object on
   stdout, usage errors included. Add `--brief` so the report doesn't embed the markup.
 
@@ -29,8 +32,8 @@ python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --preset readme --json -
 
 1. Run `--check --describe` on your draft.
 2. Read `status` and `summary`. They come first in the report.
-3. For each warning, apply its `hint`: it names the character and the row/col to move or
-   change (`dangling_line`, `broken_join`). Re-run until `status` is `ok`.
+3. For each warning, apply its `hint`: it names the character and the line/col in your file
+   to move or change (`dangling_line`, `broken_join`). Re-run until `status` is `ok`.
 4. Read `diagram.edges` (`{"from": {"name": "API"}, "to": {"name": "DB"}}`). Confirm every
    arrow connects what you meant; a missing edge usually means a misaligned arrow.
 5. Render with the preset for the destination (below), then tell the user the `summary`.
@@ -92,5 +95,8 @@ Most people won't name options. Choose from the destination; if it isn't clear, 
 `--preset readme|slides|chat|print|dark|page` · `--check` · `--describe` · `--brief` · `--json` ·
 `--color / --no-color` · `--theme light|dark|auto` · `--animate [draw|flow|scroll]` · `--html` ·
 `--style glow|shadow|flat` · `--square` · `--png [PATH]` · `--strict` · `--unescape` ·
+`--all-blocks` · `--block N` · `--accent #HEX` · `--font NAME` · `--width PX` ·
 `--tab-size N` · `--title TEXT` · `--max-rows` / `--max-cols` (default 1000 × 400).
+`--mcp` runs it as an MCP server (tools `render_diagram`, `check_diagram`) if the user wants it
+wired into their editor: `claude mcp add ascii2svg -- ascii2svg --mcp`.
 `--schema` prints all of this, and the report fields, as JSON.

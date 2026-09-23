@@ -69,6 +69,7 @@ Same diagram, same guarantee, five ways:
 | `-o page.html` (or `--html`) | A standalone web page with the diagram inline. Double-click to open, or email it. |
 | `--style glow\|shadow\|flat` | Depth under the boxes. The glow shrinks automatically so it never sits behind a label. |
 | `--square` | Keep corners square (they are rounded by default). |
+| `--accent #hex` · `--font NAME` · `--width PX` | Your brand colour for arrows and animation, a font to try first (e.g. `JetBrains Mono`), and the output width. None of them affect the 1:1 check. |
 
 The animation is careful about where it runs:
 
@@ -172,9 +173,10 @@ from the latest release (or build it: `python3 tools/package_skill.py` → `dist
 ## Usage
 
 ```
-ascii2svg [INPUT] [-o OUT.svg|OUT.html] [--preset NAME] [--json] [--check] [--describe] [--brief]
+ascii2svg [INPUT ...] [-o OUT.svg|OUT.html|DIR/] [--preset NAME] [--json] [--check] [--describe] [--brief]
           [--color] [--theme light|dark|auto] [--animate [draw|flow|scroll]] [--html]
-          [--style glow|shadow|flat] [--square] [--unescape] [--strict] [--schema]
+          [--style glow|shadow|flat] [--square] [--accent #HEX] [--font NAME] [--width PX]
+          [--all-blocks] [--block N] [--unescape] [--strict] [--schema] [--mcp]
           [--png [PATH]] [--strict] [--text TEXT] [--tab-size N] [--title TEXT]
 ```
 
@@ -270,6 +272,38 @@ ascii2svg draft.txt -o out.svg --preset readme --json --brief
 | 2 | Self-check failed: the output is not 1:1. Don't use it |
 | 3 | `--strict` and there were warnings |
 
+### Many diagrams at once
+
+```bash
+ascii2svg README.md --all-blocks -o diagrams/ --preset readme   # every diagram in the file
+ascii2svg docs/*.txt -o out/ --check                            # several files, one report each
+ascii2svg README.md --block 3 -o flow.svg                       # just the third code block
+```
+
+Code blocks without lines or boxes (your `bash` and `python` examples) are skipped and listed under
+`skipped`. Output files are named after the input (`README-2.svg` for its second code block). The
+report holds one entry per diagram under `diagrams`, and its top-level `status`, `summary` and
+`exit_code` cover the whole batch. Every warning also carries `source_line`/`source_col`: its position
+in the file you passed, not in the extracted block, and the hint uses the same numbers.
+
+### As an MCP server
+
+```bash
+claude mcp add ascii2svg -- ascii2svg --mcp          # Claude Code
+```
+
+```json
+{"mcpServers": {"ascii2svg": {"command": "ascii2svg", "args": ["--mcp"]}}}
+```
+
+The second form works for Claude Desktop, Cursor, and any other MCP client. Two tools, no dependencies:
+
+- **`check_diagram`** validates a diagram and returns the report, with boxes and edges; it writes nothing.
+- **`render_diagram`** writes `output_path` (`.svg`, or `.html` for a page) with any preset or style option.
+
+The diagram travels as a JSON string, so the escaped-newline problem can't happen. Tested against the
+official MCP Python SDK.
+
 ### As a tool in any agent framework
 
 Pass the diagram on stdin (or as a file), never through `--text`: escaped newlines are the most
@@ -293,7 +327,7 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-40 tests over 11 test diagrams:
+44 tests over 11 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
@@ -308,6 +342,8 @@ python3 docs/build.py                  # regenerate every image in this README
 - the agent contract: JSON usage errors (never exit 2), status and summary, near-miss hints,
   escaped-newline and broken-box detection, `--describe` edges, presets, `--schema`, and no hang
   on a forgotten input
+- every diagram in a markdown file, several inputs, positions mapped back to the file, style
+  options, and the MCP server's protocol
 
 They pass with and without the optional packages.
 
