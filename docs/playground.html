@@ -198,9 +198,10 @@
     }
     const cls = r.status === "ok" ? "ok" : r.status === "warnings" ? "warnings" : "bad";
     let html = `<span class="pill ${cls}">${esc(r.status.replace("_", " "))}</span>${esc(r.summary)}`;
-    if (r.warnings.length) {
-      html += "<ul>" + r.warnings.slice(0, 8).map((w, i) =>
-        `<li><button data-w="${i}">line ${w.source_line}, col ${w.source_col}</button>: ${esc(w.hint)}</li>`).join("") + "</ul>";
+    if (r.warnings.length) {                              // all of them: the first 8, the rest one click away
+      html += "<ul>" + r.warnings.map((w, i) =>
+        `<li${i >= 8 ? " hidden" : ""}><button data-w="${i}">line ${w.source_line}, col ${w.source_col}</button>: ${esc(w.hint)}</li>`).join("") + "</ul>";
+      if (r.warnings.length > 8) html += `<button id="more-w">Show ${r.warnings.length - 8} more</button>`;
     }
     const edges = (r.diagram && r.diagram.edges) || [];
     if (edges.length) {
@@ -209,6 +210,8 @@
     }
     $("report").innerHTML = html;
     $("report").querySelectorAll("button[data-w]").forEach((b) => b.onclick = () => jump(r.warnings[+b.dataset.w]));
+    const more = $("more-w");
+    if (more) more.onclick = () => { $("report").querySelectorAll("li[hidden]").forEach((li) => li.hidden = false); more.remove(); };
   }
 
   function jump(w) {

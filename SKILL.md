@@ -47,7 +47,10 @@ python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --preset readme --json -
 
 - `escaped_newlines`: your input arrived as one line with literal `\n`. Write it to a file instead
   (or add `--unescape`).
-- `no_structure`: ASCII boxes that never close; every box needs `+` at all four corners.
+- `unclosed_box`: an ASCII box that never closes stays plain text; the hint names the broken
+  wall (e.g. a `<` where a `|` belongs). `no_structure`: box pieces but no box at all.
+- A warning means evidence of a mistake. Lines ending at labels, sequence messages `│───▶│`,
+  axis ticks and lifeline ends are fine and don't warn.
 - `normalized`: what was cleaned up (tabs, odd spaces, code fence). Mention it if it matters.
 
 ## What gets drawn

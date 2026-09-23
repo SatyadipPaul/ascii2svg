@@ -378,16 +378,48 @@ def test_near_miss_gets_a_concrete_fix():
 
 
 def test_broken_join_names_the_right_character():
-    _, report = a2s.render("┌──┐\n│  │\n└──┘\n─│\n")
+    _, report = a2s.render("┌──┐\n│  │\n└──┘\n─┌─\n")            # ─ runs into ┌, which has no arm back
     joins = [w for w in report["warnings"] if w["code"] == "broken_join"]
-    assert joins and "┤" in joins[0]["hint"], report["warnings"]
+    assert joins and "use '┬' instead of '┌'" in joins[0]["hint"], report["warnings"]
 
 
-def test_no_structure_only_for_broken_boxes():
+def test_unclosed_box_says_which_wall_breaks():
     _, report = a2s.render("+----+\n| hi |\n+---+\n")                          # bottom edge too short
-    assert [w["code"] for w in report["warnings"]] == ["no_structure"], report["warnings"]
-    for name in ("markdown_table.txt", "ascii_tree.txt", "ascii_labels.txt"):
-        assert not [w for w in a2s.render(fx(name))[1]["warnings"] if w["code"] == "no_structure"], name
+    assert [w["code"] for w in report["warnings"]] == ["unclosed_box"], report["warnings"]
+    _, report = a2s.render(fx("er_broken_box.txt"))                             # crow's foot in the wall
+    w = [w for w in report["warnings"] if w["code"] == "unclosed_box"]
+    assert len(w) == 1 and "left wall at line 5 col 23 is '<'" in w[0]["hint"] and "right wall" in w[0]["hint"], w
+    assert report["status"] == "warnings"                                       # no longer a silent 'ok'
+    _, report = a2s.render("a +- b -+ c\n")                                     # pieces, but no box starts
+    assert [w["code"] for w in report["warnings"]] == ["no_structure"]
+    for name in ("markdown_table.txt", "ascii_tree.txt", "ascii_labels.txt", "ascii_fanout.txt", "ascii_titled.txt"):
+        assert not [w for w in a2s.render(fx(name))[1]["warnings"]
+                    if w["code"] in ("no_structure", "unclosed_box")], name
+
+
+def test_no_false_alarms_on_well_formed_diagrams():
+    """Sequence messages │──▶│, lifeline ends, axis ticks, labels below lines, titles in borders."""
+    for name in ("sequence.txt", "timeline.txt", "gantt_ticks.txt", "xy_chart.txt", "c4_dashed.txt",
+                 "complex_unicode.txt", "ascii_fanout.txt", "unicode_labels.txt"):
+        report = a2s.render(fx(name))[1]
+        assert report["status"] == "ok", (name, report["warnings"])
+
+
+def test_touching_lines_are_drawn_touching():
+    svg = a2s.render(fx("sequence.txt"))[0]
+    life = 12 + 4 * 9 + 4.5                                                      # the Client lifeline's x
+    assert re.search(r'<line x1="%g" y1="[\d.]+" x2="[\d.]+"' % (life + 0.7), svg), "message should start at the lifeline"
+    cells, draw, svg, _, _ = pipeline(fx("sequence.txt"))
+    assert a2s.self_check(svg, draw, cells) == []                               # the lifeline still reads back as │
+
+
+def test_real_mistakes_still_warn():
+    _, r = a2s.render("┌────┐\n│ a  │\n└─┬──┘\n  │\n\n┌────┐\n│ b  │\n└────┘\n")   # stops one row short
+    w = r["warnings"]
+    assert [x["code"] for x in w] == ["dangling_line"] and "stops 1 cell short of '─' at line 6 col 3" in w[0]["hint"], w
+    _, r = a2s.render("──  ┐\n\n    │\n")                                        # two gaps from one corner
+    corner = [x for x in r["warnings"] if (x["row"], x["col"]) == (1, 5)]
+    assert len(corner) == 1 and "also toward" in corner[0]["issue"], r["warnings"]  # one warning per character
 
 
 def test_check_validates_and_writes_nothing(tmp=os.path.join(HERE, "_tmp_check.svg")):

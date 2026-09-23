@@ -233,7 +233,12 @@ ascii2svg draft.txt -o out.svg --preset readme --json --brief
 - **Warnings you can act on:** each has a stable `code`, a 1-based `row`/`col`, the source `line`,
   and a `hint`. When a line misses its partner by one cell, the hint says where it is.
 - **Silently wrong input is caught:** one-line input with literal `\n` (`escaped_newlines`; fix it with
-  `--unescape`), and ASCII box pieces that never close (`no_structure`).
+  `--unescape`), and ASCII boxes that never close (`unclosed_box`: the hint names the broken wall,
+  e.g. "its left wall at line 5 col 23 is '<'").
+- **No false alarms on well-formed diagrams:** a line may end at a label, meet another line
+  side-on (sequence messages `│───▶│`, drawn touching), or stop in open space (axis ticks,
+  lifeline ends). A warning means there is evidence of a mistake: a partner one cell off, a
+  line that stops just short of a box, a junction with a missing arm, or a box that never closes.
 - **`--describe`** adds what the diagram *says*: boxes (name, title, text, position, parent) and
   edges (`Gateway → Orders`), so you can check that the picture means what you intended.
 - **`--preset readme|slides|chat|print|dark|page`** picks the look from the destination.
@@ -253,7 +258,7 @@ ascii2svg draft.txt -o out.svg --preset readme --json --brief
 | `summary` | One sentence to pass on to the user |
 | `exit_code`, `ok` | See exit codes; `ok` is false only when the self-check failed |
 | `roundtrip` | `exact`: the output was read back and matches the input cell for cell |
-| `warnings` | `{code, row, col, char, line, issue, hint}`; codes: `dangling_line`, `broken_join`, `escaped_newlines`, `no_structure` |
+| `warnings` | `{code, row, col, char, line, issue, hint}`; codes: `dangling_line`, `broken_join`, `unclosed_box`, `escaped_newlines`, `no_structure` |
 | `diagram` | With `--describe`: `{boxes: [...], edges: [{from, to}]}`; an endpoint is `{box, name}`, `{text}` or `{cell}` |
 | `rows`, `cols`, `boxes`, `arrowheads`, `flows`, `text_cells` | What was found |
 | `style`, `theme`, `color`, `animate`, `html`, `preset` | The look that was rendered |
@@ -327,7 +332,7 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-45 tests over 11 test diagrams:
+48 tests over 17 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
@@ -345,6 +350,8 @@ python3 docs/build.py                  # regenerate every image in this README
 - every diagram in a markdown file, several inputs, positions mapped back to the file, style
   options, and the MCP server's protocol
 - the browser playground runs exactly this module, and every playground example round-trips
+- no false alarms on sequence diagrams, timelines, charts with ticks and dashed boundaries, while
+  real mistakes (a gap before a box, a broken wall) still warn; touching lines are drawn touching
 
 They pass with and without the optional packages.
 

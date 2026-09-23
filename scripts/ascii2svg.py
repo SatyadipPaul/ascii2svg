@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -666,14 +666,18 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                 continue
             for a in sorted(arms):
                 st = st_h if a in "LR" else st_v
+                n = get(r + DIRS[a][0], c + DIRS[a][1])
+                # meeting a straight line side-on (│───▶│): run on until the strokes meet, stopping
+                # just short of that cell's centre so it still reads back as a plain │ / ─
+                ext = ((CW if a in "LR" else CH) / 2 - (2.5 if n in DOUBLE else 0.7)) if touches(a, n) else 0
                 if a == "L":
-                    add(st, "h", cy, x0, cx)
+                    add(st, "h", cy, x0 - ext, cx)
                 elif a == "R":
-                    add(st, "h", cy, cx, x0 + CW)
+                    add(st, "h", cy, cx, x0 + CW + ext)
                 elif a == "U":
-                    add(st, "v", cx, y0, cy)
+                    add(st, "v", cx, y0 - ext, cy)
                 else:
-                    add(st, "v", cx, cy, y0 + CH)
+                    add(st, "v", cx, cy, y0 + CH + ext)
         elif t in HEADS:
             heads.append((r, c, HEADS[t]))
         else:
@@ -959,6 +963,12 @@ def self_check(svg, drawn_cells, original_cells):
     return problems
 
 
+def touches(a, n):
+    """A line running toward `a` meets straight line `n` side-on, e.g. a sequence message │───▶│.
+    Nothing to fix: the renderer runs the line up to `n` so they meet."""
+    return n in ARMS and ARMS[n] == (frozenset("UD") if a in "LR" else frozenset("LR"))
+
+
 def _near_miss(get, r, c, a, at):
     """A line at (r, c) runs toward a and hits empty space. Is its partner one cell off to the side?"""
     dr, dc = DIRS[a]
@@ -974,18 +984,35 @@ def _near_miss(get, r, c, a, at):
     return None
 
 
-def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
-    """Line ends that don't meet anything - usually a misaligned diagram.
+def _gap(get, r, c, a, at, reach=3):
+    """A line at (r, c) runs toward a into empty space. Is there a line, box or arrowhead just ahead?"""
+    dr, dc = DIRS[a]
+    for k in range(2, reach + 2):
+        t = get(r + k * dr, c + k * dc)
+        if t == " ":
+            continue
+        if t in ARMS or t in HEADS:
+            return (f"the line stops {k - 1} cell{'s' if k > 2 else ''} short of '{t}' at "
+                    f"{at(r + k * dr, c + k * dc)}; extend it so they meet")
+        return None                                     # text ahead: the line just ends near a label
+    return None
 
-    Each warning has a stable `code`, 1-based `row`/`col`, the source `line`, and a `hint`
-    (a concrete fix when the partner character is one cell off)."""
+
+def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
+    """Line ends that look like mistakes - usually a misaligned diagram.
+
+    Not warned: a line that ends at text (a label) or an arrowhead, meets a straight line side-on
+    (│───▶│), or simply stops in open space (ticks, lifeline ends, stubs). Warned: a line whose
+    partner is one cell off to the side, one that stops just short of a line or box, and a line
+    that runs into a corner or junction without an arm toward it. One warning per character.
+    Each has a stable `code`, 1-based `row`/`col`, the source `line`, and a concrete `hint`."""
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
     at = lambda r, c: f"line {r + origin[0] + 1} col {c + origin[1] + 1}"      # where it is in the input
     rows = {}
     for (r, c), (t, _) in sorted(cells.items()):
         rows.setdefault(r, []).append(t)
     line = lambda r: "".join(rows.get(r, ())).rstrip()                        # only built for real warnings
-    out = []
+    out, by_cell = [], {}
     for (r, c) in sorted(cells):
         t = get(r, c)
         if t not in ARMS:
@@ -994,28 +1021,71 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
             dr, dc = DIRS[a]
             n, back = get(r + dr, c + dc), OPP[a]
             if n in ARMS:
-                if back not in ARMS[n]:
-                    w = {"row": r + 1, "col": c + 1, "char": t, "line": line(r)}
-                    fixed = SINGLE_OF.get(ARMS[n] | {back}) if n not in DOUBLE else None
-                    w.update(code="broken_join", issue=f"line toward {a} meets '{n}' which doesn't connect back",
-                             hint=(f"use '{fixed}' instead of '{n}' at {at(r + dr, c + dc)}" if fixed
-                                   else f"'{n}' at {at(r + dr, c + dc)} has no arm toward this line"))
-                    out.append(w)
-            elif n in HEADS:
-                continue
-            elif t in "─═" or (a == "U" and n.strip()):
-                continue                                  # a line may end at text; a tree may hang from a label
+                if back in ARMS[n] or touches(a, n):
+                    continue
+                fixed = SINGLE_OF.get(ARMS[n] | {back}) if n not in DOUBLE else None
+                code, issue = "broken_join", f"line toward {a} meets '{n}' which doesn't connect back"
+                hint = (f"use '{fixed}' instead of '{n}' at {at(r + dr, c + dc)}" if fixed
+                        else f"'{n}' at {at(r + dr, c + dc)} has no arm toward this line")
+            elif n != " ":
+                continue                                  # an arrowhead, or a label: a fine place to end
             else:
-                w = {"row": r + 1, "col": c + 1, "char": t, "line": line(r)}
-                w.update(code="dangling_line", issue=f"line toward {a} ends in empty space",
-                         hint=_near_miss(get, r, c, a, at) or "extend the line to a box or an arrowhead, or remove it")
-                out.append(w)
+                t2 = get(r + 2 * dr, c + 2 * dc)
+                if t2 not in (" ", "") and t2 not in ARMS and t2 not in HEADS:
+                    continue                              # a space, then a label: a title in a border, "──▶ HTTP 400"
+                hint = _near_miss(get, r, c, a, at) or _gap(get, r, c, a, at)
+                if not hint:
+                    continue                              # a free end: a tick, a lifeline's end, a stub
+                code, issue = "dangling_line", f"line toward {a} ends in empty space"
+            if (r, c) in by_cell:                         # one warning per character
+                by_cell[(r, c)]["issue"] += f"; also toward {a}"
+                continue
+            w = {"row": r + 1, "col": c + 1, "char": t, "line": line(r), "code": code, "issue": issue, "hint": hint}
+            by_cell[(r, c)] = w
+            out.append(w)
             if len(out) >= limit:
                 return out
     return out
 
 
-def input_warnings(raw, cells, info):
+def box_warnings(cells, drawn, origin=(0, 0)):
+    """ASCII boxes that start (+---+ with a wall below) but were never drawn because they don't close.
+    Says exactly which wall or edge breaks, and where."""
+    ch = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    at = lambda r, c: f"line {r + origin[0] + 1} col {c + origin[1] + 1}"
+    nrows = max((r for r, _ in cells), default=-1) + 1
+    out = []
+    for (r, c) in sorted(cells):
+        if ch(r, c) != "+" or (r, c) in drawn or ch(r, c + 1) != "-" or ch(r, c - 1) == "-":
+            continue
+        c2 = c + 1
+        while ch(r, c2) == "-":
+            c2 += 1
+        if ch(r, c2) != "+" or c2 - c < 3 or ch(r + 1, c) not in "|+" or ch(r + 1, c2) not in "|+":
+            continue
+        why = None
+        for rr in range(r + 1, nrows + 1):
+            a, b = ch(rr, c), ch(rr, c2)
+            if a == "+" and b == "+":
+                bad = next((x for x in range(c + 1, c2) if ch(rr, x) not in "-+"), None)
+                if bad is not None:
+                    why = f"its bottom edge at {at(rr, bad)} is '{ch(rr, bad)}'"
+                break
+            broken = [(side, x, t) for side, x, t in (("left", c, a), ("right", c2, b)) if t not in "|+"]
+            if broken:
+                why = " and ".join(f"its {side} wall at {at(rr, x)} is '{t}'" if t.strip()
+                                   else f"its {side} wall stops at {at(rr, x)}" for side, x, t in broken)
+                break
+        if why is None:
+            continue                                      # closed after all; left as text for another reason
+        out.append({"row": r + 1, "col": c + 1, "char": "+", "code": "unclosed_box",
+                    "issue": f"the box starting at {at(r, c)} is not closed, so it stays plain text",
+                    "hint": f"{why}; box walls need '|' (or '+' where a line joins) all the way down, "
+                            f"and the bottom edge needs '+' at both corners"})
+    return out
+
+
+def input_warnings(raw, cells, info, drawn=None, origin=(0, 0)):
     """Input that renders 'successfully' but not as intended."""
     out = []
     body = raw.strip("\r\n")
@@ -1023,8 +1093,10 @@ def input_warnings(raw, cells, info):
         out.append({"code": "escaped_newlines", "row": 1, "col": body.index("\\n") + 1,
                     "issue": "the input is one line containing literal \\n sequences",
                     "hint": "pass real newlines (write the diagram to a file or stdin), or add --unescape"})
+    boxes = box_warnings(cells, drawn or {}, origin)
+    out += boxes
     unicode_lines = any(t in ARMS or t in HEADS for t, _ in cells.values())
-    if not unicode_lines and not info["ascii_drawn_as_lines"] and re.search(r"\+-|-\+", raw):
+    if not boxes and not unicode_lines and not info["ascii_drawn_as_lines"] and re.search(r"\+-|-\+", raw):
         out.append({"code": "no_structure", "row": 1, "col": 1,
                     "issue": "ASCII box pieces (+-) were found but nothing was drawn as lines",
                     "hint": "close every box: '+' at all four corners, '-' along the top and bottom, "
@@ -1135,6 +1207,7 @@ WARNING_CODES = {
     "broken_join": "a line meets a line character that has no arm toward it; hint names the right character",
     "escaped_newlines": "one-line input containing literal \\n; pass real newlines or add --unescape",
     "no_structure": "ASCII box pieces were found but no closed box, so everything stayed text",
+    "unclosed_box": "an ASCII box starts (+---+) but never closes, so it stays text; hint names the broken wall",
 }
 REPORT_FIELDS = {
     "status": "ok | warnings | self_check_failed | bad_input | usage_error",
@@ -1409,7 +1482,8 @@ def run_one(args, raw, notes, base=0):
         still = render_svg(draw_cells, nrows, ncols, args.style, args.square, args.title,
                            "light" if args.theme == "auto" else args.theme, args.color, **style)[0]
         problems += self_check(still, draw_cells, cells)
-    warnings = input_warnings(raw, cells, info) + connector_warnings(
+    where = (base + origin["line"], origin["col"])
+    warnings = input_warnings(raw, cells, info, drawn, where) + connector_warnings(
         draw_cells, nrows, ncols, origin=(base + origin["line"], origin["col"]))
     for w in warnings:                                     # where to fix it in the file you were given
         w["source_line"] = base + origin["line"] + w["row"]
