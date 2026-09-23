@@ -688,8 +688,9 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         body.append('<line x1="%g" y1="%g" x2="%g" y2="%g" class="sgl shaft"%s/>' % (*sh, tm))
         body.append('<polygon points="%s" class="head"%s/>' % (" ".join(f"{x:g},{y:g}" for x, y in pts), tm))
     for r, c, w, t in texts:                         # one delay per row (a class), not per character
+        row_cls = f' class="r{r}"' if timed else ""
         body.append(f'<text x="{PAD + c * CW + w * CW / 2:g}" y="{PAD + r * CH + CH / 2 + 5:g}"'
-                    f'{f" class=\"r{r}\"" if timed else ""}>{html.escape(t, quote=False)}</text>')
+                    f'{row_cls}>{html.escape(t, quote=False)}</text>')
     rows_css = "".join(f".r{r}{{animation-delay:{at(PAD + r * CH + 0.08 * speed):.2f}s}}"
                        for r in sorted({r for r, *_ in texts})) if timed else ""
 
