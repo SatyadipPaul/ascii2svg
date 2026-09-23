@@ -9,7 +9,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLI = os.path.join(ROOT, "scripts", "ascii2svg.py")
 LIVE = ["--theme", "auto", "--color", "--animate", "flow"]
 IMAGES = [
-    ("docs/examples/banner.txt", "docs/banner.svg", LIVE + ["--title", "ascii2svg"]),     # docs/make_banner.py writes it
+    ("docs/examples/banner.txt", "docs/banner.svg",       # docs/make_banner.py writes it; static, so it
+     ["--theme", "auto", "--color", "--title", "ascii2svg"]),  # shows even where animation never starts
     ("docs/examples/how-it-works.txt", "docs/how-it-works.svg", LIVE),
     ("docs/examples/workflow.txt", "docs/workflow.svg", LIVE),
     ("tests/fixtures/complex_unicode.txt", "docs/architecture.svg", LIVE),
