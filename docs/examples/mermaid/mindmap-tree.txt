@@ -1,0 +1,10 @@
+                         ┌──────────────┐
+                         │ Product plan │
+                         └──────┬───────┘
+          ┌─────────────────────┼─────────────────────┐
+    ┌─────┴─────┐         ┌─────┴─────┐         ┌─────┴─────┐
+    │  Growth   │         │  Quality  │         │ Platform  │
+    └─────┬─────┘         └─────┬─────┘         └─────┬─────┘
+          ├── SEO               ├── Test coverage     ├── API v2
+          ├── Referrals         ├── Error budget      ├── SDKs
+          └── Pricing page      └── On-call           └── Webhooks

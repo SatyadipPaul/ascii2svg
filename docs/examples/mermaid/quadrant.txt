@@ -1,0 +1,12 @@
+               High impact
+                    ▲
+    Quick wins      │      Big bets
+      • SSO         │        • Redesign
+      • Dark mode   │        • Mobile app
+                    │
+Low ────────────────┼────────────────▶ High effort
+effort              │
+    Fill-ins        │      Money pits
+      • Tooltips    │        • Rewrite in Rust
+                    │
+               Low impact

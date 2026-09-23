@@ -1,0 +1,11 @@
+* 9f2c1a0 (HEAD -> main) Merge feature/login
+|\
+| * 4be77d1 (feature/login) Add login form
+| * 1a0c3de Add auth service
+* | 7d19e02 Fix typo in README
+|/
+* 3c5e8f1 Initial commit
+
+main     ──●──────●──────────────●──────●──▶
+                  │              ▲
+feature           └────●────●────┘
