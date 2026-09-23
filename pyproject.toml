@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ascii2svg"
-version = "1.0.0"
+version = "1.1.0"
 description = "Render ASCII/Unicode box diagrams as SVG, 1:1 - built for LLM agents"
 readme = "README.md"
 requires-python = ">=3.8"
