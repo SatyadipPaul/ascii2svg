@@ -197,12 +197,14 @@
       preview.appendChild(img);
     }
     const cls = r.status === "ok" ? "ok" : r.status === "warnings" ? "warnings" : "bad";
-    let html = `<span class="pill ${cls}">${esc(r.status.replace("_", " "))}</span>${esc(r.summary)}`;
+    let html = `<span class="pill ${cls}">${esc(r.status.replace("_", " "))}</span>`;
+    if (r.warnings.length)                                // the fix sits by the summary, not under a long list
+      html += `<button id="fix-btn" class="primary" style="float:right;margin:0 0 6px 10px" title="Move misaligned walls, connectors and arrowheads into line. Your text is never changed.">Fix alignment</button>`;
+    html += esc(r.summary);
     if (r.warnings.length) {                              // all of them: the first 8, the rest one click away
       html += "<ul>" + r.warnings.map((w, i) =>
         `<li${i >= 8 ? " hidden" : ""}><button data-w="${i}">line ${w.source_line}, col ${w.source_col}</button>: ${esc(w.hint)}</li>`).join("") + "</ul>";
       if (r.warnings.length > 8) html += `<button id="more-w">Show ${r.warnings.length - 8} more</button>`;
-      html += ` <button id="fix-btn" class="primary" title="Move misaligned walls, connectors and arrowheads into line. Your text is never changed.">Fix alignment</button>`;
     }
     const edges = (r.diagram && r.diagram.edges) || [];
     if (edges.length) {
