@@ -4,69 +4,248 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ascii2svg playground</title>
-<meta name="description" content="Paste an ASCII or Unicode box diagram and get a clean, animated SVG. Runs ascii2svg in your browser; nothing is uploaded.">
+<meta name="description" content="Paste an ASCII or Unicode box diagram and get a clean, animated SVG, verified 1:1. Runs ascii2svg in your browser; nothing is uploaded.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2305070d'/%3E%3Cpath d='M8 9h16v14H8z' fill='none' stroke='%2358a6ff' stroke-width='2.4'/%3E%3Cpath d='M12 16h8' stroke='%23bc8cff' stroke-width='2.4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <style>
-  :root { --ink: #1f2328; --muted: #59636e; --bg: #ffffff; --card: #f6f8fa; --line: #d1d9e0; --accent: #0969da;
-          --ok: #1a7f37; --warn: #9a6700; --bad: #cf222e; --field: #ffffff; }
+  :root {
+    --ink: #1f2328; --muted: #59636e; --bg: #f7f8fa; --card: #ffffff; --card2: #f6f8fa; --line: #d8dee4; --accent: #0969da;
+    --accent2: #8250df; --ok: #1a7f37; --warn: #9a6700; --bad: #cf222e; --field: #ffffff; --shadow: 0 1px 2px rgba(31,35,40,.06), 0 8px 24px rgba(31,35,40,.06);
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+    --hero: #05070d;
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --ink: #e6edf3; --muted: #9198a1; --bg: #0d1117; --card: #151b23; --line: #3d444d; --accent: #58a6ff;
-            --ok: #3fb950; --warn: #d29922; --bad: #f85149; --field: #0d1117; }
+    :root { --ink: #e6edf3; --muted: #9198a1; --bg: #0a0d14; --card: #0f141d; --card2: #121926; --line: #262e3b; --accent: #58a6ff;
+            --accent2: #bc8cff; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --field: #0b1019; --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 32px rgba(0,0,0,.35); }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { max-width: 1280px; margin: 0 auto; padding: 20px 16px 8px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
-  header h1 { font: 700 24px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0; }
-  header p { margin: 0; color: var(--muted); flex: 1 1 320px; }
-  header nav { display: flex; gap: 14px; font-size: 14px; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
   a { color: var(--accent); }
-  main { max-width: 1280px; margin: 0 auto; padding: 8px 16px 48px; }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; background: var(--card);
-             border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
-  .toolbar label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-  select, input[type=color] { font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
-  input[type=color] { width: 36px; height: 26px; padding: 1px; }
-  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  code { font-family: var(--mono); font-size: .92em; }
+  ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+  /* ── top bar ───────────────────────────────────────────────────────────── */
+  .topbar { position: fixed; inset: 0 0 auto; z-index: 50; display: flex; align-items: center; gap: 20px;
+            padding: 14px clamp(16px, 4vw, 40px); color: #e6edf3; transition: background .3s, backdrop-filter .3s, padding .3s, border-color .3s;
+            border-bottom: 1px solid transparent; }
+  .topbar.scrolled { background: color-mix(in srgb, var(--hero) 72%, transparent); backdrop-filter: blur(14px) saturate(1.4);
+                     -webkit-backdrop-filter: blur(14px) saturate(1.4); padding-top: 9px; padding-bottom: 9px; border-color: rgba(255,255,255,.08); }
+  .logo { font: 700 18px var(--mono); color: #fff; text-decoration: none; letter-spacing: -.02em; }
+  .logo i { font-style: normal; color: #58a6ff; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .topbar nav { display: flex; gap: 22px; margin-left: auto; font-size: 14px; }
+  .topbar nav a { color: rgba(230,237,243,.78); text-decoration: none; transition: color .2s; }
+  .topbar nav a:hover { color: #fff; }
+  @media (max-width: 640px) { .topbar nav a.opt { display: none; } }
+
+  /* ── buttons ───────────────────────────────────────────────────────────── */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 10px; font: 600 14px var(--sans);
+         text-decoration: none; border: 1px solid transparent; cursor: pointer; will-change: transform; }
+  .btn.primary { color: #fff; background: linear-gradient(135deg, #1f6feb, #8957e5); box-shadow: 0 8px 28px rgba(88,120,255,.35); }
+  .btn.primary:hover { box-shadow: 0 10px 34px rgba(120,120,255,.5); }
+  .btn.ghost { color: #e6edf3; border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.04); }
+  .btn.ghost:hover { border-color: rgba(255,255,255,.4); }
+  .btn.small { padding: 7px 12px; font-size: 13px; border-radius: 8px; }
+
+  /* ── hero ──────────────────────────────────────────────────────────────── */
+  .hero { position: relative; height: 100vh; min-height: 620px; overflow: hidden; background: var(--hero); color: #e6edf3; isolation: isolate; }
+  .hero::before { content: ""; position: absolute; inset: -20%; z-index: -2;
+                  background: radial-gradient(40% 50% at 70% 45%, rgba(56,110,255,.20), transparent 70%),
+                              radial-gradient(35% 40% at 20% 80%, rgba(137,87,229,.18), transparent 70%),
+                              radial-gradient(30% 35% at 90% 10%, rgba(46,160,67,.10), transparent 70%); }
+  .hero::after { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .5;
+                 background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+                 background-size: 36px 36px; mask-image: radial-gradient(70% 70% at 50% 45%, #000 30%, transparent 80%); }
+  #hero-gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .hero-fallback { display: none; position: absolute; right: 4vw; top: 50%; transform: translateY(-50%); width: min(52vw, 760px); opacity: .95; }
+  .hero.no-gl .hero-fallback { display: block; }
+  .hero-copy { position: relative; z-index: 2; max-width: 1280px; margin: 0 auto; height: 100%; display: flex; flex-direction: column;
+               justify-content: center; padding: 90px clamp(16px, 4vw, 40px) 120px; pointer-events: none; }
+  .hero-copy > * { max-width: 520px; pointer-events: auto; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font: 500 12.5px var(--mono); letter-spacing: .02em;
+             color: #9fb4ff; padding: 5px 11px; border: 1px solid rgba(125,140,255,.35); border-radius: 999px; background: rgba(88,120,255,.08); margin: 0 0 22px; }
+  .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: #3fb950; box-shadow: 0 0 0 0 rgba(63,185,80,.6); animation: ping 2s infinite; }
+  @keyframes ping { 70% { box-shadow: 0 0 0 8px rgba(63,185,80,0); } 100% { box-shadow: 0 0 0 0 rgba(63,185,80,0); } }
+  .hero-title { font: 800 clamp(40px, 5.6vw, 72px)/1.02 var(--sans); letter-spacing: -.035em; margin: 0 0 20px; }
+  .hero-title .line { display: block; }
+  .hero-title .grad { background: linear-gradient(100deg, #7aa7ff, #bc8cff 55%, #ff9bd2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero-title .w { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .08em; margin-bottom: -.08em; }
+  .hero-title .w > span { display: inline-block; }
+  .hero-title .grad .w > span { background: linear-gradient(100deg, #7aa7ff, #bc8cff 55%, #ff9bd2); -webkit-background-clip: text; background-clip: text; color: transparent; }  /* split words keep the gradient */
+  .hero-sub { font-size: clamp(16px, 1.5vw, 18px); color: rgba(230,237,243,.72); margin: 0 0 28px; }
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 30px; }
+  .cmd { display: inline-flex; align-items: center; gap: 10px; font: 500 13px var(--mono); color: #c9d1d9; padding: 10px 12px 10px 14px;
+         border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); cursor: pointer; }
+  .cmd:hover { border-color: rgba(255,255,255,.3); }
+  .cmd span { color: #7ee787; }
+  .cmd.done { border-color: #3fb950; }
+  .hero-stats { display: flex; gap: 28px; list-style: none; padding: 0; margin: 0; }
+  .hero-stats li { font-size: 13px; color: rgba(230,237,243,.6); }
+  .hero-stats b { display: block; font: 700 24px var(--mono); color: #fff; letter-spacing: -.02em; }
+  #hero-steps { position: absolute; z-index: 2; right: clamp(16px, 4vw, 40px); bottom: 36px; display: flex; gap: 8px; list-style: none; margin: 0; padding: 0;
+                font: 500 12px var(--mono); }
+  #hero-steps li { padding: 6px 10px; border-radius: 8px; color: rgba(230,237,243,.45); border: 1px solid rgba(255,255,255,.08); transition: all .35s; }
+  #hero-steps li.on { color: #fff; border-color: rgba(125,140,255,.6); background: rgba(88,120,255,.14); }
+  .scroll-cue { position: absolute; z-index: 2; left: 50%; bottom: 26px; transform: translateX(-50%); font: 500 11px var(--mono); letter-spacing: .12em;
+                text-transform: uppercase; color: rgba(230,237,243,.5); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .scroll-cue::after { content: ""; width: 1px; height: 34px; background: linear-gradient(#9fb4ff, transparent); animation: cue 1.8s ease-in-out infinite; transform-origin: top; }
+  @keyframes cue { 0% { transform: scaleY(0); } 50% { transform: scaleY(1); } 100% { transform: scaleY(1); opacity: 0; } }
+  @media (max-width: 900px) {
+    .hero-copy { justify-content: flex-start; padding-top: 110px; }
+    #hero-steps { left: 16px; right: auto; }
+    .scroll-cue { display: none; }
+  }
+
+  /* ── sections ──────────────────────────────────────────────────────────── */
+  section.band { max-width: 1280px; margin: 0 auto; padding: 88px clamp(16px, 4vw, 40px) 24px; }
+  .kicker { font: 600 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+  h2.title { font: 800 clamp(28px, 3.4vw, 42px)/1.1 var(--sans); letter-spacing: -.03em; margin: 0 0 12px; }
+  .lead { color: var(--muted); font-size: 17px; max-width: 640px; margin: 0 0 32px; }
+
+  /* ── the tool ──────────────────────────────────────────────────────────── */
+  #tool { scroll-margin-top: 64px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 14px; background: var(--card);
+             border: 1px solid var(--line); border-radius: 14px; margin-bottom: 14px; font-size: 13.5px; box-shadow: var(--shadow); }
+  .toolbar label { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; color: var(--muted); }
+  select, input[type=color] { font: 500 13px var(--sans); color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 8px;
+                              padding: 5px 8px; transition: border-color .2s, box-shadow .2s; }
+  select:hover, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); outline: none; }
+  input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+  input[type=color] { width: 38px; height: 28px; padding: 2px; cursor: pointer; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; perspective: 1200px; }
   @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
-  .panel { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; min-height: 420px; }
-  .panel h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--muted); padding: 8px 12px;
-              border-bottom: 1px solid var(--line); background: var(--card); display: flex; justify-content: space-between; gap: 8px; }
-  textarea { flex: 1; width: 100%; min-height: 420px; border: 0; resize: vertical; padding: 12px; background: var(--field); color: var(--ink);
-             font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; white-space: pre; overflow: auto; tab-size: 4; }
-  textarea:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .preview { flex: 1; position: relative; overflow: auto; background: var(--field); display: flex; align-items: flex-start; justify-content: center; padding: 12px; min-height: 300px; }
-  .preview img { max-width: 100%; height: auto; display: block; }
-  .preview iframe { width: 100%; height: 520px; border: 0; background: transparent; }
-  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  .panel { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; min-height: 460px;
+           background: var(--card); box-shadow: var(--shadow); transition: border-color .3s, box-shadow .3s; }
+  .panel:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); box-shadow: var(--shadow), 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent); }
+  .panel h3 { margin: 0; font: 600 12.5px var(--sans); letter-spacing: .02em; color: var(--muted); padding: 10px 14px;
+              border-bottom: 1px solid var(--line); background: var(--card2); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .panel h3 .dots { display: inline-flex; gap: 6px; margin-right: 10px; }
+  .panel h3 .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .panel h3 .dots i:nth-child(1) { background: #ff5f57; } .panel h3 .dots i:nth-child(2) { background: #febc2e; } .panel h3 .dots i:nth-child(3) { background: #28c840; }
+  .panel h3 span:first-child { display: inline-flex; align-items: center; }
+  textarea { flex: 1; width: 100%; min-height: 460px; border: 0; resize: vertical; padding: 14px; background: var(--field); color: var(--ink);
+             font: 13px/1.45 var(--mono); white-space: pre; overflow: auto; tab-size: 4; }
+  textarea:focus { outline: none; }
+  .preview { flex: 1; position: relative; overflow: auto; background: var(--field); display: flex; align-items: flex-start; justify-content: center; padding: 14px; min-height: 320px;
+             background-image: radial-gradient(color-mix(in srgb, var(--muted) 18%, transparent) 1px, transparent 1px); background-size: 18px 18px; }
+  .preview img { max-width: 100%; height: auto; display: block; border-radius: 6px; }
+  .preview iframe { width: 100%; height: 540px; border: 0; background: transparent; }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
              background: var(--field); color: var(--muted); font-size: 14px; text-align: center; padding: 16px; }
+  .loader { font: 700 22px var(--mono); color: var(--accent); min-width: 3ch; }
+  .bar { width: 220px; height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; position: relative; }
+  .bar::after { content: ""; position: absolute; inset: 0; width: 40%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2));
+                animation: slide 1.3s ease-in-out infinite; }
+  @keyframes slide { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
   #loadmsg[data-secs]::after { content: " (" attr(data-secs) ")"; }
-  .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
-  button { font: inherit; font-size: 13px; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
-  button:hover:not(:disabled) { border-color: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--card2); }
+  button { font: 500 13px var(--sans); color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 11px;
+           cursor: pointer; transition: border-color .2s, background .2s, color .2s, box-shadow .2s; }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   button:disabled { opacity: .5; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .report { padding: 10px 12px; border-top: 1px solid var(--line); font-size: 14px; }
-  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; margin-right: 6px; color: #fff; }
+  button.primary:hover:not(:disabled) { color: #fff; box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent); }
+  button.done { border-color: var(--ok); color: var(--ok); }
+  #fix-btn { position: relative; background: linear-gradient(135deg, #1f6feb, #8957e5); border: 0; }
+  #fix-btn::before { content: ""; position: absolute; inset: -3px; border-radius: 10px; z-index: -1;
+                     background: linear-gradient(135deg, #58a6ff, #bc8cff, #58a6ff); background-size: 200% 200%; filter: blur(6px); opacity: .7;
+                     animation: halo 2.4s ease-in-out infinite; }
+  @keyframes halo { 50% { background-position: 100% 100%; opacity: .35; } }
+  .report { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 14px; isolation: isolate; }
+  .pill { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; margin-right: 8px; color: #fff; text-transform: uppercase; letter-spacing: .04em; }
   .pill.ok { background: var(--ok); } .pill.warnings { background: var(--warn); } .pill.bad { background: var(--bad); }
   .report ul { margin: 8px 0 0; padding-left: 18px; }
-  .report li { margin: 2px 0; }
+  .report li { margin: 3px 0; }
   .report li button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 13px; }
   .muted { color: var(--muted); font-size: 13px; }
-  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 6px 14px;
-           border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .hint { margin-top: 14px; }
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px;
+           border-radius: 10px; font-size: 13.5px; font-weight: 500; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 60; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
   .toast.show { opacity: 1; }
+  .spark { position: fixed; z-index: 70; pointer-events: none; font: 700 16px var(--mono); color: var(--accent); translate: -50% -50%; }
+  .spark:nth-child(odd) { color: var(--accent2); }
+
+  /* ── how it works, features ────────────────────────────────────────────── */
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; counter-reset: s; }
+  @media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }
+  .step { position: relative; padding: 24px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .step::before { counter-increment: s; content: "0" counter(s); font: 700 13px var(--mono); color: var(--accent); display: block; margin-bottom: 14px; }
+  .step h4 { margin: 0 0 6px; font-size: 18px; letter-spacing: -.01em; }
+  .step p { margin: 0 0 16px; color: var(--muted); }
+  .step pre { margin: 0; font: 12px/1.35 var(--mono); padding: 12px; border-radius: 10px; background: var(--field); border: 1px solid var(--line); overflow: hidden; color: var(--ink); }
+  .step pre .hl { color: var(--accent); }
+  .step pre .ok { color: var(--ok); }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 960px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 620px) { .tiles { grid-template-columns: 1fr; } }
+  .spot { --mx: 50%; --my: 50%; position: relative; overflow: hidden; padding: 24px; border-radius: 16px; background: var(--card); border: 1px solid var(--line);
+          box-shadow: var(--shadow); transition: transform .35s cubic-bezier(.2,.8,.2,1), border-color .3s; }
+  .spot::before { content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity .3s; pointer-events: none;
+                  background: radial-gradient(360px circle at var(--mx) var(--my), color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%); }
+  .spot:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .spot:hover::before { opacity: 1; }
+  .spot .ico { font: 700 20px var(--mono); width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; margin-bottom: 16px;
+               color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .spot h4 { margin: 0 0 6px; font-size: 17px; }
+  .spot p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .cta { margin: 96px auto 0; max-width: 1200px; padding: 56px clamp(20px, 5vw, 64px); border-radius: 24px; color: #e6edf3; position: relative; overflow: hidden;
+         background: radial-gradient(60% 120% at 0% 0%, rgba(88,120,255,.35), transparent 60%), radial-gradient(60% 120% at 100% 100%, rgba(188,140,255,.28), transparent 60%), var(--hero);
+         display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between; }
+  .cta h2 { margin: 0; font: 800 clamp(26px, 3vw, 36px)/1.15 var(--sans); letter-spacing: -.03em; max-width: 560px; }
+  .cta .row { display: flex; flex-wrap: wrap; gap: 12px; }
+  footer { max-width: 1280px; margin: 0 auto; padding: 48px clamp(16px, 4vw, 40px) 56px; color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .logo i, .eyebrow .dot, .scroll-cue::after, .bar::after, #fix-btn::before { animation: none; }
+  }
 </style>
+<script defer src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/ScrollTrigger.min.js"></script>
 </head>
 <body>
-<header>
-  <h1>ascii2svg</h1>
-  <p>Paste a text diagram and get a clean SVG, with every character in its exact place. It runs in your browser; nothing is uploaded.</p>
-  <nav><a href="./">Home</a><a href="https://github.com/SatyadipPaul/ascii2svg">GitHub</a><a href="https://pypi.org/project/ascii2svg/">PyPI</a></nav>
+<header class="topbar" id="topbar">
+  <a class="logo" href="./">ascii2svg<i>▍</i></a>
+  <nav aria-label="Site">
+    <a href="#tool">Playground</a>
+    <a class="opt" href="#how">How it works</a>
+    <a class="opt" href="./">Docs</a>
+    <a href="https://github.com/SatyadipPaul/ascii2svg">GitHub</a>
+  </nav>
 </header>
-<main>
-  <div class="toolbar" role="group" aria-label="Options">
+
+<section class="hero" id="hero" aria-label="ascii2svg">
+  <canvas id="hero-gl" aria-hidden="true"></canvas>
+  <img class="hero-fallback" src="banner.svg" alt="">
+  <div class="hero-copy">
+    <p class="eyebrow"><span class="dot"></span>Runs in your browser · nothing is uploaded</p>
+    <h1 class="hero-title"><span class="line">Text diagrams,</span><span class="line grad">drawn properly.</span></h1>
+    <p class="hero-sub">Paste the box diagram you (or your AI) already wrote. ascii2svg turns it into a crisp, animated SVG, and proves every character is exactly where you put it.</p>
+    <div class="hero-cta">
+      <a class="btn primary magnetic" href="#tool">Start drawing →</a>
+      <button class="cmd magnetic" id="pip" title="Copy the install command"><span>$</span> pip install ascii2svg</button>
+    </div>
+    <ul class="hero-stats">
+      <li><b data-to="1" data-suffix=":1">1:1</b>verified, cell by cell</li>
+      <li><b data-to="0">0</b>dependencies</li>
+      <li><b data-to="0" data-suffix=" B">0 B</b>uploaded</li>
+    </ul>
+  </div>
+  <ol id="hero-steps" aria-hidden="true"><li class="on">scattered</li><li>aligned</li><li>drawn, 1:1</li></ol>
+  <div class="scroll-cue" aria-hidden="true">scroll</div>
+</section>
+
+<section class="band" id="tool" aria-labelledby="tool-h">
+  <p class="kicker" data-reveal>Playground</p>
+  <h2 class="title" id="tool-h" data-reveal>Draw in text. Ship a picture.</h2>
+  <p class="lead" data-reveal>Pick an example or paste your own. Everything renders as you type, with Python running right here in your browser tab.</p>
+
+  <div class="toolbar" role="group" aria-label="Options" data-reveal>
     <label>Example <select id="example"></select></label>
     <label>For <select id="preset">
       <option value="">custom</option><option value="readme">README / docs</option><option value="slides">slides</option>
@@ -82,17 +261,17 @@
 
   <div class="grid">
     <section class="panel" aria-labelledby="in-h">
-      <h2 id="in-h"><span>Your diagram</span><span class="muted" id="pos"></span></h2>
+      <h3 id="in-h"><span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>Your diagram</span><span class="muted" id="pos"></span></h3>
       <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Diagram text"></textarea>
     </section>
     <section class="panel" aria-labelledby="out-h">
-      <h2 id="out-h"><span>Result</span><span class="muted" id="timing"></span></h2>
+      <h3 id="out-h"><span>Result</span><span class="muted" id="timing"></span></h3>
       <div class="preview" id="preview">
-        <div class="overlay" id="overlay"><div class="spinner"></div><div id="loadmsg">Starting…</div></div>
+        <div class="overlay" id="overlay"><div class="loader" id="loader" aria-hidden="true">⠋</div><div class="bar" aria-hidden="true"></div><div id="loadmsg">Starting…</div></div>
       </div>
       <div class="report" id="report" aria-live="polite"></div>
       <div class="actions">
-        <button id="replay" title="Play the animation again">Replay</button>
+        <button id="replay" title="Play the animation again">↻ Replay</button>
         <button id="dl-svg" class="primary">Download SVG</button>
         <button id="dl-html">Download page</button>
         <button id="dl-png">Download PNG</button>
@@ -101,15 +280,70 @@
       </div>
     </section>
   </div>
-  <p class="muted">Boxes: <code>+--+</code> / <code>|  |</code> / <code>+--+</code> or <code>┌─┐ │ │ └─┘</code>. Arrows end in <code>v ^ &lt; &gt;</code> or
+  <p class="muted hint">Boxes: <code>+--+</code> / <code>|  |</code> / <code>+--+</code> or <code>┌─┐ │ │ └─┘</code>. Arrows end in <code>v ^ &lt; &gt;</code> or
     <code>▼ ▲ ▶ ◀</code>, touching (or one space from) the box they point at. Warnings say exactly what to move; click one to jump there.
     Runs <a href="https://github.com/SatyadipPaul/ascii2svg">ascii2svg</a> <span id="ver"></span> with <a href="https://pyodide.org">Pyodide</a>.</p>
-</main>
+</section>
+
+<section class="band" id="how" aria-labelledby="how-h">
+  <p class="kicker" data-reveal>How it works</p>
+  <h2 class="title" id="how-h" data-reveal>Three steps, no guessing.</h2>
+  <p class="lead" data-reveal>ascii2svg never invents a shape. When it isn't sure, a character stays text, and every render is checked against your input before you see it.</p>
+  <div class="steps" data-stagger>
+    <article class="step">
+      <h4>Paste plain text</h4>
+      <p>ASCII or Unicode, from a README, a code comment or a chat with an AI.</p>
+<pre>+--------+     +-------+
+|  api   |----&gt;|  db   |
++--------+     +-------+</pre>
+    </article>
+    <article class="step">
+      <h4>Check and repair</h4>
+      <p>Warnings say exactly what to move. <b>Fix alignment</b> lines up what a model got one column wrong.</p>
+<pre><span class="hl">line 2, col 12</span>: the line '│' is one
+column right; move one of them
+<span class="ok">✓ Fixed 5 misalignments</span></pre>
+    </article>
+    <article class="step">
+      <h4>Ship a verified SVG</h4>
+      <p>Light and dark, animated or still. The SVG is read back and compared cell by cell.</p>
+<pre><span class="ok">ok</span> Rendered 2 boxes and 1 arrow
+(3x24); 1:1 self-check <span class="ok">exact</span></pre>
+    </article>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="feat-h">
+  <p class="kicker" data-reveal>Why ascii2svg</p>
+  <h2 class="title" id="feat-h" data-reveal>Professional pictures from the text you already have.</h2>
+  <div class="tiles" data-stagger style="margin-top:32px">
+    <article class="spot"><div class="ico">1:1</div><h4>Faithful, provably</h4><p>Every character lands in its exact cell, verified by reading the SVG back.</p></article>
+    <article class="spot"><div class="ico">⇥</div><h4>Fixes LLM diagrams</h4><p>Walls, connectors and arrowheads one column off move into line. Your words never change.</p></article>
+    <article class="spot"><div class="ico">◐</div><h4>Alive, light and dark</h4><p>Lines draw themselves, pulses follow the arrows, and the theme follows your reader.</p></article>
+    <article class="spot"><div class="ico">△</div><h4>More than boxes</h4><p>Flowcharts, sequence and state diagrams, C4, UML, ER crow's feet, Gantt and bar charts.</p></article>
+    <article class="spot"><div class="ico">{ }</div><h4>Built for agents</h4><p>One JSON report for every outcome, an MCP server, and a Claude skill.</p></article>
+    <article class="spot"><div class="ico">py</div><h4>Zero dependencies</h4><p>One Python file. The same file runs this page through WebAssembly.</p></article>
+  </div>
+</section>
+
+<div class="cta" data-reveal>
+  <h2>Your next diagram is one paste away.</h2>
+  <div class="row">
+    <a class="btn primary magnetic" href="#tool">Open the playground</a>
+    <a class="btn ghost magnetic" href="https://github.com/SatyadipPaul/ascii2svg">★ Star on GitHub</a>
+  </div>
+</div>
+
+<footer>
+  <span>ascii2svg · MIT licensed · every diagram here is drawn from plain text and checked cell by cell.</span>
+  <span><a href="./">Docs</a> · <a href="https://pypi.org/project/ascii2svg/">PyPI</a> · <a href="https://github.com/SatyadipPaul/ascii2svg">GitHub</a></span>
+</footer>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
+  const emit = (name, detail) => dispatchEvent(new CustomEvent("a2s:" + name, { detail }));   // for playground/fx.js
   const PRESETS = {
     readme: { theme: "auto", color: true, animate: "flow" }, slides: { color: true, animate: "draw" },
     chat: { color: true }, print: { style: "flat", square: true }, dark: { theme: "dark", color: true },
@@ -123,21 +357,25 @@
 
   const worker = new Worker("playground/worker.js", { type: "module" });
   const started = performance.now();
+  const FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+  let frame = 0;
   const ticker = setInterval(() => {                     // a slow first download should not look frozen
+    $("loader").textContent = FRAMES[frame++ % FRAMES.length];
     const s = Math.round((performance.now() - started) / 1000);
     if (s >= 3) $("loadmsg").dataset.secs = s + " s";
-  }, 1000);
+  }, 90);
   worker.onmessage = ({ data }) => {
     if (data.type === "status") $("loadmsg").textContent = data.text;
     else if (data.type === "ready") clearInterval(ticker);
     else if (data.type === "fatal") $("loadmsg").textContent = "Could not start Python: " + data.error;
-    if (data.type === "ready") { $("ver").textContent = data.version; schedule(0); }
+    if (data.type === "ready") { $("ver").textContent = data.version; emit("ready", data); schedule(0); }
     else if (data.type === "result") { const done = pending.get(data.id); pending.delete(data.id); done && done(data); }
   };
   worker.onerror = (e) => {
+    clearInterval(ticker);
     $("loadmsg").textContent = "Could not load Python in this browser (" + (e.message || "worker error") +
       "). Check your connection, or use the command line: pip install ascii2svg";
-    document.querySelector("#overlay .spinner").style.display = "none";
+    $("loader").textContent = "!";
   };
   const call = (text, opts) => new Promise((resolve) => { const id = ++seq; pending.set(id, resolve); worker.postMessage({ id, text, opts }); });
 
@@ -178,6 +416,7 @@
       current = null;
       $("report").innerHTML = `<span class="pill bad">error</span>${esc(res.error || "no result")}`;
       preview.querySelectorAll("img,iframe").forEach((n) => n.remove());
+      emit("rendered", { ms: res.ms, status: "error" });
       return;
     }
     current = res;
@@ -199,7 +438,7 @@
     const cls = r.status === "ok" ? "ok" : r.status === "warnings" ? "warnings" : "bad";
     let html = `<span class="pill ${cls}">${esc(r.status.replace("_", " "))}</span>`;
     if (r.warnings.length)                                // the fix sits by the summary, not under a long list
-      html += `<button id="fix-btn" class="primary" style="float:right;margin:0 0 6px 10px" title="Move misaligned walls, connectors and arrowheads into line. Your text is never changed.">Fix alignment</button>`;
+      html += `<button id="fix-btn" class="primary" style="float:right;margin:0 0 6px 10px" title="Move misaligned walls, connectors and arrowheads into line. Your text is never changed.">✦ Fix alignment</button>`;
     html += esc(r.summary);
     if (r.warnings.length) {                              // all of them: the first 8, the rest one click away
       html += "<ul>" + r.warnings.map((w, i) =>
@@ -223,6 +462,7 @@
       if (res.report && res.report.repair && res.report.repair.text) {
         src.value = res.report.repair.text;
         $("example").value = "";
+        emit("fixed", { count: edits.length, from: fix });
         toast(`Fixed ${edits.length} misalignment${edits.length === 1 ? "" : "s"}`);
         schedule(0);
       } else {
@@ -230,6 +470,7 @@
         toast("Nothing to fix automatically: see the hints");
       }
     };
+    emit("rendered", { ms: res.ms, status: r.status, warnings: r.warnings.length });
   }
 
   function jump(w) {
@@ -243,7 +484,10 @@
     src.scrollTop = Math.max(0, (w.source_line - 4) * lh);
   }
 
-  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 1600); }
+  function toast(msg) {
+    const t = $("toast"); t.textContent = msg; t.classList.add("show"); emit("toast", msg);
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 1800);
+  }
 
   function save(name, data, type) {
     const a = document.createElement("a");
@@ -286,7 +530,11 @@
   $("copy-svg").onclick = async () => {
     const o = options();
     const svg = await variant({ html: false, animate: o.animate === "scroll" ? "none" : o.animate });
-    if (svg) { await navigator.clipboard.writeText(svg); toast("SVG copied"); }
+    if (svg) { await navigator.clipboard.writeText(svg); emit("copied", { button: $("copy-svg") }); toast("SVG copied"); }
+  };
+  $("pip").onclick = async () => {
+    await navigator.clipboard.writeText("pip install ascii2svg");
+    emit("copied", { button: $("pip") });
   };
   $("replay").onclick = () => current && show(current);
 
@@ -315,6 +563,7 @@
     const link = location.href.split("#")[0] + "#" + q.toString();
     history.replaceState(null, "", link);
     await navigator.clipboard.writeText(link);
+    emit("copied", { button: $("share") });
     toast("Share link copied");
   };
 
@@ -345,6 +594,7 @@
       for (const k of ["theme", "animate", "style"]) if (q.get(k)) $(k).value = q.get(k);
       $("color").checked = q.get("color") === "1"; $("square").checked = q.get("square") === "1";
       if (q.get("accent")) $("accent").value = "#" + q.get("accent");
+      addEventListener("load", () => $("tool").scrollIntoView({ behavior: "instant" }));   // a shared diagram skips the intro
     } else {
       $("example").value = Object.keys(examples)[0];
       src.value = examples[$("example").value];
@@ -354,5 +604,7 @@
   })();
 })();
 </script>
+<script type="module" src="playground/hero.js" onerror="document.getElementById('hero').classList.add('no-gl')"></script>
+<script type="module" src="playground/fx.js"></script>
 </body>
 </html>
