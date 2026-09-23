@@ -380,7 +380,7 @@ THEMES = {
              "hues": [("#0f1a2b", "#15325a"), ("#0e1f16", "#16402a"), ("#1b1530", "#34245a"),
                       ("#23180e", "#4a2e14"), ("#241421", "#4a1f3a"), ("#0c2023", "#124042")]},
 }
-ANIMATIONS = ("none", "draw", "flow")
+ANIMATIONS = ("none", "draw", "flow", "scroll")
 FLOW_SPEED, FLOW_REST = 150.0, 0.9          # pulse speed along a connector (px/s), pause between pulses (s)
 
 
@@ -495,7 +495,8 @@ def flow_paths(get, heads, boxes, line_like, limit=200):
     return routes
 
 
-def _layout_css(anim):
+def _layout_css(mode):
+    """mode: none | timed (plays on load) | scroll (a host page adds .a2s-on as things scroll into view)."""
     css = (".sgl{stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;fill:none}"
            ".dbl{stroke-width:5;stroke-linecap:round;stroke-linejoin:round;fill:none}"
            ".dbl-gap{stroke-width:2;stroke-linecap:round;stroke-linejoin:round;fill:none}"
@@ -503,22 +504,26 @@ def _layout_css(anim):
            f"text{{font:{FS}px ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono',monospace;"
            "text-anchor:middle;white-space:pre}"
            ".fill{transition:fill .25s}text,line,path,polygon{pointer-events:none}")
-    if anim:
-        ease = "cubic-bezier(.3,.7,.4,1)"
-        css += ("@keyframes a2s-gap{0%{stroke-dasharray:1 2;stroke-dashoffset:1.01}"
-                "60%,100%{stroke-dasharray:1 2;stroke-dashoffset:0}}"
-                "@keyframes a2s-fade{0%{opacity:0}}"
-                "@keyframes a2s-pop{0%{opacity:0;transform:scale(.2)}}"
-                f".sgl,.dbl{{animation:a2s-draw .6s {ease} backwards}}"
-                f".dbl-gap{{animation:a2s-gap .6s {ease} backwards}}"
-                ".sgl.shaft{animation:a2s-fade .3s ease-out backwards}"
-                ".head{animation:a2s-pop .45s cubic-bezier(.3,1.6,.5,1) backwards;"
-                "transform-box:fill-box;transform-origin:center}"
-                "text{animation:a2s-fade .5s ease-out backwards}"
-                ".glow,.shadow,.fill,.plate{animation:a2s-fade .8s ease-out backwards}"
-                ".pulse .halo{fill-opacity:.28}"
-                "@media (prefers-reduced-motion:reduce){*{animation:none!important}.pulse{display:none}}")
-    return css
+    if mode == "none":
+        return css
+    on = ".a2s-on" if mode == "scroll" else ""
+    sel = lambda *names: ",".join(f"{on}{n}" if n.startswith(".") else f"{n}{on}" for n in names)
+    ease = "cubic-bezier(.3,.7,.4,1)"
+    css += ("@keyframes a2s-gap{0%{stroke-dasharray:1 2;stroke-dashoffset:1.01}"
+            "60%,100%{stroke-dasharray:1 2;stroke-dashoffset:0}}"
+            "@keyframes a2s-fade{0%{opacity:0}}"
+            "@keyframes a2s-pop{0%{opacity:0;transform:scale(.2)}}"
+            f"{sel('.sgl', '.dbl')}{{animation:a2s-draw .6s {ease} backwards}}"
+            f"{sel('.dbl-gap')}{{animation:a2s-gap .6s {ease} backwards}}"
+            f"{sel('.sgl.shaft')}{{animation:a2s-fade .3s ease-out backwards}}"
+            f"{sel('.head')}{{animation:a2s-pop .45s cubic-bezier(.3,1.6,.5,1) backwards}}"
+            ".head{transform-box:fill-box;transform-origin:center}"
+            f"{sel('text')}{{animation:a2s-fade .5s ease-out backwards}}"
+            f"{sel('.glow', '.shadow', '.fill', '.plate')}{{animation:a2s-fade .8s ease-out backwards}}"
+            ".pulse .halo{fill-opacity:.28}")
+    if mode == "scroll":
+        css += ".a2s-off{opacity:0}.sgl,.dbl{transition:stroke .8s}"
+    return css + "@media (prefers-reduced-motion:reduce){*{animation:none!important}.pulse{display:none}}"
 
 
 def _colour_css(t, color, anim):
@@ -533,7 +538,8 @@ def _colour_css(t, color, anim):
     if anim:   # lines are sketched in the accent colour, then settle to ink
         css += (f"@keyframes a2s-draw{{0%{{stroke-dasharray:1 2;stroke-dashoffset:1.01;stroke:{acc}}}"
                 f"60%{{stroke-dasharray:1 2;stroke-dashoffset:0;stroke:{acc}}}"
-                f"100%{{stroke-dasharray:1 2;stroke-dashoffset:0}}}}.pulse circle{{fill:{acc}}}")
+                f"100%{{stroke-dasharray:1 2;stroke-dashoffset:0}}}}.pulse circle{{fill:{acc}}}"
+                f".a2s-live.sgl,.a2s-live.dbl{{stroke:{acc}}}")
     return css
 
 
@@ -548,6 +554,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     curves, heads, texts = [], [], []
     round_ok = not square and not any(t in ROUNDED for t, _ in cells.values())
     anim = animate != "none"
+    timed = animate in ("draw", "flow")              # "scroll" leaves the timing to the host page
     span = max(nrows * CH, 1)
     sweep = min(2.0, 0.5 + 0.025 * nrows)          # seconds for the drawing front to reach the bottom
     speed = span / sweep
@@ -556,7 +563,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         return sweep * min(max(y - PAD, 0.0), span) / span
 
     def timing(y, dur=None):
-        if not anim:
+        if not timed:
             return ""
         s = f"animation-delay:{at(y):.2f}s"
         if dur is not None:
@@ -681,12 +688,12 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         body.append('<polygon points="%s" class="head"%s/>' % (" ".join(f"{x:g},{y:g}" for x, y in pts), tm))
     for r, c, w, t in texts:                         # one delay per row (a class), not per character
         body.append(f'<text x="{PAD + c * CW + w * CW / 2:g}" y="{PAD + r * CH + CH / 2 + 5:g}"'
-                    f'{f" class=\"r{r}\"" if anim else ""}>{html.escape(t, quote=False)}</text>')
+                    f'{f" class=\"r{r}\"" if timed else ""}>{html.escape(t, quote=False)}</text>')
     rows_css = "".join(f".r{r}{{animation-delay:{at(PAD + r * CH + 0.08 * speed):.2f}s}}"
-                       for r in sorted({r for r, *_ in texts})) if anim else ""
+                       for r in sorted({r for r, *_ in texts})) if timed else ""
 
-    routes = flow_paths(get, heads, boxes, line_like) if animate == "flow" else []
-    begin = sweep + 0.9
+    routes = flow_paths(get, heads, boxes, line_like) if animate in ("flow", "scroll") else []
+    begin = "indefinite" if animate == "scroll" else f"{sweep + 0.9:.2f}s"      # scroll: the page starts them
     for pts in routes:
         length = sum(abs(bx - ax) + abs(by - ay) for (ax, ay), (bx, by) in zip(pts, pts[1:]))
         travel = max(length / FLOW_SPEED, 0.4)
@@ -694,23 +701,105 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         f = travel / dur
         d = "M" + "L".join(f"{x:g} {y:g}" for x, y in pts)
         body.append(f'<g class="pulse" opacity="0"><circle r="5.5" class="halo"/><circle r="2.6"/>'
-                    f'<animateMotion path="{d}" dur="{dur:.2f}s" begin="{begin:.2f}s" repeatCount="indefinite" '
+                    f'<animateMotion path="{d}" dur="{dur:.2f}s" begin="{begin}" repeatCount="indefinite" '
                     f'calcMode="linear" keyPoints="0;1;1" keyTimes="0;{f:.3f};1"/>'
                     f'<animate attributeName="opacity" values="0;1;1;0;0" '
-                    f'keyTimes="0;{0.08 * f:.3f};{0.85 * f:.3f};{f:.3f};1" dur="{dur:.2f}s" begin="{begin:.2f}s" '
+                    f'keyTimes="0;{0.08 * f:.3f};{0.85 * f:.3f};{f:.3f};1" dur="{dur:.2f}s" begin="{begin}" '
                     f'repeatCount="indefinite"/></g>')
 
     pal = THEMES["light" if theme == "auto" else theme]
-    css = _layout_css(anim) + rows_css + _colour_css(pal, color, anim)
+    css = _layout_css("timed" if timed else animate if anim else "none") + rows_css + _colour_css(pal, color, anim)
     if theme == "auto":
         css += "@media (prefers-color-scheme:dark){" + _colour_css(THEMES["dark"], color, anim) + "}"
     W, H = ncols * CW + 2 * PAD, nrows * CH + 2 * PAD
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W:g} {H:g}" width="{W:g}" '
            f'height="{H:g}" role="img" data-cell="{CW}x{CH}" data-pad="{PAD}" '
+           + ('data-reveal="scroll" ' if animate == "scroll" else "") +
            f'data-generator="ascii2svg {__version__}"><title>{html.escape(title)}</title>'
            f'<style>{css}</style><rect width="100%" height="100%" fill="{pal["bg"]}" class="bg"/>'
            + "".join(body) + "</svg>\n")
     return svg, {"boxes": len(boxes), "text_cells": len(texts), "arrowheads": len(heads), "flows": len(routes)}
+
+
+# ─── web page (--html) ───────────────────────────────────────────────────────
+# Scroll reveal, no dependencies. An SVG inside <img> cannot see the page scroll, and CSS
+# scroll timelines don't drive SVG shapes, so the page does it: things fade and draw in as
+# they reach the reader, long vertical connectors grow with the scroll, and flow pulses
+# start once their route is on screen. Every step ends on the static, self-checked drawing.
+REVEAL_JS = r"""(() => {
+  const svg = document.querySelector('svg[data-reveal="scroll"]');
+  if (!svg || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const q = s => [...svg.querySelectorAll(s)], n = (el, a) => +el.getAttribute(a);
+  const grow = [], show = q('path.sgl,path.dbl,path.dbl-gap,.shaft,.head,text,.glow,.shadow,.fill,.plate');
+  for (const el of q('line.sgl:not(.shaft),line.dbl,line.dbl-gap')) {
+    if (n(el, 'x1') === n(el, 'x2') && n(el, 'y2') - n(el, 'y1') > 72) grow.push({el, y1: n(el, 'y1'), y2: n(el, 'y2'), f: 0});
+    else show.push(el);
+  }
+  const pulses = q('g.pulse').map(g => {
+    const ys = g.querySelector('animateMotion').getAttribute('path').match(/-?[\d.]+/g).filter((_, i) => i % 2);
+    return {g, bottom: Math.max(...ys), go: false};
+  });
+  show.forEach(el => el.classList.add('a2s-off'));
+  for (const g of grow) {
+    Object.assign(g.el.style, {strokeDasharray: '1 2', strokeDashoffset: '1.01',
+                               transition: 'stroke-dashoffset .45s ease-out, stroke .8s'});
+    g.el.classList.add('a2s-live');
+  }
+  let first = true;
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      const el = e.target, top = e.boundingClientRect.top / innerHeight;
+      io.unobserve(el);
+      el.style.animationDelay = (first ? Math.min(Math.max(top, 0), 1) * 0.9 : 0).toFixed(2) + 's';
+      if (el.tagName === 'line' && !el.classList.contains('shaft'))
+        el.style.animationDuration = Math.min(Math.max((n(el, 'x2') - n(el, 'x1')) / 600, 0.3), 0.9) + 's';
+      el.classList.replace('a2s-off', 'a2s-on');
+    }
+    first = false;
+  }, {rootMargin: '0px 0px -8% 0px'});
+  show.forEach(el => io.observe(el));
+  let queued = false;
+  const tick = () => {
+    queued = false;
+    const box = svg.getBoundingClientRect(), k = box.height / svg.viewBox.baseVal.height;
+    const edge = innerHeight * 0.92;
+    for (const g of grow) {
+      if (g.f >= 1) continue;
+      const f = Math.min(Math.max((edge - box.top - g.y1 * k) / ((g.y2 - g.y1) * k), 0), 1);
+      if (f <= g.f) continue;
+      g.f = f;
+      g.el.style.strokeDashoffset = String(1 - f);
+      if (f >= 1) setTimeout(() => {
+        Object.assign(g.el.style, {strokeDasharray: '', strokeDashoffset: ''});
+        g.el.classList.remove('a2s-live');
+      }, 500);
+    }
+    for (const p of pulses) {
+      if (p.go || box.top + p.bottom * k > edge) continue;
+      p.go = true;
+      setTimeout(() => p.g.querySelectorAll('animateMotion,animate').forEach(a => a.beginElement()), 900);
+    }
+  };
+  const later = () => { if (!queued) { queued = true; requestAnimationFrame(tick); } };
+  addEventListener('scroll', later, {passive: true});
+  addEventListener('resize', later);
+  requestAnimationFrame(tick);
+})();"""
+
+
+def to_html(svg, title="ASCII diagram", theme="light"):
+    """A standalone page with the SVG inline (and the scroll reveal, when the SVG asks for it)."""
+    bg = THEMES["light" if theme == "auto" else theme]["bg"]
+    css = f"html{{background:{bg}}}body{{margin:0}}main{{padding:32px 16px 72px;display:flex;justify-content:center}}" \
+          "main svg{max-width:100%;height:auto}"
+    if theme == "auto":
+        css += f"@media (prefers-color-scheme:dark){{html{{background:{THEMES['dark']['bg']}}}}}"
+    script = f"<script>{REVEAL_JS}</script>" if 'data-reveal="scroll"' in svg else ""
+    return ('<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            f"<title>{html.escape(title)}</title><style>{css}</style></head>"
+            f"<body><main>{svg.strip()}</main>{script}</body></html>\n")
 
 
 # ─── self-check: read the SVG back into a grid ───────────────────────────────
@@ -829,12 +918,16 @@ examples:
   ascii2svg --text "$(cat d.txt)" --json   # no -o: the SVG markup is returned inside the JSON
   ascii2svg d.txt -o d.svg --png           # also writes d.png (needs: pip install cairosvg)
   ascii2svg d.txt -o d.svg --theme auto --color --animate flow   # for a GitHub README
+  ascii2svg d.txt -o d.html --color --animate scroll            # a page that reveals as you scroll
 
 looks (all optional, and all keep the 1:1 guarantee):
   --theme light|dark|auto   auto follows the viewer's light/dark setting
   --color                   tint boxes by group, colour the arrows
   --animate draw            the diagram draws itself once, top to bottom
   --animate flow            ...then pulses keep travelling along every arrow
+  --animate scroll          web page only: parts appear as the reader scrolls to them,
+                            long connectors grow with the scroll (best for tall diagrams)
+  --html / -o NAME.html     write a standalone web page with the diagram inline
   Viewers without animation support show the finished drawing. PNG output is
   always the finished drawing (auto theme -> light).
 
@@ -866,9 +959,11 @@ def build_parser():
     p.add_argument("--color", action="store_true", help="tint boxes by group and colour the arrows")
     p.add_argument("--animate", nargs="?", const="flow", choices=list(ANIMATIONS), default="none",
                    help="draw: the diagram draws itself; flow: draw, then pulses travel along the "
-                        "arrows (bare --animate = flow)")
+                        "arrows (bare --animate = flow); scroll: web page that reveals as you scroll")
     p.add_argument("--png", nargs="?", const="", metavar="PATH",
                    help="also write a PNG (default path: next to -o). Needs cairosvg")
+    p.add_argument("--html", action="store_true",
+                   help="write a standalone web page (implied by -o NAME.html); needed for --animate scroll")
     p.add_argument("--json", action="store_true", help="print a machine-readable report on stdout")
     p.add_argument("--strict", action="store_true", help="exit 3 if there are connector warnings")
     p.add_argument("--tab-size", type=int, default=4, help="tab stops for tab characters (default: 4)")
@@ -925,8 +1020,11 @@ def run(args) -> tuple[int, dict, str, str]:
               "boxes": stats["boxes"], "arrowheads": stats["arrowheads"], "flows": stats["flows"],
               "text_cells": stats["text_cells"],
               **info, "roundtrip": "exact" if not problems else "MISMATCH",
-              "normalized": notes, "warnings": warnings, "width_source": WIDTH_SOURCE,
+              "normalized": notes, "warnings": warnings, "tips": [], "width_source": WIDTH_SOURCE,
               "version": __version__}
+    if nrows > 45 and args.animate in ("draw", "flow") and not args.html:
+        report["tips"].append("tall diagram: the lower part finishes drawing before the reader scrolls "
+                              "to it; for a web page use --animate scroll -o NAME.html")
     if problems:
         report["self_check_problems"] = problems[:50]
         return 2, report, svg, still
@@ -938,6 +1036,7 @@ def main(argv=None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
+    args.html = args.html or bool(args.output and args.output.lower().endswith((".html", ".htm")))
 
     def fail(code, msg):
         if args.json:
@@ -946,6 +1045,9 @@ def main(argv=None) -> int:
             print(f"ascii2svg: error: {msg}", file=sys.stderr)
         return code
 
+    if args.animate == "scroll" and not args.html:
+        return fail(1, "--animate scroll needs a web page: add --html or use -o NAME.html "
+                       "(an SVG shown as an image can't see the page scroll)")
     try:
         code, report, svg, still = run(args)
     except ValueError as e:
@@ -957,22 +1059,24 @@ def main(argv=None) -> int:
             import cairosvg
         except ImportError:
             return fail(1, "--png needs cairosvg: pip install cairosvg")
+    kind = "html" if args.html else "svg"
+    out = to_html(svg, args.title, args.theme) if args.html else svg
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as f:   # same bytes on every OS
-            f.write(svg)
-        report["svg"] = args.output
+            f.write(out)
+        report[kind] = args.output
     if args.png is not None:
-        png = args.png or re.sub(r"\.svg$", "", args.output) + ".png"
+        png = args.png or re.sub(r"\.(svg|html?)$", "", args.output, flags=re.I) + ".png"
         cairosvg.svg2png(bytestring=still.encode(), write_to=png, scale=2)
         report["png"] = png
     report["exit_code"] = code
     if args.json:
         if not args.output:
-            report["svg"] = svg
+            report[kind] = out
         print(json.dumps(report, ensure_ascii=False))
     else:
         if not args.output:
-            sys.stdout.write(svg)
+            sys.stdout.write(out)
         where = args.output or "stdout"
         print(f"ascii2svg: {where}  {report['rows']}x{report['cols']}  {report['boxes']} boxes  "
               f"style={report['style']}  theme={report['theme']}  animate={report['animate']}  "

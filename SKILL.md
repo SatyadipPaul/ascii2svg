@@ -15,6 +15,8 @@ Each run reads the SVG back and checks it against the input, cell by cell, in ev
 python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --json
 ```
 
+- `scripts/` is inside this skill's folder; use the full path to it if you are elsewhere.
+  On Windows, `python` instead of `python3`. No packages are needed.
 - Write the diagram to a file (or pipe it on stdin) rather than using `--text`: long
   multi-line arguments break in shells.
 - A markdown file is fine: the first ```` ``` ```` code block is used automatically.
@@ -54,6 +56,7 @@ Most people won't name options. Infer them from the destination; if it isn't cle
 | Destination | Options |
 |---|---|
 | GitHub README, docs site, wiki that shows SVG | `--theme auto --color --animate` |
+| Tall diagram (≈45+ rows) someone will scroll through, or "a page I can share" | `-o NAME.html --theme auto --color --animate scroll` |
 | Slides | `--color --animate draw` (or `--color --png` for a still) |
 | Slack, email, Jira, chat apps, anything that won't show SVG | `--color --png` |
 | Print, PDF, formal docs | `--style flat --square` |
@@ -63,6 +66,12 @@ Most people won't name options. Infer them from the destination; if it isn't cle
 - `--animate` (= `flow`): the diagram draws itself, then pulses travel along every arrow.
   `draw` does the drawing only. Animation never changes the final picture, stops under
   *reduce motion*, and needs no JavaScript (it plays in a plain `<img>`).
+- `--animate scroll` writes a web page (`-o NAME.html` or `--html`): parts appear as the reader
+  scrolls to them and long connectors grow with the scroll. It only works as a page — an SVG
+  shown as an image can't see the scroll — so it is refused for `.svg` output. For a tall
+  diagram going into a README, use `--animate` there and offer the `.html` page as well.
+- The report's `tips` suggests `scroll` when a timed animation would finish off-screen. Pass
+  it on to the user rather than silently switching formats.
 - `--color`: each group of boxes gets its own soft hue; arrows turn accent blue.
 - `--theme auto` follows the reader's light/dark setting.
 - PNGs are always the finished, still drawing (the `auto` theme becomes light).
@@ -71,7 +80,7 @@ Most people won't name options. Infer them from the destination; if it isn't cle
 
 ## Options
 
-`--color` · `--theme light|dark|auto` · `--animate [draw|flow]` ·
+`--color` · `--theme light|dark|auto` · `--animate [draw|flow|scroll]` · `--html` ·
 `--style glow|shadow|flat` (default glow) · `--square` (square corners) · `--png [PATH]` ·
 `--strict` · `--tab-size N` (default 4) · `--title TEXT` · `--max-rows` / `--max-cols`
 (default 1000 × 400)

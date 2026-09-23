@@ -10,6 +10,8 @@ IMAGES = [
     ("docs/examples/how-it-works.txt", "docs/how-it-works.svg", LIVE),
     ("docs/examples/workflow.txt", "docs/workflow.svg", LIVE),
     ("tests/fixtures/complex_unicode.txt", "docs/architecture.svg", LIVE),
+    ("tests/fixtures/complex_unicode.txt", "docs/architecture.html",
+     ["--theme", "auto", "--color", "--animate", "scroll", "--title", "Order platform architecture"]),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/default.svg", []),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/color.svg", ["--color"]),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/dark.svg", ["--theme", "dark", "--color"]),

@@ -63,6 +63,8 @@ Same diagram, same guarantee, five ways:
 | `--theme light\|dark\|auto` | `auto` follows the reader's system light/dark setting, which suits GitHub READMEs and docs sites. |
 | `--animate draw` | The diagram draws itself once, top to bottom: lines are sketched in accent blue and settle to ink, boxes fade in, arrowheads pop. |
 | `--animate flow` (or bare `--animate`) | `draw`, then glowing pulses keep travelling along every connector toward its arrowhead, so readers can see where things go. |
+| `--animate scroll` | For tall diagrams, as a web page: each part appears as the reader scrolls to it, and long connectors grow downward with the scroll. See below. |
+| `-o page.html` (or `--html`) | A standalone web page with the diagram inline. Double-click to open, or email it. |
 | `--style glow\|shadow\|flat` | Depth under the boxes. The glow shrinks automatically so it never sits behind a label. |
 | `--square` | Keep corners square (they are rounded by default). |
 
@@ -72,15 +74,43 @@ The animation is careful about where it runs:
   the animation ends, you're looking at exactly what the self-check verified. Tools that
   don't play animation (PNG export, most editors) show the finished drawing.
 - **It respects the reader.** With *reduce motion* turned on in the OS, nothing moves.
-- **It needs no JavaScript.** It uses CSS and SVG `<animate>` only, so it plays inside a plain
-  `<img>` tag, which is how GitHub, Notion and most docs sites show images.
+- **`draw` and `flow` need no JavaScript.** They use CSS and SVG `<animate>` only, so they play
+  inside a plain `<img>` tag, which is how GitHub, Notion and most docs sites show images.
 - **Hover a box** in a browser and it lights up. That helps when you're presenting.
+
+## Tall diagrams: reveal as you scroll
+
+A 70-row architecture diagram drawn on a timer finishes before anyone scrolls down to it.
+With `--animate scroll`, the diagram unfolds with the reader instead:
+
+```bash
+python3 scripts/ascii2svg.py architecture.txt -o architecture.html --color --theme auto --animate scroll
+```
+
+- Boxes and labels fade in as they reach the lower edge of the screen.
+- Long vertical connectors are drawn *by the scroll*: they grow downward in accent blue as you
+  read, then settle to ink.
+- Each flow pulse starts once its whole route is on screen.
+- With *reduce motion* on, the page shows the finished diagram.
+
+**Why a web page, not just an SVG?** An SVG shown as an image (which is how GitHub READMEs,
+Notion and most docs sites show them) can't see the page it sits in, so it can't know how
+far you've scrolled. CSS scroll timelines don't drive SVG shapes either: we tested it, and
+Chromium leaves them inactive. So `scroll` writes an `.html` page with the SVG inline and about
+2 KB of plain JavaScript (IntersectionObserver and CSS animations, no libraries). It uses only
+standard browser features and works offline, though so far it has been tested in Chromium only. `--animate scroll` with a plain `.svg` output
+is refused with an explanation. The SVG inside the page is the same self-checked drawing; the
+script only decides *when* each part appears.
+
+Try it: download [`docs/architecture.html`](docs/architecture.html) and open it. GitHub shows
+`.html` files as source, not as pages.
 
 ## Where is it going?
 
 | Destination | Use |
 |---|---|
 | GitHub README, docs site | `--theme auto --color --animate`, then commit the `.svg` |
+| A tall diagram people will scroll through, or a page to share | `-o diagram.html --color --theme auto --animate scroll` |
 | Slides (Keynote, Google Slides, PowerPoint) | `--color --animate draw` for a live build. For a still, `--color --png` |
 | Slack, email, Jira, anywhere SVG isn't shown | `--color --png` (needs `pip install cairosvg`). PNGs are always the finished frame |
 | Printed docs, a PDF | `--style flat --square` |
@@ -109,14 +139,23 @@ pip install .                # adds the `ascii2svg` command
 pip install ".[width,png]"   # optional: wcwidth (character widths) + cairosvg (--png)
 ```
 
-**As a Claude skill:** copy this folder into your skills directory. [`SKILL.md`](SKILL.md) tells
-Claude when to use it, which look fits which destination, and how to read the report.
+**As a Claude skill:** build the package, then install it:
+
+```bash
+python3 tools/package_skill.py        # -> dist/ascii2svg.skill (19 KB: SKILL.md + the script)
+```
+
+- **claude.ai / Claude desktop:** Customize → Skills → upload `ascii2svg.skill`.
+- **Claude Code:** unzip it into `~/.claude/skills/` (you get `~/.claude/skills/ascii2svg/`).
+
+[`SKILL.md`](SKILL.md) tells Claude when to use it, which look fits which destination (including
+`scroll` pages for tall diagrams), and how to read the report before handing you the file.
 
 ## Usage
 
 ```
-ascii2svg [INPUT] [-o OUT.svg] [--json] [--color] [--theme light|dark|auto]
-          [--animate [draw|flow]] [--style glow|shadow|flat] [--square]
+ascii2svg [INPUT] [-o OUT.svg|OUT.html] [--html] [--json] [--color] [--theme light|dark|auto]
+          [--animate [draw|flow|scroll]] [--style glow|shadow|flat] [--square]
           [--png [PATH]] [--strict] [--text TEXT] [--tab-size N] [--title TEXT]
 ```
 
@@ -127,7 +166,7 @@ ascii2svg [INPUT] [-o OUT.svg] [--json] [--color] [--theme light|dark|auto]
 | Inline | `ascii2svg --text "$DIAGRAM" --json` (the SVG comes back inside the JSON when there's no `-o`) |
 | Markdown | The first ```` ``` ```` code block is used. Prose around it is dropped (and reported) |
 
-stdout is always exactly one thing: the SVG, or (with `--json`) the report. A one-line
+stdout is always exactly one thing: the SVG (or the page, with `--html`), or (with `--json`) the report. A one-line
 summary goes to stderr.
 
 ## What gets drawn
@@ -162,7 +201,8 @@ exit code 2. This covers every look, including animated ones and the still frame
 | `ascii_line_like_kept_as_text` | ASCII `- \| +` not drawn because they don't attach to anything |
 | `normalized` | Every clean-up applied (tabs, odd spaces, zero-width and control characters, colour codes, code fence, indentation, bad UTF-8) |
 | `warnings` | Line ends that meet nothing, with 1-based `row`/`col`. Usually a misaligned source |
-| `svg`, `png` | Output paths (or the SVG markup itself when no `-o` is given) |
+| `tips` | Suggestions, e.g. "tall diagram: use `--animate scroll`" when a timed animation would finish off-screen |
+| `svg` / `html`, `png` | Output paths (or the markup itself when no `-o` is given) |
 | `self_check_problems` | Only when `roundtrip` isn't exact |
 
 ## Exit codes
@@ -189,7 +229,8 @@ Expose it as one tool and run the CLI in the handler:
       "output_path": {"type": "string", "description": "Where to write the .svg"},
       "color": {"type": "boolean", "description": "Tint boxes by group and colour the arrows"},
       "theme": {"type": "string", "enum": ["light", "dark", "auto"]},
-      "animate": {"type": "string", "enum": ["none", "draw", "flow"]}
+      "animate": {"type": "string", "enum": ["none", "draw", "flow", "scroll"],
+                  "description": "scroll needs output_path ending in .html"}
     },
     "required": ["diagram", "output_path"]
   }
@@ -213,10 +254,11 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-26 tests over 11 test diagrams:
+27 tests over 11 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
+- scroll reveal driven by the page, with no script inside the SVG
 - colour groups
 - the ASCII traps
 - glow never behind a label

@@ -125,6 +125,19 @@ def test_color_groups_boxes():
     assert len({t[:2] for t in tints if t != "tn"}) == 6                # six groups, six hues
 
 
+def test_scroll_reveal_is_driven_by_the_page():
+    cells, draw, svg, stats, _ = pipeline(fx("complex_unicode.txt"), color=True, animate="scroll")
+    assert a2s.self_check(svg, draw, cells) == [] and 'data-reveal="scroll"' in svg
+    assert _strip_motion(svg) == _strip_motion(pipeline(fx("complex_unicode.txt"), color=True)[2])
+    css = re.search(r"<style>(.*)</style>", svg).group(1)
+    assert "a2s-on" in css and not re.search(r"(^|})\.sgl,\.dbl\{animation", css)   # nothing plays by itself
+    assert stats["flows"] == 18 and svg.count('begin="indefinite"') == 36             # pulses wait for the page
+    page = a2s.to_html(svg, "t", "auto")
+    assert page.startswith("<!doctype html>") and svg.strip() in page and "IntersectionObserver" in page
+    assert "prefers-reduced-motion" in page and "<script" not in svg                   # no script inside the SVG
+    assert "<script" not in a2s.to_html(pipeline(fx("ascii_fanout.txt"), animate="flow")[2])
+
+
 def test_self_check_catches_planted_faults():
     cells, draw, svg, _, _ = pipeline(fx("complex_unicode.txt"))
     letter = svg.replace(">y</text>", ">Y</text>", 1)
@@ -295,6 +308,12 @@ def test_cli_looks():
     assert (code, r["animate"], r["color"], r["theme"], r["flows"], r["roundtrip"]) == (0, "flow", True, "auto", 4, "exact")
     assert "prefers-color-scheme:dark" in r["svg"] and "<animateMotion" in r["svg"]
     assert cli("--text", "+--+", "--animate", "sideways")[0] == 2           # argparse rejects it
+    assert cli("--text", "+--+", "--animate", "scroll")[0] == 1               # scroll needs a web page
+    code, out, _ = cli(os.path.join(FX, "complex_unicode.txt"), "--json", "--html", "--animate", "scroll")
+    r = json.loads(out)
+    assert code == 0 and r["html"].startswith("<!doctype html>") and r["roundtrip"] == "exact" and not r["tips"]
+    r = json.loads(cli(os.path.join(FX, "complex_unicode.txt"), "--json", "--animate")[1])
+    assert r["tips"] and "scroll" in r["tips"][0]                             # tall + timed: suggest scroll
 
 
 if __name__ == "__main__":
