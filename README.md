@@ -101,6 +101,14 @@ Flows that branch and merge, tables with callouts, swimlanes: all plain text, al
 
 <p align="center"><img src="https://satyadippaul.github.io/ascii2svg/swimlanes.svg" width="700" alt="Incident-response swimlanes with arrows crossing lanes"></p>
 
+Diamonds and fan-outs drawn with `/ \`, and charts drawn with block characters, come out as real
+shapes: diagonals run corner to corner, and `█▓▒░` become solid rectangles with no seams between cells.
+
+<p align="center">
+  <img src="https://satyadippaul.github.io/ascii2svg/diamond-flow.svg" width="300" alt="A sign-up flowchart with an ASCII diamond decision, OK?, branching to Create user and Show errors">
+  <img src="https://satyadippaul.github.io/ascii2svg/gantt.svg" width="520" alt="A release-plan Gantt chart drawn with block characters: solid bars, a lighter shaded remainder, and a milestone">
+</p>
+
 The sources are in [`docs/examples/`](https://github.com/SatyadipPaul/ascii2svg/tree/main/docs/examples),
 and all of them are in the playground's example picker.
 
@@ -252,16 +260,20 @@ summary goes to stderr.
 | `─│┌┐└┘├┤┬┴┼╭╮╰╯═║╔╗╚╝╪`, `▼▲▶◀` | always | – |
 | ASCII `+` `-` `\|` | they form a closed box, or attach to one directly or through `+` junctions | stay text |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
+| `╱╲╳` | always, corner to corner | – |
+| ASCII `/` `\` | two or more run along their own slope, with no letter or digit beside them (diamonds, fan-outs) | stay text |
+| Block elements `█▓▒░ ▀▄▌▐ ▁▂▃▅▆▇ ▏▎▍▋▊▉ ▖▗▘▝▚▞▙▛▜▟` | always, as exact rectangles (a run is one rectangle), so bars and shading have no seams | – |
 
 When unsure, a character stays text, so the worst case is the character itself in its own cell,
-never a wrong shape. `a->b`, `--dry-run`, `user_id`, `C:\temp`, markdown tables and `|--` file
-trees all stay exactly as written.
+never a wrong shape. `a->b`, `--dry-run`, `user_id`, `C:\temp`, `yes/no`, `TCP/IP`, markdown
+tables and `|--` file trees all stay exactly as written.
 
 ## How 1:1 is guaranteed
 
-Every run parses the SVG it just wrote (lines, curves, arrowheads, text positions) back into a
-character grid and compares it with the input, cell by cell. ASCII characters may only appear as
-the line they stand for (`-`→`─`, `|`→`│`, `+`→corner or junction, `v`→`▼`). Any mismatch is
+Every run parses the SVG it just wrote (lines, curves, diagonals, arrowheads, block rectangles,
+text positions) back into a character grid and compares it with the input, cell by cell. ASCII
+characters may only appear as the line they stand for (`-`→`─`, `|`→`│`, `+`→corner or junction,
+`v`→`▼`, `/`→`╱`). Any mismatch is
 exit code 2. This covers every look, including animated ones and the still frame used for PNGs.
 
 ## Built for agents
@@ -387,7 +399,7 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-52 tests over 21 test diagrams:
+54 tests over 23 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
@@ -409,6 +421,8 @@ python3 docs/build.py                  # regenerate every image in this README
   real mistakes (a gap before a box, a broken wall) still warn; touching lines are drawn touching
 - `--repair` on LLM-style misalignment: every fixture repaired to `ok`, text provably unchanged,
   well-formed diagrams untouched
+- block elements drawn as exact rectangles (no glyphs, runs merged), and `/ \` drawn only as runs,
+  never inside words like `yes/no` or `C:\Users`
 
 They pass with and without the optional packages.
 
@@ -420,9 +434,9 @@ They pass with and without the optional packages.
 
 - **Repairing bigger misalignments.** `--repair` fixes pieces up to two cells off and walls up to
   three; anything further is left alone and warned, since guessing would risk a wrong picture.
-- **ASCII rounded corners (`.-'`) and diagonals (`/ \`).** These stay text.
+- **ASCII rounded corners (`.-'`).** These stay text.
 - **Free-floating ASCII connectors that touch no box** (e.g. `A ---> B` between plain words). These stay text.
-- **An MCP server and a JS/npm port.**
+- **A JS/npm port.**
 - **Every renderer checked.** The original static look was verified in cairo and resvg. The new
   looks (colour, themes, animation) have been checked in Chromium only so far, not yet in
   Firefox, Safari, or through cairo for `--png`.

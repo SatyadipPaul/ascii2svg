@@ -1,0 +1,4 @@
+Shades   ░░░░▒▒▒▒▓▓▓▓████   Eighths ▏▎▍▌▋▊▉█  ▁▂▃▄▅▆▇█
+Halves   ▀▀▀▀ ▄▄▄▄ ▌▐▌▐     Quadrants ▘▝▖▗▚▞▙▛▜▟
+Text stays text: yes/no, TCP/IP, C:\Users, \_/ and a/b/c
+Unicode diagonals: ╱╲  ╳

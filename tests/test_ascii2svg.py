@@ -668,6 +668,31 @@ def test_repair_result_is_exact_and_positions_point_into_the_input():
     assert j["status"] == "ok" and j["summary"].startswith("Repaired 5 misalignments. Rendered 5 boxes"), j["summary"]
 
 
+def test_block_elements_are_exact_rectangles():
+    cells, draw, svg, stats, _ = pipeline("A ████░░ ▏▎▍▌▋▊▉ ▁▂▃▄▅▆▇ ▀▐▔▕ ▘▝▖▗▚▞▙▛▜▟\nB ▓▓▒▒", color=True, animate="draw")
+    assert a2s.self_check(svg, draw, cells) == []
+    texts = re.findall(r"<text[^>]*>(.*?)</text>", svg)
+    assert not any(t in a2s.BLOCKS for t in texts), texts           # no glyphs: rectangles only
+    runs = re.findall(r'<rect x="[\d.]+" y="[\d.]+" width="([\d.]+)" height="[\d.]+" class="blk (k\d)"', svg)
+    assert ("36", "k4") in runs and ("18", "k1") in runs, runs       # ████ is one rect, ░░ another
+    assert svg.count('class="blk k3"') == 1 and svg.count('class="blk k2"') == 1
+    assert "crispEdges" in svg and "a2s-grow" in svg
+
+
+def test_diagonals_draw_only_as_runs():
+    text = fx("diagonals.txt")
+    cells, draw, svg, stats, _ = pipeline(text)
+    assert a2s.self_check(svg, draw, cells) == []
+    assert "╱" in {t for t, _ in draw.values()} and "╲" in {t for t, _ in draw.values()}
+    assert not re.search(r"<text[^>]*>[/\\]</text>", svg)            # every slash in the fixture is a line
+    assert svg.count('class="sgl ext"') >= 4                          # diamond caps + run-ons to the firewall
+    for words in ("yes/no", "TCP/IP", r"C:\Users", r"\_/", "a/b/c", "/\n/"):
+        cells, draw, svg, _, _ = pipeline(words)
+        assert not any(t in a2s.DIAG for t, _ in draw.values()), words
+    cells, draw, svg, _, _ = pipeline("╱╲\n╲╱ ╳")
+    assert a2s.self_check(svg, draw, cells) == [] and "<text" not in svg
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0

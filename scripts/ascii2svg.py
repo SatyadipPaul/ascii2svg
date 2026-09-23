@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -175,9 +175,33 @@ SINGLE_OF = {frozenset(v): k for k, v in {
 SINGLE_OF.update({frozenset("L"): "─", frozenset("R"): "─", frozenset("U"): "│", frozenset("D"): "│"})
 ASCII_HEADS = {"v": "▼", "^": "▲", ">": "▶", "<": "◀"}
 ASCII_TAIL = {"v": "U", "^": "D", ">": "L", "<": "R"}
+# diagonals: which strokes each character draws, corner to corner across its cell
+DIAG = {"╱": "/", "╲": "\\", "╳": "/\\"}
+DIAG_OF = {"/": "╱", "\\": "╲", "/\\": "╳"}
 # 1:1 contract: an ASCII character may be drawn only as the line it stands for
 CORR = {"-": set("─┬┴┼"), "|": set("│├┤┼"), "+": set("┌┐└┘├┤┬┴┼─│"),
-        "v": {"▼"}, "^": {"▲"}, ">": {"▶"}, "<": {"◀"}}
+        "v": {"▼"}, "^": {"▲"}, ">": {"▶"}, "<": {"◀"}, "/": {"╱"}, "\\": {"╲"}}
+
+
+def _block_table():
+    """Block elements -> (shade 1-4, rectangles in eighths of the cell: x0, y0, x1, y1).
+    Drawn as exact rectangles instead of font glyphs, so bars and shading have no seams."""
+    full = (0, 0, 8, 8)
+    t = {"█": (4, [full]), "▓": (3, [full]), "▒": (2, [full]), "░": (1, [full]),
+         "▀": (4, [(0, 0, 8, 4)]), "▐": (4, [(4, 0, 8, 8)]), "▔": (4, [(0, 0, 8, 1)]), "▕": (4, [(7, 0, 8, 8)])}
+    for k, ch in enumerate("▁▂▃▄▅▆▇", 1):              # lower k eighths
+        t[ch] = (4, [(0, 8 - k, 8, 8)])
+    for k, ch in enumerate("▏▎▍▌▋▊▉", 1):              # left k eighths
+        t[ch] = (4, [(0, 0, k, 8)])
+    q = {"a": (0, 0, 4, 4), "b": (4, 0, 8, 4), "c": (0, 4, 4, 8), "d": (4, 4, 8, 8)}   # quadrants
+    for ch, parts in zip("▘▝▖▗▚▞▙▛▜▟", ("a", "b", "c", "d", "ad", "bc", "acd", "abc", "abd", "bcd")):
+        t[ch] = (4, [q[p] for p in parts])
+    return t
+
+
+BLOCKS = _block_table()
+BLOCK_OF = {tuple(sorted((s, r) for r in rects)): ch for ch, (s, rects) in BLOCKS.items()}
+MERGEABLE = {ch for ch, (s, rects) in BLOCKS.items() if len(rects) == 1 and rects[0][0] == 0 and rects[0][2] == 8}
 DIRS = {"U": (-1, 0), "D": (1, 0), "L": (0, -1), "R": (0, 1)}
 OPP = {"U": "D", "D": "U", "L": "R", "R": "L"}
 
@@ -389,6 +413,18 @@ def interpret(cells, nrows, ncols):
         arms |= {d for d in "UDLR" if conn(r, c, d, t)}
         if arms:
             drawn[(r, c)] = SINGLE_OF[frozenset(arms)]
+
+    # 4) diagonals: '/' and '\' only in a run of two or more along their own slope, and never
+    #    touching a word ("yes/no", "TCP/IP", "C:\Users" and "\_/" stay text)
+    def slash(r, c):
+        return ch(r, c) in "/\\" and not _alnum(ch(r, c - 1)) and not _alnum(ch(r, c + 1))
+
+    for (r, c) in sorted(cells):
+        t = ch(r, c)
+        if slash(r, c):
+            dc = -1 if t == "/" else 1                      # where the line goes one row down
+            if any(ch(r + k, c + k * dc) == t and slash(r + k, c + k * dc) for k in (-1, 1)):
+                drawn[(r, c)] = DIAG_OF[t]
     kept = sum(1 for k, (t, _) in cells.items() if t in "|+" and k not in drawn)
     kept += sum(b - a + 1 for r, a, b in hruns if b > a and (r, a) not in drawn)
     return drawn, {"ascii_drawn_as_lines": len(drawn), "ascii_line_like_kept_as_text": kept}
@@ -556,7 +592,8 @@ def _layout_css(mode, font=None):
            ".head{stroke-width:1;stroke-linejoin:round}"
            f"text{{font:{FS}px {font_stack(font)}ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono',monospace;"
            "text-anchor:middle;white-space:pre}"
-           ".fill{transition:fill .25s}text,line,path,polygon{pointer-events:none}")
+           ".blk{shape-rendering:crispEdges}.k3{fill-opacity:.75}.k2{fill-opacity:.5}.k1{fill-opacity:.28}"
+           ".fill{transition:fill .25s}text,line,path,polygon,.blk{pointer-events:none}")
     if mode == "none":
         return css
     on = ".a2s-on" if mode == "scroll" else ""
@@ -566,6 +603,9 @@ def _layout_css(mode, font=None):
             "60%,100%{stroke-dasharray:1 2;stroke-dashoffset:0}}"
             "@keyframes a2s-fade{0%{opacity:0}}"
             "@keyframes a2s-pop{0%{opacity:0;transform:scale(.2)}}"
+            "@keyframes a2s-grow{0%{transform:scaleX(0)}}"
+            f"{sel('.blk')}{{animation:a2s-grow .7s {ease} backwards}}"
+            ".blk{transform-box:fill-box;transform-origin:left}"
             f"{sel('.sgl', '.dbl')}{{animation:a2s-draw .6s {ease} backwards}}"
             f"{sel('.dbl-gap')}{{animation:a2s-gap .6s {ease} backwards}}"
             f"{sel('.sgl.shaft')}{{animation:a2s-fade .3s ease-out backwards}}"
@@ -605,9 +645,9 @@ def _colour_css(t, color, anim):
     acc = t["accent"]
     css = (f".bg,.fill,.plate{{fill:{t['bg']}}}.sgl,.dbl{{stroke:{t['ink']}}}.dbl-gap{{stroke:{t['bg']}}}"
            f".head{{fill:{t['ink']};stroke:{t['ink']}}}text{{fill:{t['ink']}}}"
-           f".glow{{fill:{t['glow']};fill-opacity:{t['glow_a']}}}.shadow{{fill:#000}}")
+           f".glow{{fill:{t['glow']};fill-opacity:{t['glow_a']}}}.shadow{{fill:#000}}.blk{{fill:{t['ink']}}}")
     if color:
-        css += (f".shaft{{stroke:{acc}}}.head{{fill:{acc};stroke:{acc}}}.fill.tn{{fill:{t['neutral']}}}"
+        css += (f".shaft{{stroke:{acc}}}.head{{fill:{acc};stroke:{acc}}}.blk{{fill:{acc}}}.fill.tn{{fill:{t['neutral']}}}"
                 + "".join(f".fill.t{i}c{{fill:{a}}}.fill.t{i}l{{fill:{b}}}" for i, (a, b) in enumerate(t["hues"])))
     css += f".fill:hover{{fill:{t['hover']}}}"
     if anim:   # lines are sketched in the accent colour, then settle to ink
@@ -626,7 +666,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     renderer that ignores CSS/SMIL animation shows exactly what the self-check verified."""
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
     segs = {"s": {"h": {}, "v": {}}, "d": {"h": {}, "v": {}}}
-    curves, heads, texts = [], [], []
+    curves, heads, texts, blocks = [], [], [], []
+    diag = {"/": set(), "\\": set()}
     round_ok = not square and not any(t in ROUNDED for t, _ in cells.values())
     anim = animate != "none"
     timed = animate in ("draw", "flow")              # "scroll" leaves the timing to the host page
@@ -684,6 +725,11 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                     add(st, "v", cx, cy, y0 + CH + ext)
         elif t in HEADS:
             heads.append((r, c, HEADS[t]))
+        elif t in DIAG:
+            for s in DIAG[t]:
+                diag[s].add((r, c))
+        elif t in BLOCKS:
+            blocks.append((r, c, t))
         else:
             texts.append((r, c, w, t))
 
@@ -714,7 +760,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     under = []
     boxes = find_boxes(get, nrows, ncols)
     tints = box_tints(boxes) if color else {}
-    is_text = lambda t: t not in (" ", "") and t not in ARMS and t not in HEADS
+    is_text = lambda t: t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG and t not in BLOCKS
     for b in boxes:
         r1, c1, r2, c2 = b
         x1, y1 = PAD + c1 * CW + CW / 2, PAD + r1 * CH + CH / 2
@@ -758,7 +804,64 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                                  f'width="{(c - run) * CW:g}" height="{CH:g}" class="plate"{tm}/>')
                     run = None
 
-    body = under + lines("d", "dbl") + lines("d", "dbl-gap") + lines("s", "sgl")
+    def diagonals():
+        """One stroke per run of ╱ or ╲, corner to corner. Where a ╱ and a ╲ end one cell apart on
+        the same edge (the flat top and bottom of an ASCII diamond) a short cap joins them; an end
+        that points at a line runs on to meet it. Caps and run-ons are marked `ext`."""
+        o, ends = [], []
+        for s, cellset in diag.items():
+            dc = -1 if s == "/" else 1
+            for (r, c) in sorted(cellset):
+                if (r - 1, c - dc) in cellset:
+                    continue                                # not the top of its run
+                n = 1
+                while (r + n, c + n * dc) in cellset:
+                    n += 1
+                if s == "/":
+                    top, bot = (PAD + (c + 1) * CW, PAD + r * CH), (PAD + (c - n + 1) * CW, PAD + (r + n) * CH)
+                    a, b = bot, top
+                else:
+                    top, bot = (PAD + c * CW, PAD + r * CH), (PAD + (c + n) * CW, PAD + (r + n) * CH)
+                    a, b = top, bot
+                o.append(f'<line x1="{a[0]:g}" y1="{a[1]:g}" x2="{b[0]:g}" y2="{b[1]:g}" class="sgl"{grow}'
+                         f'{timing(top[1], max(n * CH / speed, 0.25))}/>')
+                ends.append((s, "top", top, (r - 1, c - dc)))
+                ends.append((s, "bot", bot, (r + n, c + n * dc)))
+        at_end = {(s, e, p) for s, e, p, _ in ends}
+        capped = set()
+        for s, e, p, _ in ends:                            # left end of a flat top or bottom
+            if (s, e) in (("/", "top"), ("\\", "bot")):
+                q = (p[0] + CW, p[1])
+                if ({"top": "\\", "bot": "/"}[e], e, q) in at_end:
+                    o.append(f'<line x1="{p[0]:g}" y1="{p[1]:g}" x2="{q[0]:g}" y2="{q[1]:g}" class="sgl ext"'
+                             f'{grow}{timing(p[1])}/>')
+                    capped.update({p, q})
+        for s, e, p, (br, bc) in ends:
+            if p in capped or get(br, bc) not in ARMS:
+                continue
+            q = (PAD + bc * CW + CW / 2, PAD + br * CH + CH / 2)
+            o.append(f'<line x1="{p[0]:g}" y1="{p[1]:g}" x2="{q[0]:g}" y2="{q[1]:g}" class="sgl ext"{grow}{timing(p[1])}/>')
+        return o
+
+    def block_rects():
+        """Block elements as exact rectangles; a run of the same full-width block is one rectangle."""
+        o, i = [], 0
+        while i < len(blocks):
+            r, c, t = blocks[i]
+            n = 1
+            if t in MERGEABLE:
+                while i + n < len(blocks) and blocks[i + n] == (r, c + n, t):
+                    n += 1
+            shade, rects = BLOCKS[t]
+            for x0, y0, x1, y1 in rects:
+                x, y = PAD + c * CW + x0 * CW / 8, PAD + r * CH + y0 * CH / 8
+                wd, ht = (n - 1) * CW + (x1 - x0) * CW / 8, (y1 - y0) * CH / 8
+                o.append(f'<rect x="{x:g}" y="{y:g}" width="{wd:g}" height="{ht:g}" class="blk k{shade}"'
+                         f'{timing(y)}/>')
+            i += n
+        return o
+
+    body = under + block_rects() + lines("d", "dbl") + lines("d", "dbl-gap") + lines("s", "sgl") + diagonals()
     line_like = lambda r, c: get(r, c) in ARMS
     for r, c, d in heads:
         sh, pts, _ = head_geometry(r, c, d, line_like)
@@ -812,7 +915,7 @@ REVEAL_JS = r"""(() => {
   const svg = document.querySelector('svg[data-reveal="scroll"]');
   if (!svg || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const q = s => [...svg.querySelectorAll(s)], n = (el, a) => +el.getAttribute(a);
-  const grow = [], show = q('path.sgl,path.dbl,path.dbl-gap,.shaft,.head,text,.glow,.shadow,.fill,.plate');
+  const grow = [], show = q('path.sgl,path.dbl,path.dbl-gap,.shaft,.head,text,.glow,.shadow,.fill,.plate,.blk');
   for (const el of q('line.sgl:not(.shaft),line.dbl,line.dbl-gap')) {
     if (n(el, 'x1') === n(el, 'x2') && n(el, 'y2') - n(el, 'y1') > 72) grow.push({el, y1: n(el, 'y1'), y2: n(el, 'y2'), f: 0});
     else show.push(el);
@@ -891,6 +994,8 @@ def read_back(svg: str) -> dict:
     pad = float(re.search(r'data-pad="([\d.]+)"', svg).group(1))
     arms: dict = {}
     out: dict = {}
+    slopes: dict = {}
+    pieces: dict = {}
 
     def arm(r, c, st, a):
         arms.setdefault((r, c), {"s": set(), "d": set()})[st].add(a)
@@ -914,7 +1019,15 @@ def read_back(svg: str) -> dict:
                 row = int((y1 - pad) // chh)
                 out[(row, round((x1 - pad) / cw) - (0 if x2 > x1 else 1))] = "▶" if x2 > x1 else "◀"
             continue
-        if cls == "dbl-gap":
+        if cls in ("dbl-gap", "sgl ext"):
+            continue
+        if x1 != x2 and y1 != y2:                          # a diagonal run, one cell per row
+            s = "/" if y2 < y1 else "\\"
+            r0, c0 = round((min(y1, y2) - pad) / chh), round((x1 - pad) / cw)
+            n = round(abs(y2 - y1) / chh)
+            for k in range(n):
+                cell = (r0 + k, c0 + n - 1 - k) if s == "/" else (r0 + k, c0 + k)
+                slopes[cell] = slopes.get(cell, "") + s
             continue
         st = "d" if cls == "dbl" else "s"
         if y1 == y2:
@@ -943,6 +1056,20 @@ def read_back(svg: str) -> dict:
             out[k] = next((ch for ch in DOUBLE if ARMS[ch] == d), "?")
         else:
             out[k] = SINGLE_OF.get(s, "?")
+    for k, s in slopes.items():
+        out[k] = "?" if k in out else DIAG_OF.get("".join(sorted(s)), "?")
+    for x, y, w, h, shade in re.findall(
+            r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" class="blk k(\d)"', svg):
+        x, y, w, h, shade = float(x), float(y), float(w), float(h), int(shade)
+        r = int((y - pad) // chh)
+        ry = pad + r * chh
+        for c in range(int((x - pad) // cw), int((x + w - pad - 0.01) // cw) + 1):   # a run: one piece per cell
+            cx0 = pad + c * cw
+            e = lambda v, o, size: round((v - o) / size * 8)
+            rect = (e(max(x, cx0), cx0, cw), e(y, ry, chh), e(min(x + w, cx0 + cw), cx0, cw), e(y + h, ry, chh))
+            pieces.setdefault((r, c), []).append((shade, rect))
+    for k, p in pieces.items():
+        out[k] = BLOCK_OF.get(tuple(sorted(p)), "?")
     for x, y, t in re.findall(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
         t = html.unescape(t)
         w = width_of(t)
@@ -1366,7 +1493,7 @@ def describe(cells, nrows, ncols):
     Lets an agent check that the picture means what it intended, e.g. that an arrow really
     runs from "API" to "DB"."""
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
-    is_text = lambda t: t not in (" ", "") and t not in ARMS and t not in HEADS
+    is_text = lambda t: t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG and t not in BLOCKS
     boxes = sorted(find_boxes(get, nrows, ncols))
     inside = lambda a, b: a != b and b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
     ids = {b: f"b{i}" for i, b in enumerate(boxes, 1)}
@@ -1766,7 +1893,7 @@ def run_one(args, raw, notes, base=0):
         report["repair"] = fixes
     if args.describe:
         report["diagram"] = describe(draw_cells, nrows, ncols)
-    is_diagram = any(t in ARMS or t in HEADS for t, _ in draw_cells.values())
+    is_diagram = any(t in ARMS or t in HEADS or t in DIAG or t in BLOCKS for t, _ in draw_cells.values())
     if problems:
         report["self_check_problems"] = problems[:50]
         return 2, report, svg, still, is_diagram
