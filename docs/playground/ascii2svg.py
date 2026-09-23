@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.7.0"
+__version__ = "1.8.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -182,9 +182,17 @@ ASCII_TAIL = {"v": "U", "^": "D", ">": "L", "<": "R"}
 # diagonals: which strokes each character draws, corner to corner across its cell
 DIAG = {"╱": "/", "╲": "\\", "╳": "/\\"}
 DIAG_OF = {"/": "╱", "\\": "╲", "/\\": "╳"}
+# UML heads: a hollow triangle points at the parent class, a diamond sits at the whole
+UML_DIR = {"△": "U", "▽": "D", "◁": "L", "▷": "R"}
+UML = set(UML_DIR) | {"◇", "◆"}
+# ER crow's-foot notation on a connector: ticks ('|' -> ┼), rings ('o' -> ○) and feet
+FOOT_R, FOOT_L = "ᐸ", "ᐳ"                  # a foot opening right (from '<' or '{') or left ('>' '}')
+FEET = {FOOT_R: "L", FOOT_L: "R"}           # the side its point, and its line, is on
+MARKS = UML | set(FEET) | {"○"}
 # 1:1 contract: an ASCII character may be drawn only as the line it stands for
 CORR = {"-": set("─┬┴┼"), "|": set("│├┤┼"), "+": set("┌┐└┘├┤┬┴┼─│"),
-        "v": {"▼"}, "^": {"▲"}, ">": {"▶"}, "<": {"◀"}, "/": {"╱"}, "\\": {"╲"}}
+        "v": {"▼"}, "^": {"▲"}, ">": {"▶", FOOT_L}, "<": {"◀", FOOT_R}, "/": {"╱"}, "\\": {"╲"},
+        "o": {"○"}, "{": {FOOT_R}, "}": {FOOT_L}}
 
 
 def _block_table():
@@ -221,6 +229,42 @@ def interpret(cells, nrows, ncols):
     ch = lambda r, c: cells.get((r, c), (" ", 1))[0]
     struct: set = set()
 
+    def wall_at(r, c):
+        """A box wall crossing row r at column c (ASCII, Unicode, or a crow's foot set in the wall)."""
+        t = ch(r, c)
+        if t in ARMS:
+            return {"U", "D"} <= ARMS[t]
+        up, down = ch(r - 1, c), ch(r + 1, c)
+        if t in "<{>}":
+            return up in "|+" and down in "|+"
+        return t in "|+" and (up in "|+<>{}" or down in "|+<>{}")
+
+    def er_run(r, c0, dc):
+        """ER connector from the wall at (r, c0) to the next wall along dc: '--||--o<', '>o--|--'.
+        Returns ({cell: drawn}, far wall) or None. Feet only next to a wall, opening toward it."""
+        run, x = [], c0 + dc
+        while not wall_at(r, x):
+            if ch(r, x) not in "-─|o<>{}":
+                return None
+            run.append(x)
+            x += dc
+        if dc < 0:
+            run.reverse()
+        left, right = min(c0, x), max(c0, x)
+        body = "".join(ch(r, y) for y in run)
+        lw, rw = ch(r, left), ch(r, right)
+        feet_ok = (all(t not in "<{" for t in body[:-1]) and all(t not in ">}" for t in body[1:])
+                   and lw not in "<{" and rw not in ">}")
+        marked = any(t in "|o<>{}" for t in body) or lw in ">}" or rw in "<{"
+        if not run or not feet_ok or not marked or sum(t in "-─" for t in body) < 2:
+            return None
+        er_map = {"-": "─", "─": "─", "|": "┼", "o": "○", "<": FOOT_R, "{": FOOT_R, ">": FOOT_L, "}": FOOT_L}
+        out = {(r, y): er_map[ch(r, y)] for y in run}
+        for y in (left, right):
+            if ch(r, y) in "<{>}":
+                out[(r, y)] = er_map[ch(r, y)]
+        return out
+
     # 1) closed boxes: '+' corners, '-' edges (a title may sit on the top edge), '|' walls
     for (r, c) in sorted(cells):
         if ch(r, c) != "+" or ch(r, c + 1) != "-":
@@ -238,7 +282,9 @@ def interpret(cells, nrows, ncols):
                         and all(ch(rr, x) in "-+" for x in range(c + 1, c2))):
                     r2 = rr
                     break
-                if a not in "|+" or b not in "|+":
+                a_ok = a in "|+" or (a in "<{" and er_run(rr, c, -1))      # a crow's foot in the wall
+                b_ok = b in "|+" or (b in ">}" and er_run(rr, c2, 1))
+                if not (a_ok and b_ok):
                     break
             if r2 is None:
                 continue
@@ -262,7 +308,16 @@ def interpret(cells, nrows, ncols):
                 struct.update({(rr, c), (rr, c2)})
             break
 
-    uni = lambda r, c: ch(r, c) in ARMS or ch(r, c) in HEADS
+    # 1b) ER connectors between walls that are drawn (or already Unicode lines)
+    er = {}
+    for (r, c) in sorted(cells):
+        if ((r, c) in struct or ch(r, c) in ARMS) and wall_at(r, c):
+            found = er_run(r, c, 1)
+            if found:
+                er.update(found)
+    struct.update(er)
+
+    uni = lambda r, c: ch(r, c) in ARMS or ch(r, c) in HEADS or ch(r, c) in UML
     is_s = lambda r, c: (r, c) in struct or uni(r, c)
 
     # 2) connectors grow outward from structure until nothing changes
@@ -391,6 +446,8 @@ def interpret(cells, nrows, ncols):
         n = (r + DIRS[d][0], c + DIRS[d][1])
         t = ch(*n)
         back = OPP[d]
+        if er.get(n, "─") != "─":
+            return False                                    # ER marks sit on the line; walls get no arm to them
         perpendicular = (own == "-" and d in "UD") or (own == "|" and d in "LR")
         if n in struct:
             if t == "-":
@@ -405,11 +462,16 @@ def interpret(cells, nrows, ncols):
             return back in ARMS[t]
         if t in HEADS:
             return TAIL[t] == back
-        return False
+        if t in UML_DIR:
+            return OPP[UML_DIR[t]] == back
+        return t in ("◇", "◆")
 
     drawn = {}
     for (r, c) in sorted(struct):
         t = ch(r, c)
+        if (r, c) in er:
+            drawn[(r, c)] = er[(r, c)]
+            continue
         if t in ASCII_HEADS:
             drawn[(r, c)] = ASCII_HEADS[t]
             continue
@@ -464,7 +526,7 @@ def find_boxes(get, nrows, ncols):
             t = get(r, c)
             if t not in TL:
                 continue
-            side = set("║╟╢╪") if t == "╔" else set("│├┤┼╎┆┊")
+            side = set("║╟╢╪") if t == "╔" else set("│├┤┼╎┆┊") | set(FEET)
             c2 = None
             for x in range(c + 1, ncols):
                 tx = get(r, x)
@@ -597,8 +659,10 @@ def _layout_css(mode, font=None):
            f"text{{font:{FS}px {font_stack(font)}ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono',monospace;"
            "text-anchor:middle;white-space:pre}"
            ".dash.n2{stroke-dasharray:4.2 4.8}.dash.n3{stroke-dasharray:2.6 3.4}.dash.n4{stroke-dasharray:1.4 3.1}"
+           ".uml{stroke-width:1.2;stroke-linejoin:round}.ring{stroke-width:1.3}"
+           ".foot{fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}"
            ".blk{shape-rendering:crispEdges}.k3{fill-opacity:.75}.k2{fill-opacity:.5}.k1{fill-opacity:.28}"
-           ".fill{transition:fill .25s}text,line,path,polygon,.blk{pointer-events:none}")
+           ".fill{transition:fill .25s}text,line,path,polygon,circle,.blk{pointer-events:none}")
     if mode == "none":
         return css
     on = ".a2s-on" if mode == "scroll" else ""
@@ -614,8 +678,9 @@ def _layout_css(mode, font=None):
             f"{sel('.sgl', '.dbl')}{{animation:a2s-draw .6s {ease} backwards}}"
             f"{sel('.dbl-gap')}{{animation:a2s-gap .6s {ease} backwards}}"
             f"{sel('.sgl.shaft', '.sgl.dash')}{{animation:a2s-fade .3s ease-out backwards}}"
-            f"{sel('.head')}{{animation:a2s-pop .45s cubic-bezier(.3,1.6,.5,1) backwards}}"
-            ".head{transform-box:fill-box;transform-origin:center}"
+            f"{sel('.head', '.uml', '.ring')}{{animation:a2s-pop .45s cubic-bezier(.3,1.6,.5,1) backwards}}"
+            f"{sel('.foot')}{{animation:a2s-fade .4s ease-out backwards}}"
+            ".head,.uml,.ring{transform-box:fill-box;transform-origin:center}"
             f"{sel('text')}{{animation:a2s-fade .5s ease-out backwards}}"
             f"{sel('.glow', '.shadow', '.fill', '.plate')}{{animation:a2s-fade .8s ease-out backwards}}"
             ".pulse .halo{fill-opacity:.28}")
@@ -650,9 +715,10 @@ def _colour_css(t, color, anim):
     acc = t["accent"]
     css = (f".bg,.fill,.plate{{fill:{t['bg']}}}.sgl,.dbl{{stroke:{t['ink']}}}.dbl-gap{{stroke:{t['bg']}}}"
            f".head{{fill:{t['ink']};stroke:{t['ink']}}}text{{fill:{t['ink']}}}"
-           f".glow{{fill:{t['glow']};fill-opacity:{t['glow_a']}}}.shadow{{fill:#000}}.blk{{fill:{t['ink']}}}")
+           f".glow{{fill:{t['glow']};fill-opacity:{t['glow_a']}}}.shadow{{fill:#000}}.blk{{fill:{t['ink']}}}"
+           f".uml,.ring{{fill:{t['bg']};stroke:{t['ink']}}}.uml.solid{{fill:{t['ink']}}}.foot{{stroke:{t['ink']}}}")
     if color:
-        css += (f".shaft{{stroke:{acc}}}.head{{fill:{acc};stroke:{acc}}}.blk{{fill:{acc}}}.fill.tn{{fill:{t['neutral']}}}"
+        css += (f".shaft{{stroke:{acc}}}.head{{fill:{acc};stroke:{acc}}}.blk{{fill:{acc}}}.uml{{stroke:{acc}}}.uml.solid{{fill:{acc}}}.fill.tn{{fill:{t['neutral']}}}"
                 + "".join(f".fill.t{i}c{{fill:{a}}}.fill.t{i}l{{fill:{b}}}" for i, (a, b) in enumerate(t["hues"])))
     css += f".fill:hover{{fill:{t['hover']}}}"
     if anim:   # lines are sketched in the accent colour, then settle to ink
@@ -671,7 +737,31 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     renderer that ignores CSS/SMIL animation shows exactly what the self-check verified."""
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
     segs = {st: {"h": {}, "v": {}} for st in ("s", "d", "2", "3", "4")}      # single, double, dashed x2/x3/x4
-    curves, heads, texts, blocks = [], [], [], []
+    curves, heads, texts, blocks, marks = [], [], [], [], []
+
+    def back(r, c, a):
+        """The neighbour on side a has a line arm reaching back to (r, c)."""
+        n = get(r + DIRS[a][0], c + DIRS[a][1])
+        return n in ARMS and OPP[a] in ARMS[n]
+
+    def link(r, c, a):
+        """How a mark at (r, c) meets side a: "edge" (a line or mark comes to the shared edge),
+        "touch" (a straight line runs across that cell: reach over to it), or None."""
+        n = get(r + DIRS[a][0], c + DIRS[a][1])
+        if back(r, c, a) or n == "○" or n in ("┼",) or FEET.get(n) == OPP[a]:
+            return "edge"
+        return "touch" if touches(a, n) else None
+
+    def mark_kind(r, c, t):
+        if t in UML_DIR:
+            return "tri" if back(r, c, OPP[UML_DIR[t]]) else None
+        if t in ("◇", "◆"):
+            return "dia" if any(back(r, c, a) for a in "UDLR") else None
+        if t == "○":
+            return "ring" if (link(r, c, "L") and link(r, c, "R")) or (link(r, c, "U") and link(r, c, "D")) else None
+        if t in FEET:
+            return "foot" if link(r, c, FEET[t]) else None
+        return None
     diag = {"/": set(), "\\": set()}
     round_ok = not square and not any(t in ROUNDED for t, _ in cells.values())
     anim = animate != "none"
@@ -714,8 +804,20 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                 add(st_v, "v", cx, *((vy, y0 + CH) if "D" in arms else (y0, vy)))
                 curves.append((st_h, f"M{hx:g} {cy:g}Q{cx:g} {cy:g} {cx:g} {vy:g}", y0))
                 continue
+            tick = ""
+            if t == "┼":                                    # a mark across a line (ER '||'), not a crossing
+                if not back(r, c, "U") and not back(r, c, "D") and link(r, c, "L") and link(r, c, "R"):
+                    tick = "UD"
+                elif not back(r, c, "L") and not back(r, c, "R") and link(r, c, "U") and link(r, c, "D"):
+                    tick = "LR"
             for a in sorted(arms):
                 st = st_h if a in "LR" else st_v
+                if a in tick:
+                    if a == "D":
+                        add(st, "v", cx, cy - 5, cy + 5)
+                    elif a == "R":
+                        add(st, "h", cy, cx - 4, cx + 4)
+                    continue
                 n = get(r + DIRS[a][0], c + DIRS[a][1])
                 # meeting a straight line side-on (│───▶│): run on until the strokes meet, stopping
                 # just short of that cell's centre so it still reads back as a plain │ / ─
@@ -730,6 +832,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                     add(st, "v", cx, cy, y0 + CH + ext)
         elif t in HEADS:
             heads.append((r, c, HEADS[t]))
+        elif t in MARKS and mark_kind(r, c, t):
+            marks.append((r, c, t, mark_kind(r, c, t)))
         elif t in DIAG:
             for s in DIAG[t]:
                 diag[s].add((r, c))
@@ -766,7 +870,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     under = []
     boxes = find_boxes(get, nrows, ncols)
     tints = box_tints(boxes) if color else {}
-    is_text = lambda t: t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG and t not in BLOCKS
+    is_text = lambda t: (t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG
+                         and t not in BLOCKS and t not in MARKS)
     for b in boxes:
         r1, c1, r2, c2 = b
         x1, y1 = PAD + c1 * CW + CW / 2, PAD + r1 * CH + CH / 2
@@ -867,8 +972,81 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
             i += n
         return o
 
+    def mark_shapes():
+        """UML triangles and diamonds, ER rings and crow's feet. Joining strokes are `ext`."""
+        o, border = [], box_border(boxes)
+        reach = lambda r, c, a: (not back(r, c, a) and line_like(r + DIRS[a][0], c + DIRS[a][1])) or \
+            (r + DIRS[a][0], c + DIRS[a][1]) in border     # a diamond touches the box it sits on
+        ext = lambda x1, y1, x2, y2, y: (f'<line x1="{x1:g}" y1="{y1:g}" x2="{x2:g}" y2="{y2:g}" '
+                                         f'class="sgl ext"{grow}{timing(y)}/>')
+        for r, c, t, kind in marks:
+            x0, y0 = PAD + c * CW, PAD + r * CH
+            cx, cy = x0 + CW / 2, y0 + CH / 2
+            tm = timing(y0)
+            if kind == "tri":                               # tip first, then the two base corners
+                d = UML_DIR[t]
+                if d in "UD":
+                    s = -1 if d == "U" else 1
+                    tip = (cy + s * CH / 2) + s * (CH / 2 if line_like(r + s, c) else 0)
+                    base = tip - s * 10
+                    pts = ((cx, tip), (cx - 5.5, base), (cx + 5.5, base))
+                    if (base - (cy - s * CH / 2)) * s > 0:
+                        o.append(ext(cx, cy - s * CH / 2, cx, base, y0))
+                else:
+                    s = -1 if d == "L" else 1
+                    tip = (cx + s * CW / 2) + s * (CW / 2 if line_like(r, c + s) else 0)
+                    base = tip - s * 8
+                    pts = ((tip, cy), (base, cy - 5), (base, cy + 5))
+                    if (base - (cx - s * CW / 2)) * s > 0:
+                        o.append(ext(cx - s * CW / 2, cy, base, cy, y0))
+                o.append(f'<polygon points="{" ".join(f"{x:g},{y:g}" for x, y in pts)}" class="uml"{tm}/>')
+            elif kind == "dia":                             # spans its cell; reaches over to a line it meets
+                if back(r, c, "U") or back(r, c, "D"):
+                    top = y0 - (CH / 2 if reach(r, c, "U") else 0)
+                    bot = y0 + CH + (CH / 2 if reach(r, c, "D") else 0)
+                    mid = (top + bot) / 2
+                    pts = ((cx, top), (cx + 5, mid), (cx, bot), (cx - 5, mid))
+                else:
+                    lft = x0 - 2 - (CW / 2 if reach(r, c, "L") else 0)
+                    rgt = x0 + CW + 2 + (CW / 2 if reach(r, c, "R") else 0)
+                    mid = (lft + rgt) / 2
+                    pts = ((lft, cy), (mid, cy - 5), (rgt, cy), (mid, cy + 5))
+                cls = "uml solid" if t == "◆" else "uml"
+                o.append(f'<polygon points="{" ".join(f"{x:g},{y:g}" for x, y in pts)}" class="{cls}"{tm}/>')
+            elif kind == "ring":
+                sides = "LR" if link(r, c, "L") and link(r, c, "R") else "UD"
+                for a in sides:
+                    far = link(r, c, a) == "touch"
+                    if a == "L":
+                        o.append(ext(x0 - (CW / 2 - 0.7 if far else 0), cy, cx - 3.5, cy, y0))
+                    elif a == "R":
+                        o.append(ext(cx + 3.5, cy, x0 + CW + (CW / 2 - 0.7 if far else 0), cy, y0))
+                    elif a == "U":
+                        o.append(ext(cx, y0 - (CH / 2 - 0.7 if far else 0), cx, cy - 3.5, y0))
+                    else:
+                        o.append(ext(cx, cy + 3.5, cx, y0 + CH + (CH / 2 - 0.7 if far else 0), y0))
+                o.append(f'<circle cx="{cx:g}" cy="{cy:g}" r="3.5" class="ring"{tm}/>')
+            else:                                           # crow's foot: point on the line side, prongs at the entity
+                opens = "R" if t == FOOT_R else "L"
+                in_wall = back(r, c, "U") and back(r, c, "D")
+                s = 1 if opens == "R" else -1
+                ax = (x0 if opens == "R" else x0 + CW) - s * (1.5 if in_wall else 0)   # room for the prongs, clear of a ring
+                if in_wall:
+                    ex = cx
+                elif link(r, c, opens) == "touch":
+                    ex = cx + s * (CW - 0.7)
+                else:
+                    ex = cx + s * CW / 2
+                d = "".join(f"M{ax:g} {cy:g}L{ex:g} {y:g}" for y in (cy - 5.5, cy, cy + 5.5))
+                if in_wall:
+                    d += f"M{cx:g} {y0:g}V{y0 + CH:g}"
+                o.append(f'<path d="{d}" class="foot"{tm}/>')
+        return o
+
     body = under + block_rects() + lines("d", "dbl") + lines("d", "dbl-gap") + lines("s", "sgl") + diagonals()
     body += [ln for n in "234" for ln in lines(n, f"sgl dash n{n}")]
+    line_like = lambda r, c: get(r, c) in ARMS
+    body += mark_shapes()
     line_like = lambda r, c: get(r, c) in ARMS
     for r, c, d in heads:
         sh, pts, _ = head_geometry(r, c, d, line_like)
@@ -910,7 +1088,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
            f'data-generator="ascii2svg {__version__}"><title>{html.escape(title)}</title>'
            f'<style>{css}</style><rect width="100%" height="100%" fill="{pal["bg"]}" class="bg"/>'
            + "".join(body) + "</svg>\n")
-    return svg, {"boxes": len(boxes), "text_cells": len(texts), "arrowheads": len(heads), "flows": len(routes)}
+    return svg, {"boxes": len(boxes), "text_cells": len(texts), "arrowheads": len(heads) + sum(k in ("tri", "dia") for *_, k in marks),
+                 "flows": len(routes)}
 
 
 # ─── web page (--html) ───────────────────────────────────────────────────────
@@ -922,7 +1101,7 @@ REVEAL_JS = r"""(() => {
   const svg = document.querySelector('svg[data-reveal="scroll"]');
   if (!svg || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const q = s => [...svg.querySelectorAll(s)], n = (el, a) => +el.getAttribute(a);
-  const grow = [], show = q('path.sgl,path.dbl,path.dbl-gap,.shaft,.dash,.head,text,.glow,.shadow,.fill,.plate,.blk');
+  const grow = [], show = q('path.sgl,path.dbl,path.dbl-gap,.shaft,.dash,.head,.uml,.ring,.foot,text,.glow,.shadow,.fill,.plate,.blk');
   for (const el of q('line.sgl:not(.shaft):not(.dash),line.dbl,line.dbl-gap')) {
     if (n(el, 'x1') === n(el, 'x2') && n(el, 'y2') - n(el, 'y1') > 72) grow.push({el, y1: n(el, 'y1'), y2: n(el, 'y2'), f: 0});
     else show.push(el);
@@ -1081,6 +1260,22 @@ def read_back(svg: str) -> dict:
             pieces.setdefault((r, c), []).append((shade, rect))
     for k, p in pieces.items():
         out[k] = BLOCK_OF.get(tuple(sorted(p)), "?")
+    cell = lambda x, y: (int((y - pad) // chh), int((x - pad) // cw))
+    for pts, solid in re.findall(r'<polygon points="([^"]+)" class="uml( solid)?"', svg):
+        xy = [tuple(map(float, q.split(","))) for q in pts.split()]
+        if len(xy) == 3:                                   # tip, base, base
+            (tx, ty), (ax, ay), (bx, by) = xy
+            mx, my = (ax + bx) / 2, (ay + by) / 2
+            d = ("D" if ty > my else "U") if abs(ty - my) > abs(tx - mx) else ("R" if tx > mx else "L")
+            out[cell(mx, my)] = {v: k for k, v in UML_DIR.items()}[d]
+        else:
+            out[cell(sum(x for x, _ in xy) / 4, sum(y for _, y in xy) / 4)] = "◆" if solid else "◇"
+    for x, y in re.findall(r'<circle cx="([\d.]+)" cy="([\d.]+)" r="[\d.]+" class="ring"', svg):
+        out[cell(float(x), float(y))] = "○"
+    for ax, ay, ex, rest in re.findall(r'<path d="M([\d.]+) ([\d.]+)L([\d.]+) ([^"]*)" class="foot"', svg):
+        ax, ay, ex = float(ax), float(ay), float(ex)
+        at = ex if "V" in rest else ax + (0.01 if ex > ax else -0.01)   # set in a wall: the prongs meet the wall
+        out[cell(at, ay)] = FOOT_R if ex > ax else FOOT_L
     for x, y, t in re.findall(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
         t = html.unescape(t)
         w = width_of(t)
@@ -1159,7 +1354,10 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
         t = get(r, c)
         if t not in ARMS:
             continue
+        joined = lambda s: get(r + DIRS[s][0], c + DIRS[s][1]) in ARMS and OPP[s] in ARMS[get(r + DIRS[s][0], c + DIRS[s][1])]
         for a in sorted(ARMS[t]):
+            if t == "┼" and not joined(a) and not joined(OPP[a]):
+                continue                                  # a tick across a line (ER '||'), not two stubs
             dr, dc = DIRS[a]
             n, back = get(r + dr, c + dc), OPP[a]
             if n in ARMS:
@@ -1504,7 +1702,8 @@ def describe(cells, nrows, ncols):
     Lets an agent check that the picture means what it intended, e.g. that an arrow really
     runs from "API" to "DB"."""
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
-    is_text = lambda t: t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG and t not in BLOCKS
+    is_text = lambda t: (t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG
+                         and t not in BLOCKS and t not in MARKS)
     boxes = sorted(find_boxes(get, nrows, ncols))
     inside = lambda a, b: a != b and b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
     ids = {b: f"b{i}" for i, b in enumerate(boxes, 1)}
@@ -1557,9 +1756,28 @@ def describe(cells, nrows, ncols):
                 return {"text": text_run(r, c)}
             if get(r, c) != " ":
                 break
+        around = [b for b in boxes if b[0] < cell[0] < b[2] and b[1] < cell[1] < b[3]]
+        if around:                                        # e.g. an arrow into a C4 boundary's title row
+            b = min(around, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+            return {"box": ids[b], "name": info[b]["name"]}
         return {"cell": [cell[0] + 1, cell[1] + 1]}
 
     heads = [(r, c, HEADS[t]) for (r, c), (t, _) in sorted(cells.items()) if t in HEADS]
+    joins = lambda r, c, a: get(r + DIRS[a][0], c + DIRS[a][1]) in ARMS and \
+        OPP[a] in ARMS[get(r + DIRS[a][0], c + DIRS[a][1])]
+    kinds = {}
+    for (r, c), (t, _) in sorted(cells.items()):          # UML heads: the triangle or diamond marks the target
+        if t in UML_DIR and joins(r, c, OPP[UML_DIR[t]]):
+            heads.append((r, c, UML_DIR[t]))
+            kinds[(r, c)] = "inheritance"
+        elif t in ("◇", "◆"):
+            linked = [a for a in "UDLR" if joins(r, c, a)]
+            if not linked:
+                continue
+            at_box = [a for a in "UDLR" if on_border((r + DIRS[a][0], c + DIRS[a][1]))]
+            d = at_box[0] if at_box else OPP[linked[0]]
+            heads.append((r, c, d))
+            kinds[(r, c)] = "composition" if t == "◆" else "aggregation"
     edges, seen = [], set()
     for (r, c, d), seq, kind, step in trace_routes(get, heads, boxes):
         src = seq[-1]
@@ -1572,8 +1790,59 @@ def describe(cells, nrows, ncols):
         key = json.dumps([frm, to], sort_keys=True)
         if key not in seen:
             seen.add(key)
-            edges.append({"from": frm, "to": to})
+            edges.append({"from": frm, "to": to, **({"kind": kinds[(r, c)]} if (r, c) in kinds else {})})
+    pair = lambda e: frozenset((e["from"].get("box"), e["to"].get("box")))
+    drawn = {pair(e) for e in edges}
+    edges += [e for e in straight_links(get, boxes, ids, info, on_border) if pair(e) not in drawn]  # not an arrow's own line
     return {"boxes": [info[b] for b in boxes], "edges": edges}
+
+
+def _cardinality(marks):
+    """ER marks near one end of a relationship -> crow's-foot cardinality."""
+    foot, ring, tick = (any(m in FEET for m in marks), "○" in marks, "┼" in marks)
+    if foot:
+        return "zero or many" if ring else "one or many" if tick else "many"
+    if tick:
+        return "zero or one" if ring else "one"
+    return "zero or one" if ring else None
+
+
+def straight_links(get, boxes, ids, info, on_border):
+    """Straight lines between two boxes without an arrowhead: plain links, and ER relationships
+    (with the cardinality at each end: ticks, rings and crow's feet)."""
+    out = []
+    along = {"R": set("─╌┄┈┼○") | set(FEET), "D": set("│╎┆┊┼○")}
+    for b in boxes:
+        r1, c1, r2, c2 = b
+        for (r, c), a in [((r, c2), "R") for r in range(r1 + 1, r2)] + [((r2, c), "D") for c in range(c1 + 1, c2)]:
+            t = get(r, c)
+            if not ((t in ARMS and a in ARMS[t]) or (a == "R" and t in FEET)):
+                continue
+            run, k = ([(r, c)] if t in FEET else []), 1
+            while True:
+                n = (r + k * DIRS[a][0], c + k * DIRS[a][1])
+                other = on_border(n)
+                if other and other != b:
+                    if get(*n) in FEET:
+                        run.append(n)
+                    break
+                if get(*n) not in along[a]:
+                    other = None
+                    break
+                run.append(n)
+                k += 1
+            if not other:
+                continue
+            marks = [get(*x) for x in run]
+            half = len(marks) // 2
+            near, far = _cardinality(marks[:half]), _cardinality(marks[len(marks) - half:])
+            e = {"from": {"box": ids[b], "name": info[b]["name"]}, "to": {"box": ids[other], "name": info[other]["name"]}}
+            if near or far:
+                e.update(kind="relationship", cardinality=[near, far])
+            else:
+                e["kind"] = "link"
+            out.append(e)
+    return out
 
 
 # ─── command line ────────────────────────────────────────────────────────────
@@ -1610,7 +1879,9 @@ REPORT_FIELDS = {
     "ascii_drawn_as_lines, ascii_line_like_kept_as_text": "how ASCII - | + v ^ < > were read",
     "style, theme, color, animate, html, preset": "the look that was rendered",
     "diagram": "with --describe: {boxes: [{id, name, title, text, row, col, rows, cols, parent}], "
-               "edges: [{from, to}]}; an endpoint is {box, name}, {text} or {cell}",
+               "edges: [{from, to, kind?, cardinality?}]}; an endpoint is {box, name}, {text} or {cell}; "
+               "kind is inheritance, aggregation or composition (UML heads), relationship (ER, with "
+               "cardinality [from end, to end]) or link (a straight line with no arrowhead)",
     "svg / html, png": "output paths, or the markup itself when there is no -o (unless --brief or --check)",
     "source": "where the diagram came from: {input, block, line, info} (block/line for markdown code blocks)",
     "warnings[].source_line, source_col": "the warning's position in the input file itself (1-based); hints use these",

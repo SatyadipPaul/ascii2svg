@@ -109,6 +109,14 @@ shapes: diagonals run corner to corner, and `█▓▒░` become solid rectangl
   <img src="https://satyadippaul.github.io/ascii2svg/gantt.svg" width="520" alt="A release-plan Gantt chart drawn with block characters: solid bars, a lighter shaded remainder, and a milestone">
 </p>
 
+UML and ER notation too: hollow inheritance triangles, aggregation and composition diamonds, and
+crow's feet, with `--describe` reporting `inheritance` or `["one", "zero or many"]` for each edge.
+
+<p align="center">
+  <img src="https://satyadippaul.github.io/ascii2svg/uml-class.svg" width="300" alt="A UML class diagram: Dog and Cat inherit from Animal through a hollow triangle">
+  <img src="https://satyadippaul.github.io/ascii2svg/er.svg" width="520" alt="An ER diagram: CUSTOMER, ORDER and PRODUCT joined by crow's-foot relationships">
+</p>
+
 The sources are in [`docs/examples/`](https://github.com/SatyadipPaul/ascii2svg/tree/main/docs/examples),
 and all of them are in the playground's example picker.
 
@@ -258,6 +266,8 @@ summary goes to stderr.
 | Source | Drawn as lines when… | Otherwise |
 |---|---|---|
 | `─│┌┐└┘├┤┬┴┼╭╮╰╯═║╔╗╚╝╪`, `▼▲▶◀` | always | – |
+| UML heads `△▽◁▷ ◇◆` | a line joins them: hollow triangles (inheritance) touch the parent, diamonds (aggregation ◇, composition ◆) sit on the whole | stay text (bullets, symbols) |
+| ER crow's feet: `\|` `o` `<` `>` `{` `}` on a connector | the connector runs between two box walls, as in `+--\|\|--o<`: ticks, rings and feet, also a foot set in a wall | stay text |
 | Dashed `╌╎ ┄┆ ┈┊` | always, dashed with 2, 3 or 4 dashes per cell; they join, box and carry arrows like any line (C4 boundaries, async calls) | – |
 | ASCII `+` `-` `\|` | they form a closed box, or attach to one directly or through `+` junctions | stay text |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
@@ -308,7 +318,9 @@ ascii2svg draft.txt -o out.svg --preset readme --json --brief
   lifeline ends). A warning means there is evidence of a mistake: a partner one cell off, a
   line that stops just short of a box, a junction with a missing arm, or a box that never closes.
 - **`--describe`** adds what the diagram *says*: boxes (name, title, text, position, parent) and
-  edges (`Gateway → Orders`), so you can check that the picture means what you intended.
+  edges (`Gateway → Orders`), so you can check that the picture means what you intended. Edges
+  carry a `kind` where the notation says more: `inheritance`, `aggregation`, `composition`,
+  `relationship` with ER `cardinality` (`["one", "zero or many"]`), or `link` for a plain line.
 - **`--preset readme|slides|chat|print|dark|page`** picks the look from the destination.
   Explicit flags still win (`--preset readme --no-color`).
 - **`--brief`** never embeds the markup; without it, `--json` without `-o` returns the markup
@@ -327,7 +339,7 @@ ascii2svg draft.txt -o out.svg --preset readme --json --brief
 | `exit_code`, `ok` | See exit codes; `ok` is false only when the self-check failed |
 | `roundtrip` | `exact`: the output was read back and matches the input cell for cell |
 | `warnings` | `{code, row, col, char, line, issue, hint}`; codes: `dangling_line`, `broken_join`, `unclosed_box`, `escaped_newlines`, `no_structure` |
-| `diagram` | With `--describe`: `{boxes: [...], edges: [{from, to}]}`; an endpoint is `{box, name}`, `{text}` or `{cell}` |
+| `diagram` | With `--describe`: `{boxes: [...], edges: [{from, to, kind?, cardinality?}]}`; an endpoint is `{box, name}`, `{text}` or `{cell}` |
 | `rows`, `cols`, `boxes`, `arrowheads`, `flows`, `text_cells` | What was found |
 | `style`, `theme`, `color`, `animate`, `html`, `preset` | The look that was rendered |
 | `ascii_drawn_as_lines`, `ascii_line_like_kept_as_text` | How ASCII `- \| + v ^ < >` were read |
@@ -400,7 +412,7 @@ python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image in this README
 ```
 
-55 tests over 24 test diagrams:
+57 tests over 25 test diagrams:
 - round-trip in every style and every look
 - animation that ends on the static drawing and respects reduced motion
 - flow routes that start at the right box
@@ -426,6 +438,8 @@ python3 docs/build.py                  # regenerate every image in this README
   never inside words like `yes/no` or `C:\Users`
 - dashed lines keep their dash count through the round trip, form boxes (a dashed C4 boundary
   holds its three boxes) and carry arrows and flow pulses
+- UML triangles and diamonds and ER ticks, rings and crow's feet (even set in a box wall) are drawn
+  and read back; `--describe` names each relationship and its cardinality; bullets stay text
 
 They pass with and without the optional packages.
 

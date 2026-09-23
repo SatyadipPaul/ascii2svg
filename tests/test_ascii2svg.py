@@ -386,10 +386,10 @@ def test_broken_join_names_the_right_character():
 def test_unclosed_box_says_which_wall_breaks():
     _, report = a2s.render("+----+\n| hi |\n+---+\n")                          # bottom edge too short
     assert [w["code"] for w in report["warnings"]] == ["unclosed_box"], report["warnings"]
-    _, report = a2s.render(fx("er_broken_box.txt"))                             # crow's foot in the wall
+    _, report = a2s.render("+------+\n| hi   |\n| yo   <\n+------+\n")      # '<' in a wall, no connector
     w = [w for w in report["warnings"] if w["code"] == "unclosed_box"]
-    assert len(w) == 1 and "left wall at line 5 col 23 is '<'" in w[0]["hint"] and "right wall" in w[0]["hint"], w
-    assert report["status"] == "warnings"                                       # no longer a silent 'ok'
+    assert len(w) == 1 and "right wall at line 3 col 8 is '<'" in w[0]["hint"], w
+    assert report["status"] == "warnings"                                       # never a silent 'ok'
     _, report = a2s.render("a +- b -+ c\n")                                     # pieces, but no box starts
     assert [w["code"] for w in report["warnings"]] == ["no_structure"]
     for name in ("markdown_table.txt", "ascii_tree.txt", "ascii_labels.txt", "ascii_fanout.txt", "ascii_titled.txt"):
@@ -635,7 +635,7 @@ def test_repair_fixes_llm_style_misalignment():
     _, r = a2s.render(fx("llm_output.txt"), repair=True, describe=True)
     edges = {(e["from"].get("name"), e["to"].get("name")) for e in r["diagram"]["edges"]}
     assert r["boxes"] == 5 and edges == {("📱 Mobile app", "API Gateway"), ("API Gateway", "Auth service"),
-                                         ("API Gateway", "Orders service")}, edges
+                                         ("API Gateway", "Orders service"), ("Orders service", "PostgreSQL")}, edges
     _, r = a2s.render(fx("llm_ascii_ragged.txt"), repair=True, describe=True)
     edges = {(e["from"].get("name"), e["to"].get("name")) for e in r["diagram"]["edges"]}
     assert r["boxes"] == 3 and edges == {("Client", "Server"), ("Server", "Database")}, edges
@@ -706,6 +706,40 @@ def test_dashed_lines_join_like_lines_and_keep_their_dash_count():
     d = a2s.describe(*a2s.build_grid(fx("c4_dashed.txt").split("\n")))
     boundary = next(b for b in d["boxes"] if b["name"].startswith("Internet Banking"))
     assert sum(b["parent"] == boundary["id"] for b in d["boxes"]) == 3, d["boxes"]
+
+
+def test_uml_heads_are_drawn_and_described():
+    for name, shapes in (("uml.txt", 3), ("../../docs/examples/mermaid/class.txt", 1)):
+        cells, draw, svg, stats, _ = pipeline(fx(name), color=True, animate="draw")
+        assert a2s.self_check(svg, draw, cells) == [], name
+        assert len(re.findall(r'<polygon[^>]*class="uml', svg)) == shapes, name
+        assert not re.search(r"<text[^>]*>[△▽◁▷◇◆]</text>", svg), name
+    assert 'class="uml solid"' in pipeline(fx("uml.txt"))[2]                   # ◆ composition is filled
+    d = a2s.describe(*a2s.build_grid(fx("uml.txt").split("\n")))
+    kinds = {(e["from"]["name"], e["to"]["name"]): e.get("kind") for e in d["edges"]}
+    assert kinds == {("Wheel", "Car"): "composition", ("Driver", "Car"): "aggregation",
+                     ("Driver", "Person"): "inheritance"}, kinds
+    for loose in ("◆ Feature one\n◇ Feature two", "a △ b"):                   # bullets and symbols stay text
+        cells, draw, svg, _, _ = pipeline(loose)
+        assert "class=\"uml" not in svg and a2s.self_check(svg, draw, cells) == [], loose
+
+
+def test_er_crows_foot_notation():
+    text = fx("er_crowsfoot.txt")
+    cells, draw, svg, stats, _ = pipeline(text, color=True)
+    assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 3
+    assert svg.count('class="ring"') == 2 and svg.count('class="foot"') == 2   # o and < > in the walls
+    assert not re.findall(r"<text[^>]*>(\||&lt;|&gt;)</text>", svg)             # every mark is drawn
+    _, report = a2s.render(text, describe=True)
+    assert report["status"] == "ok" and not report["warnings"], report["warnings"]
+    rel = [(e["from"]["name"], e["to"]["name"], e["cardinality"]) for e in report["diagram"]["edges"]]
+    assert rel == [("CUSTOMER", "ORDER", ["one", "zero or many"]), ("ORDER", "PRODUCT", ["zero or many", "one"])], rel
+    for plain in ("+---+     +---+\n| a |---->| b |\n+---+     +---+\n",     # an arrow is still an arrow
+                  "+---+     +---+\n| a |-----| b |\n+---+     +---+\n"):    # and a plain link a line
+        cells, draw, svg, _, _ = pipeline(plain)
+        assert 'class="foot"' not in svg and 'class="ring"' not in svg
+    _, r = a2s.render("+---+     +---+\n| a |-----| b |\n+---+     +---+\n", describe=True)
+    assert [e.get("kind") for e in r["diagram"]["edges"]] == ["link"]
 
 
 if __name__ == "__main__":
