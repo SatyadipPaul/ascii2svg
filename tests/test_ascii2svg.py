@@ -28,12 +28,12 @@ def cli(*args, stdin=None, env=None):
     return p.returncode, p.stdout.decode("utf-8"), p.stderr.decode("utf-8")
 
 
-def pipeline(text, style="glow", square=False):
+def pipeline(text, style="glow", square=False, **look):
     lines, notes = a2s.prepare(text)
     cells, nr, nc = a2s.build_grid(lines)
     drawn, info = a2s.interpret(cells, nr, nc)
     draw = {k: ((drawn[k], w) if k in drawn else (t, w)) for k, (t, w) in cells.items()}
-    svg, stats = a2s.render_svg(draw, nr, nc, style, square)
+    svg, stats = a2s.render_svg(draw, nr, nc, style, square, **look)
     return cells, draw, svg, stats, notes
 
 
@@ -42,7 +42,7 @@ def glow_hits(svg):
     cw, ch = 9.0, 18.0
     boxes, glows = [], []
     for m in re.finditer(r'<rect x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"'
-                         r'(?: rx="[\d.]+")? class="(glow|fill|plate)"', svg):
+                         r'(?: rx="[\d.]+")? class="(glow|fill|plate)[ "]', svg):
         x, y, w, h = map(float, m.groups()[:4])
         if m.group(5) == "glow":
             glows.append((x, y, x + w, y + h))
@@ -54,7 +54,7 @@ def glow_hits(svg):
     hit = lambda a, b: a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
     inside = lambda a, b: b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
     n = 0
-    for x, y, t in re.findall(r'<text x="([\d.]+)" y="([\d.]+)">(.*?)</text>', svg):
+    for x, y, t in re.findall(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
         w = a2s.width_of(t)
         cell = (float(x) - w * cw / 2, float(y) - 5 - ch / 2, float(x) + w * cw / 2, float(y) - 5 + ch / 2)
         for b in boxes:
@@ -71,6 +71,58 @@ def test_every_fixture_roundtrips_exactly_in_every_style():
             for square in (False, True):
                 cells, draw, svg, _, _ = pipeline(fx(name), style, square)
                 assert a2s.self_check(svg, draw, cells) == [], (name, style, square)
+
+
+LOOKS = [dict(theme="dark", color=True), dict(theme="auto", color=True, animate="flow"),
+         dict(theme="light", animate="draw")]
+
+
+def test_every_look_roundtrips_exactly():
+    for name in FIXTURES:
+        for look in LOOKS:
+            for style in ("glow", "flat"):
+                cells, draw, svg, _, _ = pipeline(fx(name), style, **look)
+                assert a2s.self_check(svg, draw, cells) == [], (name, look, style)
+
+
+def _strip_motion(svg):
+    body = svg[svg.index("</style>"):]
+    body = re.sub(r' pathLength="1"| style="[^"]*"| class="r\d+"', "", body)
+    return re.sub(r'<g class="pulse".*?</g>', "", body)
+
+
+def test_animation_ends_on_the_static_drawing():
+    """Animated = static + timing only, and every animation reverts to the static state when done."""
+    for name in FIXTURES:
+        for kw in (dict(theme="auto", color=True), dict(style="shadow")):
+            style = kw.pop("style", "glow")
+            still = pipeline(fx(name), style, **kw)[2]
+            moving = pipeline(fx(name), style, animate="flow", **kw)[2]
+            assert _strip_motion(moving) == _strip_motion(still), name
+    css = re.search(r"<style>(.*)</style>", moving).group(1)
+    shorthands = [a for a in re.findall(r"animation:([^;}]+)", css) if not a.startswith("none")]
+    assert shorthands and all(a.strip().endswith("backwards") for a in shorthands), shorthands
+    assert "forwards" not in css and "infinite" not in css and "prefers-reduced-motion" in css
+    assert all(g.startswith('<g class="pulse" opacity="0">') for g in re.findall(r'<g class="pulse"[^>]*>', moving))
+
+
+def test_flow_follows_every_arrow_from_its_source():
+    get_routes = lambda name: pipeline(fx(name), animate="flow")
+    _, draw, svg, stats, _ = get_routes("complex_unicode.txt")
+    assert stats["flows"] == stats["arrowheads"] == 18
+    _, draw, svg, stats, _ = get_routes("ascii_fanout.txt")
+    paths = re.findall(r'<animateMotion path="([^"]+)"', svg)
+    starts = sorted(p.split("L")[0] for p in paths)
+    gateway_foot = "M%g %g" % (12 + 14 * 9 + 4.5, 12 + 2 * 18 + 9)         # the ┬ under Gateway
+    assert stats["flows"] == 4 and starts.count(gateway_foot) == 2, starts
+    assert pipeline(fx("ascii_fanout.txt"), animate="draw")[3]["flows"] == 0
+
+
+def test_color_groups_boxes():
+    svg = pipeline(fx("complex_unicode.txt"), color=True)[2]
+    tints = re.findall(r'class="fill (t\w+)"', svg)
+    assert len(tints) == 28 and tints.count("tn") == 1                 # only the outer platform box is neutral
+    assert len({t[:2] for t in tints if t != "tn"}) == 6                # six groups, six hues
 
 
 def test_self_check_catches_planted_faults():
@@ -234,7 +286,15 @@ def test_cli_output_is_utf8_on_any_console():
 
 def test_help_is_written_for_models():
     out = cli("--help")[1]
-    assert "exit codes" in out and "--json" in out and "stays text" in out
+    assert "exit codes" in out and "--json" in out and "stays text" in out and "--animate" in out
+
+
+def test_cli_looks():
+    code, out, _ = cli(os.path.join(FX, "ascii_fanout.txt"), "--json", "--animate", "--color", "--theme", "auto")
+    r = json.loads(out)
+    assert (code, r["animate"], r["color"], r["theme"], r["flows"], r["roundtrip"]) == (0, "flow", True, "auto", 4, "exact")
+    assert "prefers-color-scheme:dark" in r["svg"] and "<animateMotion" in r["svg"]
+    assert cli("--text", "+--+", "--animate", "sideways")[0] == 2           # argparse rejects it
 
 
 if __name__ == "__main__":

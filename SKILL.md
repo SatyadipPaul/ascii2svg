@@ -1,13 +1,13 @@
 ---
 name: ascii2svg
-description: Render ASCII or Unicode box diagrams (architecture diagrams, flowcharts, call trees, box-and-arrow sketches, ┌─┐ or +--+ boxes) as a clean SVG in which every character keeps its exact position. Use this whenever a text diagram needs to be shared, exported, embedded in docs or slides, or pasted somewhere that breaks monospace alignment (Slack, email, Confluence, Jira) — even if the user only says "render this diagram", "make this look nice", "export this as an image", or "turn this into SVG".
+description: Render ASCII or Unicode box diagrams (architecture diagrams, flowcharts, call trees, box-and-arrow sketches, ┌─┐ or +--+ boxes) as a clean SVG in which every character keeps its exact position, optionally coloured, dark-mode aware, and animated (draws itself, pulses flow along the arrows). Use this whenever a text diagram needs to be shared, exported, embedded in docs, READMEs or slides, or pasted somewhere that breaks monospace alignment (Slack, email, Confluence, Jira) — even if the user only says "render this diagram", "make this look nice", "animate this diagram", "export this as an image", or "turn this into SVG".
 ---
 
 # ascii2svg
 
 Turns a text diagram into an SVG **1:1**: every character stays in its exact grid cell.
 Box and line characters become real drawn lines; everything else stays the same text.
-Each run reads the SVG back and checks it against the input, cell by cell.
+Each run reads the SVG back and checks it against the input, cell by cell, in every look.
 
 ## Run it
 
@@ -46,8 +46,32 @@ python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --json
   (or `▼ ▲ ▶ ◀`) touching, or one space from, the target box.
 - A title can sit on a box's top edge: `+-- Title ---+`.
 
+## Pick the look from where the diagram is going
+
+Most people won't name options. Infer them from the destination; if it isn't clear, use
+`--color` alone.
+
+| Destination | Options |
+|---|---|
+| GitHub README, docs site, wiki that shows SVG | `--theme auto --color --animate` |
+| Slides | `--color --animate draw` (or `--color --png` for a still) |
+| Slack, email, Jira, chat apps, anything that won't show SVG | `--color --png` |
+| Print, PDF, formal docs | `--style flat --square` |
+| Dark-mode page or app | `--theme dark --color` |
+| The user wants it plain | no options |
+
+- `--animate` (= `flow`): the diagram draws itself, then pulses travel along every arrow.
+  `draw` does the drawing only. Animation never changes the final picture, stops under
+  *reduce motion*, and needs no JavaScript (it plays in a plain `<img>`).
+- `--color`: each group of boxes gets its own soft hue; arrows turn accent blue.
+- `--theme auto` follows the reader's light/dark setting.
+- PNGs are always the finished, still drawing (the `auto` theme becomes light).
+- Tell the user what you picked in one line, e.g. "animated, colour, follows dark mode",
+  so they can ask for something else.
+
 ## Options
 
+`--color` · `--theme light|dark|auto` · `--animate [draw|flow]` ·
 `--style glow|shadow|flat` (default glow) · `--square` (square corners) · `--png [PATH]` ·
 `--strict` · `--tab-size N` (default 4) · `--title TEXT` · `--max-rows` / `--max-cols`
 (default 1000 × 400)

@@ -1,32 +1,121 @@
 # ascii2svg
 
-Render ASCII / Unicode box diagrams as SVG, **1:1**: every character keeps its exact grid cell.
-Built to be called by LLM agents: text in, SVG plus a JSON report out.
+**Your text diagrams, drawn properly. Every character stays exactly where you put it.**
+
+<p align="center">
+  <img src="docs/how-it-works.svg" alt="ascii2svg pipeline: your diagram, find boxes and arrows, draw, read the SVG back, compare cell by cell, ready to share" width="640">
+</p>
+
+You sketch a diagram in plain text, in a README, a code comment, a chat with an AI, or a
+notes app. It looks right in a monospace font and falls apart everywhere else: Slack,
+email, Confluence, slides, a phone.
+
+`ascii2svg` turns it into a crisp SVG that draws itself, follows your reader's light or dark
+mode, and shows data moving along the arrows. It is still **1:1**: every run reads its
+own SVG back and checks it against your text, cell by cell. If anything moved, it tells you.
+
+## Type this…
+
+```
++------------+     +------------+     +------------+     +-------------+
+|    Idea    |---->|   Draft    |---->|   Review   |---->|   Publish   |
++------------+     +------------+     +-----+------+     +-------------+
+                         ^                  |
+                         |                  |
+                         +------------------+
+                           needs changes
+```
+
+## …get this
+
+<p align="center"><img src="docs/workflow.svg" alt="The same workflow rendered: four tinted boxes, arrows, and a feedback loop from Review back to Draft" width="720"></p>
 
 ```bash
-cat diagram.txt | python3 scripts/ascii2svg.py -o diagram.svg --json
+python3 scripts/ascii2svg.py workflow.txt -o workflow.svg --color --theme auto --animate
 ```
-```json
-{"ok": true, "rows": 72, "cols": 96, "style": "glow", "boxes": 28, "arrowheads": 18,
- "roundtrip": "exact", "warnings": [], "normalized": [], "svg": "diagram.svg", "exit_code": 0, "...": "..."}
-```
+
+Plain `+ - |` became real lines, `v ^ < >` became arrowheads, and the words stayed words.
+It works just as well with Unicode box characters (`┌─┐ │ └─┘ ╭╮ ═║ ▶`).
+
+## Who it's for
+
+**If you don't write code:** ask Claude. With this repo installed as a skill, say
+*"turn this diagram into an image for my slides"* or *"make this look nice for our wiki"*,
+and it picks the options for where the diagram is going, checks the result, and hands you the file.
+Nothing to learn.
+
+**If you do:** it's one Python file with no dependencies. It reads a file, stdin, or `--text`, and
+writes an SVG plus a JSON report that an agent or a CI job can check (`exit_code`, `roundtrip`, `warnings`).
+It never guesses: a character it isn't sure about stays text.
+
+## Pick a look
+
+Same diagram, same guarantee, five ways:
+
+| default | `--color` | `--theme dark --color` | `--style flat --square` | `--animate` |
+|:-:|:-:|:-:|:-:|:-:|
+| <img src="docs/looks/default.svg" width="150"> | <img src="docs/looks/color.svg" width="150"> | <img src="docs/looks/dark.svg" width="150"> | <img src="docs/looks/flat.svg" width="150"> | <img src="docs/looks/flow.svg" width="150"> |
+
+| Option | What it does |
+|---|---|
+| `--color` | Soft tints grouped by what contains what: each top-level group gets its own hue, nested boxes keep it. Arrows turn accent blue. |
+| `--theme light\|dark\|auto` | `auto` follows the reader's system light/dark setting, which suits GitHub READMEs and docs sites. |
+| `--animate draw` | The diagram draws itself once, top to bottom: lines are sketched in accent blue and settle to ink, boxes fade in, arrowheads pop. |
+| `--animate flow` (or bare `--animate`) | `draw`, then glowing pulses keep travelling along every connector toward its arrowhead, so readers can see where things go. |
+| `--style glow\|shadow\|flat` | Depth under the boxes. The glow shrinks automatically so it never sits behind a label. |
+| `--square` | Keep corners square (they are rounded by default). |
+
+The animation is careful about where it runs:
+
+- **It never changes what's drawn.** An animated file is the static file plus timing. When
+  the animation ends, you're looking at exactly what the self-check verified. Tools that
+  don't play animation (PNG export, most editors) show the finished drawing.
+- **It respects the reader.** With *reduce motion* turned on in the OS, nothing moves.
+- **It needs no JavaScript.** It uses CSS and SVG `<animate>` only, so it plays inside a plain
+  `<img>` tag, which is how GitHub, Notion and most docs sites show images.
+- **Hover a box** in a browser and it lights up. That helps when you're presenting.
+
+## Where is it going?
+
+| Destination | Use |
+|---|---|
+| GitHub README, docs site | `--theme auto --color --animate`, then commit the `.svg` |
+| Slides (Keynote, Google Slides, PowerPoint) | `--color --animate draw` for a live build. For a still, `--color --png` |
+| Slack, email, Jira, anywhere SVG isn't shown | `--color --png` (needs `pip install cairosvg`). PNGs are always the finished frame |
+| Printed docs, a PDF | `--style flat --square` |
+| Dark-mode apps | `--theme dark --color` |
+
+## A bigger one
+
+The flows follow the real wiring: through junctions, down to both branches of a fan-out, and
+across the edge of a container.
+
+<p align="center"><img src="docs/architecture.svg" alt="A 72 by 96 character architecture diagram of an order platform, rendered with colour and flow animation" width="760"></p>
+
+<details><summary>The text it came from (72 × 96 characters)</summary>
+
+See [`tests/fixtures/complex_unicode.txt`](tests/fixtures/complex_unicode.txt). 28 boxes, 18 arrows, a
+call tree and double-line borders, all drawn from plain text.
+
+</details>
 
 ## Install
 
-Nothing is required beyond Python 3.8+. Either copy `scripts/ascii2svg.py` anywhere, or:
+Python 3.8+ and nothing else. Copy `scripts/ascii2svg.py` anywhere, or:
 
 ```bash
 pip install .                # adds the `ascii2svg` command
-pip install ".[width,png]"   # optional: wcwidth (widths) + cairosvg (--png)
+pip install ".[width,png]"   # optional: wcwidth (character widths) + cairosvg (--png)
 ```
 
-As a Claude skill: copy this whole folder into your skills directory. `SKILL.md` tells the
-model when and how to use it.
+**As a Claude skill:** copy this folder into your skills directory. [`SKILL.md`](SKILL.md) tells
+Claude when to use it, which look fits which destination, and how to read the report.
 
 ## Usage
 
 ```
-ascii2svg [INPUT] [-o OUT.svg] [--json] [--style glow|shadow|flat] [--square]
+ascii2svg [INPUT] [-o OUT.svg] [--json] [--color] [--theme light|dark|auto]
+          [--animate [draw|flow]] [--style glow|shadow|flat] [--square]
           [--png [PATH]] [--strict] [--text TEXT] [--tab-size N] [--title TEXT]
 ```
 
@@ -35,10 +124,10 @@ ascii2svg [INPUT] [-o OUT.svg] [--json] [--style glow|shadow|flat] [--square]
 | File | `ascii2svg diagram.txt -o out.svg` |
 | stdin | `cat diagram.txt \| ascii2svg > out.svg` |
 | Inline | `ascii2svg --text "$DIAGRAM" --json` (the SVG comes back inside the JSON when there's no `-o`) |
-| Markdown | The first ```` ``` ```` code block is used; prose around it is dropped (and reported) |
+| Markdown | The first ```` ``` ```` code block is used. Prose around it is dropped (and reported) |
 
-stdout is always exactly one thing: the SVG, or (with `--json`) the report.
-A one-line human summary goes to stderr.
+stdout is always exactly one thing: the SVG, or (with `--json`) the report. A one-line
+summary goes to stderr.
 
 ## What gets drawn
 
@@ -48,9 +137,16 @@ A one-line human summary goes to stderr.
 | ASCII `+` `-` `\|` | they form a closed box, or attach to one directly or through `+` junctions | stay text |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
 
-When unsure, a character stays text, so the worst case is the character itself in its own
-cell, never a wrong shape. `a->b`, `--dry-run`, `user_id`, `C:\temp`, markdown tables and
-`|--` file trees all stay exactly as written.
+When unsure, a character stays text, so the worst case is the character itself in its own cell,
+never a wrong shape. `a->b`, `--dry-run`, `user_id`, `C:\temp`, markdown tables and `|--` file
+trees all stay exactly as written.
+
+## How 1:1 is guaranteed
+
+Every run parses the SVG it just wrote (lines, curves, arrowheads, text positions) back into a
+character grid and compares it with the input, cell by cell. ASCII characters may only appear as
+the line they stand for (`-`→`─`, `|`→`│`, `+`→corner or junction, `v`→`▼`). Any mismatch is
+exit code 2. This covers every look, including animated ones and the still frame used for PNGs.
 
 ## JSON report
 
@@ -59,10 +155,12 @@ cell, never a wrong shape. `a->b`, `--dry-run`, `user_id`, `C:\temp`, markdown t
 | `ok`, `exit_code` | Overall result (see exit codes) |
 | `roundtrip` | `exact`: the SVG was read back and matches the input cell for cell |
 | `rows`, `cols`, `boxes`, `arrowheads`, `text_cells` | What was found |
+| `flows` | Connectors animated with `--animate flow` (one per arrowhead route) |
+| `style`, `theme`, `color`, `animate` | The look that was rendered |
 | `ascii_drawn_as_lines` | ASCII characters drawn as lines |
 | `ascii_line_like_kept_as_text` | ASCII `- \| +` not drawn because they don't attach to anything |
 | `normalized` | Every clean-up applied (tabs, odd spaces, zero-width and control characters, colour codes, code fence, indentation, bad UTF-8) |
-| `warnings` | Line ends that meet nothing, with 1-based `row`/`col`: usually a misaligned source |
+| `warnings` | Line ends that meet nothing, with 1-based `row`/`col`. Usually a misaligned source |
 | `svg`, `png` | Output paths (or the SVG markup itself when no `-o` is given) |
 | `self_check_problems` | Only when `roundtrip` isn't exact |
 
@@ -75,7 +173,7 @@ cell, never a wrong shape. `a->b`, `--dry-run`, `user_id`, `C:\temp`, markdown t
 | 2 | Self-check failed: the SVG is not 1:1. Don't use it |
 | 3 | `--strict` and there were warnings |
 
-## Using it from any agent framework (function calling)
+## Using it from any agent framework
 
 Expose it as one tool and run the CLI in the handler:
 
@@ -88,7 +186,9 @@ Expose it as one tool and run the CLI in the handler:
     "properties": {
       "diagram": {"type": "string", "description": "The diagram text (a markdown code block is fine)"},
       "output_path": {"type": "string", "description": "Where to write the .svg"},
-      "style": {"type": "string", "enum": ["glow", "shadow", "flat"]}
+      "color": {"type": "boolean", "description": "Tint boxes by group and colour the arrows"},
+      "theme": {"type": "string", "enum": ["light", "dark", "auto"]},
+      "animate": {"type": "string", "enum": ["none", "draw", "flow"]}
     },
     "required": ["diagram", "output_path"]
   }
@@ -98,34 +198,40 @@ Expose it as one tool and run the CLI in the handler:
 ```python
 import json, subprocess, sys
 
-def render_ascii_diagram(diagram, output_path, style="glow"):
-    p = subprocess.run([sys.executable, "scripts/ascii2svg.py", "-o", output_path,
-                        "--style", style, "--json"], input=diagram.encode(), capture_output=True)
+def render_ascii_diagram(diagram, output_path, color=False, theme="light", animate="none"):
+    args = [sys.executable, "scripts/ascii2svg.py", "-o", output_path, "--json",
+            "--theme", theme, "--animate", animate] + (["--color"] if color else [])
+    p = subprocess.run(args, input=diagram.encode(), capture_output=True)
     return json.loads(p.stdout)          # always JSON, including on errors
 ```
-
-## How 1:1 is guaranteed
-
-Every run parses the SVG it just wrote (lines, curves, arrowheads, text positions) back into
-a character grid and compares it with the input cell by cell. ASCII characters may only
-appear as the line they stand for (`-`→`─`, `|`→`│`, `+`→corner or junction, `v`→`▼`).
-Any mismatch means exit code 2.
 
 ## Tests
 
 ```bash
 python3 tests/test_ascii2svg.py        # or: python3 -m pytest tests
+python3 docs/build.py                  # regenerate every image in this README
 ```
 
-21 tests over 11 test diagrams: round-trip in every style, the ASCII traps, glow never behind
-a label, planted faults that must be caught, byte-identical repeat runs, width fallback vs
-`wcwidth`, CLI behaviour, and UTF-8 output on non-UTF-8 consoles (Windows). They pass with and
-without the optional packages.
+26 tests over 11 test diagrams:
+- round-trip in every style and every look
+- animation that ends on the static drawing and respects reduced motion
+- flow routes that start at the right box
+- colour groups
+- the ASCII traps
+- glow never behind a label
+- planted faults that must be caught
+- byte-identical repeat runs
+- width fallback vs `wcwidth`
+- CLI behaviour, including UTF-8 output on Windows consoles
 
-## Not in v1
+They pass with and without the optional packages.
+
+## Not yet
 
 - **Auto-repair of misaligned diagrams.** It warns with row/column instead.
 - **ASCII rounded corners (`.-'`) and diagonals (`/ \`).** These stay text.
 - **Free-floating ASCII connectors that touch no box** (e.g. `A ---> B` between plain words). These stay text.
 - **An MCP server and a JS/npm port.**
-- **Checked renderers.** Output is verified in cairo and resvg. It was not checked in a real browser here (no browser in the build sandbox). Neither effect uses SVG filters.
+- **Every renderer checked.** The original static look was verified in cairo and resvg. The new
+  looks (colour, themes, animation) have been checked in Chromium only so far, not yet in
+  Firefox, Safari, or through cairo for `--png`.
