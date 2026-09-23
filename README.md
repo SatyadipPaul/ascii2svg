@@ -77,7 +77,7 @@ then just ask *"turn this diagram into an image for my slides"*. Or connect the 
 <p align="center"><img src="https://satyadippaul.github.io/ascii2svg/workflow.svg" alt="The same workflow rendered: four tinted boxes, arrows, and a feedback loop from Review back to Draft" width="720"></p>
 
 Plain `+ - |` became real lines, `v ^ < >` became arrowheads, and the words stayed words.
-Unicode box characters (`┌─┐ │ └─┘ ╭╮ ═║ ▶`) work just as well.
+Unicode box characters (┌─┐ │ └─┘ ╭╮ ═║ ▶) work just as well.
 
 ## LLM diagrams, fixed
 
@@ -223,14 +223,14 @@ ascii2svg focuses on box diagrams, a verified 1:1 result, and agent workflows.
 
 | Source | Drawn as lines when… | Otherwise |
 |---|---|---|
-| `─│┌┐└┘├┤┬┴┼╭╮╰╯═║╔╗╚╝╪`, `▼▲▶◀` | always | – |
-| Dashed `╌╎ ┄┆ ┈┊` | always, with 2, 3 or 4 dashes per cell; they join, box and carry arrows like any line | – |
+| ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ╭ ╮ ╰ ╯ ═ ║ ╔ ╗ ╚ ╝ ╪ ▼ ▲ ▶ ◀ | always | – |
+| Dashed ╌ ╎ ┄ ┆ ┈ ┊ | always, with 2, 3 or 4 dashes per cell; they join, box and carry arrows like any line | – |
 | ASCII `+` `-` `\|` | they form a closed box, or attach to one directly or through `+` junctions | stay text |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
-| `╱╲╳`, and ASCII `/` `\` | Unicode always; ASCII when two or more run along their own slope, with no letter or digit beside them | stay text |
-| UML heads `△▽◁▷ ◇◆` | a line joins them: triangles touch the parent, diamonds sit on the whole | stay text (bullets, symbols) |
+| ╱ ╲ ╳, and ASCII `/` `\` | Unicode always; ASCII when two or more run along their own slope, with no letter or digit beside them | stay text |
+| UML heads △ ▽ ◁ ▷ ◇ ◆ | a line joins them: triangles touch the parent, diamonds sit on the whole | stay text (bullets, symbols) |
 | ER marks `\|` `o` `<` `>` `{` `}` | on a connector between two box walls, as in `+--\|\|--o<`, even with a foot set in the wall | stay text |
-| Block elements `█▓▒░ ▀▄▌▐ ▁▂▃▅▆▇ ▏▎▍▋▊▉ ▖▗▘▝▚▞▙▛▜▟` | always, as exact rectangles, so bars and shading have no seams | – |
+| Block elements █ ▓ ▒ ░ ▀ ▄ ▌ ▐ ▁ ▂ ▃ ▅ ▆ ▇ ▏ ▎ ▍ ▋ ▊ ▉ ▖ ▗ ▘ ▝ ▚ ▞ ▙ ▛ ▜ ▟ | always, as exact rectangles, so bars and shading have no seams | – |
 
 When unsure, a character stays text, so the worst case is the character itself in its own cell,
 never a wrong shape. `a->b`, `--dry-run`, `user_id`, `C:\temp`, `yes/no`, `TCP/IP`, markdown
