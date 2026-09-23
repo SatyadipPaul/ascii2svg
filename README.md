@@ -2,6 +2,8 @@
 
 **Your text diagrams, drawn properly. Every character stays exactly where you put it.**
 
+[Live demo](https://satyadippaul.github.io/ascii2svg/) · [Scroll demo](https://satyadippaul.github.io/ascii2svg/architecture.html) · [Download the Claude skill](https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill)
+
 <p align="center">
   <img src="docs/how-it-works.svg" alt="ascii2svg pipeline: your diagram, find boxes and arrows, draw, read the SVG back, compare cell by cell, ready to share" width="640">
 </p>
@@ -102,8 +104,8 @@ standard browser features and works offline, though so far it has been tested in
 is refused with an explanation. The SVG inside the page is the same self-checked drawing; the
 script only decides *when* each part appears.
 
-Try it: download [`docs/architecture.html`](docs/architecture.html) and open it. GitHub shows
-`.html` files as source, not as pages.
+**Try it:** [open the scroll demo](https://satyadippaul.github.io/ascii2svg/architecture.html) and scroll.
+It's [`docs/architecture.html`](docs/architecture.html), served by GitHub Pages.
 
 ## Where is it going?
 
@@ -139,11 +141,8 @@ pip install .                # adds the `ascii2svg` command
 pip install ".[width,png]"   # optional: wcwidth (character widths) + cairosvg (--png)
 ```
 
-**As a Claude skill:** build the package, then install it:
-
-```bash
-python3 tools/package_skill.py        # -> dist/ascii2svg.skill (19 KB: SKILL.md + the script)
-```
+**As a Claude skill:** download [`ascii2svg.skill`](https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill)
+from the latest release (or build it: `python3 tools/package_skill.py` → `dist/ascii2svg.skill`), then:
 
 - **claude.ai / Claude desktop:** Customize → Skills → upload `ascii2svg.skill`.
 - **Claude Code:** unzip it into `~/.claude/skills/` (you get `~/.claude/skills/ascii2svg/`).
