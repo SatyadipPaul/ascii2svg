@@ -5,6 +5,11 @@
 [**Try it in your browser**](https://satyadippaul.github.io/ascii2svg/playground.html) · [Live demo](https://satyadippaul.github.io/ascii2svg/) · [Scroll demo](https://satyadippaul.github.io/ascii2svg/architecture.html) · [Download the Claude skill](https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill)
 
 <p align="center">
+  <a href="https://satyadippaul.github.io/ascii2svg/playground.html"><img src="https://satyadippaul.github.io/ascii2svg/demo.gif" alt="Screen recording of the ascii2svg playground: a misaligned, model-drawn diagram gets 10 warnings, Fix alignment makes it render cleanly, a diagram is typed and renders live, then a tour of combination diagrams (flow into decision tree, pivot table, swimlanes, sequence into decision, roadmap into mind maps) and Mermaid-style diagrams (flowchart, sequence, class, state, C4, mind map, kanban, git graph, journey, timeline, XY chart, quadrant)" width="880"></a>
+  <br><sub>The <a href="https://satyadippaul.github.io/ascii2svg/playground.html">playground</a>: fix a model's misaligned diagram, type one live, then a tour of combined and Mermaid-style diagrams.</sub>
+</p>
+
+<p align="center">
   <img src="https://satyadippaul.github.io/ascii2svg/how-it-works.svg" alt="ascii2svg pipeline: your diagram, find boxes and arrows, draw, read the SVG back, compare cell by cell, ready to share" width="640">
 </p>
 
