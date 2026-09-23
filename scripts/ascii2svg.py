@@ -958,7 +958,7 @@ def main(argv=None) -> int:
         except ImportError:
             return fail(1, "--png needs cairosvg: pip install cairosvg")
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as f:
+        with open(args.output, "w", encoding="utf-8", newline="") as f:   # same bytes on every OS
             f.write(svg)
         report["svg"] = args.output
     if args.png is not None:
