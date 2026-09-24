@@ -125,6 +125,10 @@
   .panel h3 { margin: 0; font: 600 12.5px var(--sans); letter-spacing: .02em; color: var(--muted); padding: 10px 14px;
               border-bottom: 1px solid var(--line); background: var(--card2); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .panel h3 .dots { display: inline-flex; gap: 6px; margin-right: 10px; }
+  .panel h3 .tools { display: inline-flex; align-items: center; gap: 10px; }
+  .panel h3 button.mini { font-size: 12px; padding: 2px 9px; border-radius: 6px; }
+  .panel h3 button.mini:disabled { opacity: .45; cursor: default; }
+  .preview .empty { color: var(--muted); font: 14px var(--sans); text-align: center; padding: 48px 16px; }
   .panel h3 .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
   .panel h3 .dots i:nth-child(1) { background: #ff5f57; } .panel h3 .dots i:nth-child(2) { background: #febc2e; } .panel h3 .dots i:nth-child(3) { background: #28c840; }
   .panel h3 span:first-child { display: inline-flex; align-items: center; }
@@ -263,8 +267,8 @@
 
   <div class="grid">
     <section class="panel" aria-labelledby="in-h">
-      <h3 id="in-h"><span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>Your diagram</span><span class="muted" id="pos"></span></h3>
-      <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Diagram text"></textarea>
+      <h3 id="in-h"><span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>Your diagram</span><span class="tools"><span class="muted" id="pos"></span><button id="clear" class="mini" title="Clear the editor (Ctrl+Z brings it back)" aria-label="Clear the diagram text">✕ Clear</button></span></h3>
+      <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Diagram text" placeholder="Paste or type a diagram here, or pick an example above"></textarea>
     </section>
     <section class="panel" aria-labelledby="out-h">
       <h3 id="out-h"><span>Result</span><span class="muted" id="timing"></span></h3>
@@ -397,8 +401,22 @@ column right; move one of them
     $("color").checked = p.color; $("square").checked = p.square; $("interactive").checked = p.interactive;
   }
 
+  function blank() {                                     // nothing to render: an invitation, not an error
+    current = null;
+    $("overlay").style.display = "none";
+    $("timing").textContent = "";
+    $("report").innerHTML = "";
+    preview.querySelectorAll("img,iframe,.empty").forEach((n) => n.remove());
+    const hint = document.createElement("div");
+    hint.className = "empty";
+    hint.textContent = "Paste or type a diagram, or pick an example.";
+    preview.appendChild(hint);
+  }
+
   function schedule(delay = 350) {
     clearTimeout(timer);
+    $("clear").disabled = !src.value;
+    if (!src.value.trim()) { blank(); return; }
     timer = setTimeout(async () => {
       if (busy) { queued = true; return; }
       busy = true;
@@ -418,13 +436,13 @@ column right; move one of them
     if (res.error || !r) {
       current = null;
       $("report").innerHTML = `<span class="pill bad">error</span>${esc(res.error || "no result")}`;
-      preview.querySelectorAll("img,iframe").forEach((n) => n.remove());
+      preview.querySelectorAll("img,iframe,.empty").forEach((n) => n.remove());
       emit("rendered", { ms: res.ms, status: "error" });
       return;
     }
     current = res;
     if (url) URL.revokeObjectURL(url);
-    preview.querySelectorAll("img,iframe").forEach((n) => n.remove());
+    preview.querySelectorAll("img,iframe,.empty").forEach((n) => n.remove());
     if (r.html || (r.interactive && r.folds)) {           // a script runs: a sandboxed frame, never the page itself
       const f = document.createElement("iframe");
       f.setAttribute("sandbox", "allow-scripts");
@@ -572,6 +590,14 @@ column right; move one of them
   };
 
   src.addEventListener("input", () => { $("example").value = ""; schedule(); });   // it is your diagram now
+  $("clear").onclick = () => {
+    src.focus();
+    src.select();
+    if (!document.execCommand("delete")) src.value = "";  // execCommand keeps Ctrl+Z working
+    $("example").value = "";
+    where();
+    schedule(0);
+  };
   src.addEventListener("keydown", (e) => {                 // Tab inserts spaces instead of leaving the editor
     if (e.key !== "Tab" || e.shiftKey) return;
     e.preventDefault();
