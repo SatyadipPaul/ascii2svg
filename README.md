@@ -85,6 +85,12 @@ Ask any chat model for an architecture diagram and the boxes rarely line up: an 
 as one column instead of two, a wall one space short, a connector that drifts sideways
 between rows. `--repair` puts them back:
 
+- **Boxes:** walls, corners and edges up to 12 columns off move into line. A box whose words
+  don't fit (a long label, or emoji counted as one column) grows to fit them, all rows at once.
+- **Connectors:** a piece one or two cells to the side moves into line, and so does a whole
+  half of a line that drifted 3-6 columns. Gaps of a cell or two are filled, and an arrow that
+  stops short of its box is carried on until it touches (`short_arrow` warns about it first).
+
 | As the model wrote it | `--repair` |
 |:-:|:-:|
 | <img src="https://satyadippaul.github.io/ascii2svg/llm-before.svg" width="400" alt="An LLM-drawn diagram rendered as-is: three of five boxes not recognised, broken walls, a stray line"> | <img src="https://satyadippaul.github.io/ascii2svg/llm-after.svg" width="400" alt="The same diagram after --repair: five tinted boxes, clean connectors"> |
@@ -105,8 +111,8 @@ ascii2svg diagram.txt -o diagram.svg --repair --json
   where the wall belongs), drifted left walls, edges one character too long or short,
   connector pieces and arrowheads one or two columns off, arrowheads that stop a cell short,
   and gaps of one or two cells before a box.
-- **What it never does:** change your words. Only line characters and spaces move or appear,
-  and only into empty cells. A test strips every line character from each row, before and
+- **What it never does:** change your words. Only line characters and spaces move or appear:
+  into empty cells, or, when a box grows, along that box's own connector, which gets shorter. A test strips every line character from each row, before and
   after, and checks that what remains is identical.
 - **What you get back:** every edit with its line and column, and the corrected text in
   `repair.text`, ready to paste back where the diagram came from. Diagrams that were already
@@ -372,7 +378,7 @@ JSON string, so the escaped-newline problem can't happen. Tested against the off
 | `summary` | One sentence to pass on to the user |
 | `exit_code`, `ok` | See exit codes; `ok` is false only when the self-check failed |
 | `roundtrip` | `exact`: the output was read back and matches the input cell for cell |
-| `warnings` | `{code, row, col, char, line, issue, hint}`; codes: `dangling_line`, `broken_join`, `unclosed_box`, `escaped_newlines`, `no_structure` |
+| `warnings` | `{code, row, col, char, line, issue, hint}`; codes: `dangling_line`, `broken_join`, `short_arrow`, `unclosed_box`, `escaped_newlines`, `no_structure` |
 | `diagram` | With `--describe`: `{boxes: [...], edges: [{from, to, kind?, cardinality?, label?}]}`; an endpoint is `{box, name}`, `{text}` or `{cell}` |
 | `repair` | With `--repair`: `{edits: [{line, col, fix}], text}` |
 | `rows`, `cols`, `boxes`, `arrowheads`, `flows`, `text_cells` | What was found |
@@ -440,7 +446,7 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 - [x] Block-element charts, diagonals and diamonds, dashed lines, UML heads, ER crow's feet
 - [x] ER crow's feet on vertical connectors (`-+-` ticks, `o` rings, `/|\` and `\|/` feet)
 - [x] ASCII UML heads (`<|--` `<>--` `*--`) and ASCII dashed and dotted lines (`- - ->` `....>` `:`)
-- [ ] Repairing bigger misalignments (today: pieces up to two cells off, walls up to three)
+- [x] Repairing bigger misalignments: boxes that must grow, walls and edges up to 12 columns off, lines split 3-6 apart, arrows that stop short
 - [x] ASCII rounded corners and bends (`.--.` `'--'`)
 - [x] Arrows between plain words (`A --> B`, `A --HTTP--> B`, `|` and `v` under a label)
 - [x] Vertical ASCII UML heads (`/_\` `<>` `*` under or over a box)
@@ -455,7 +461,7 @@ Issues and pull requests are welcome, and a diagram that renders wrongly is the 
 report there is: paste the text and say what you expected.
 
 ```bash
-python3 tests/test_ascii2svg.py        # 63 tests over 31 test diagrams; or: python3 -m pytest tests
+python3 tests/test_ascii2svg.py        # 64 tests over 32 test diagrams; or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image on this page and the playground files
 ```
 
@@ -475,7 +481,8 @@ must round-trip exactly in every style and look. That's the one rule: never a wr
 - every diagram in a markdown file, several inputs, positions mapped back to the file, the MCP protocol
 - the browser playground runs exactly this module, and every playground example round-trips
 - no false alarms on sequence diagrams, timelines, charts and dashed boundaries; real mistakes still warn
-- `--repair`: every LLM fixture repaired to `ok`, text provably unchanged, good diagrams untouched
+- `--repair`: every LLM fixture repaired to `ok`, text provably unchanged, good diagrams untouched;
+  a box grows for a long label or emoji, a split line is joined (never doubled), a short arrow reaches its box
 - block elements as exact rectangles; `/ \` only as runs, never inside `yes/no` or `C:\Users`
 - dashed lines keep their dash count, form boxes and carry arrows; ASCII `- - ->`, `....>` and `:` too,
   while `Loading...`, dot leaders and `- - -` stay text; ASCII UML heads `<|` `<>` `*` are drawn and described

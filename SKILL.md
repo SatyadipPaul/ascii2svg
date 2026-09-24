@@ -38,9 +38,9 @@ python3 scripts/ascii2svg.py diagram.txt -o diagram.svg --preset readme --json -
    arrow connects what you meant; a missing edge usually means a misaligned arrow.
 5. Render with the preset for the destination (below), then tell the user the `summary`.
 
-**If a model drew the diagram (including you), add `--repair`.** It fixes ragged walls, emoji
-width drift, connectors a column or two off and arrows that stop short, without changing any
-words. `repair.edits` lists every change and `repair.text` is the corrected diagram: offer to
+**If a model drew the diagram (including you), add `--repair`.** It fixes ragged walls (up to 12
+columns off), boxes too narrow for their words or emoji, connectors that drifted sideways and
+arrows that stop short, without changing any words. `repair.edits` lists every change and `repair.text` is the corrected diagram: offer to
 put it back in the user's file, so their source matches the picture.
 
 | `status` | What to do |

@@ -3,6 +3,7 @@
 Run:  python3 tests/test_ascii2svg.py      (no extra installs)
  or:  python3 -m pytest tests
 """
+import html
 import importlib.util
 import json
 import os
@@ -55,7 +56,7 @@ def glow_hits(svg):
     inside = lambda a, b: b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
     n = 0
     for x, y, t in re.findall(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
-        w = a2s.width_of(t)
+        w = a2s.width_of(html.unescape(t))               # '&gt;' is one character wide
         cell = (float(x) - w * cw / 2, float(y) - 5 - ch / 2, float(x) + w * cw / 2, float(y) - 5 + ch / 2)
         for b in boxes:
             if inside(cell, b["fill"]) or any(inside(cell, p) for p in b["plates"]):
@@ -616,7 +617,7 @@ def test_playground_runs_the_released_module():
 
 # ── repair ───────────────────────────────────────────────────────────────────
 LLM_FIXTURES = ["llm_output.txt", "llm_ascii_ragged.txt", "llm_side_by_side.txt", "llm_arrow_short.txt",
-                "broken_misaligned.txt"]
+                "broken_misaligned.txt", "llm_big_offsets.txt"]
 LINE_CHARS = set("─│┌┐└┘├┤┬┴┼╭╮╰╯═║╔╗╚╝╪▼▲▶◀|+-v^<> ")
 
 
@@ -849,6 +850,26 @@ def test_vertical_ascii_uml_heads():
     for words in ("emoticon /_\\ and <> and * bullets", "a * b <> c /_\\ d", "+---+\n| a |\n+---+\n /_\\"):
         cells, draw, *_ = pipeline(words)
         assert not {"△", "◇", "◆"} & {t for t, _ in draw.values()}, words
+
+
+def test_repair_reaches_bigger_offsets():
+    _, r = a2s.render(fx("llm_big_offsets.txt"), repair=True, describe=True)
+    assert r["status"] == "ok" and r["boxes"] == 3, r["warnings"]
+    assert r["repair"]["text"].split("\n")[2] == "| (OAuth2)               |----------->|  Postgres   |"
+    edges = [(e["from"]["name"], e["to"]["name"]) for e in r["diagram"]["edges"]]
+    assert edges == [("Authentication Service", "Users DB"), ("Authentication Service", "🚀 Deploy pipeline")]
+    fixes = " ".join(e["fix"] for e in r["repair"]["edits"])
+    assert "8 col right" in fixes and "4 cols left to join it up" in fixes
+    # an arrow that stops short is flagged, then carried on to touch its box
+    short = "+-----+             +-----+\n|  A  |------>      |  B  |\n+-----+             +-----+"
+    assert [w["code"] for w in a2s.render(short)[1]["warnings"]] == ["short_arrow"]
+    _, r = a2s.render(short, repair=True)
+    assert r["status"] == "ok" and r["repair"]["text"].split("\n")[1] == "|  A  |------------>|  B  |"
+    # a line split 4 columns apart is joined into one, never doubled
+    split = ("+---------+\n|  Client |\n+---------+\n     |\n     |\n         |\n         v\n"
+             "+---------+\n|  Server |\n+---------+")
+    _, r = a2s.render(split, repair=True)
+    assert r["status"] == "ok" and r["repair"]["text"].split("\n")[3:7] == ["     |"] * 3 + ["     v"]
 
 
 if __name__ == "__main__":

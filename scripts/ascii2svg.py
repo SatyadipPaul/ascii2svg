@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.13.0"
+__version__ = "1.14.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -1788,6 +1788,28 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
             out.append(w)
             if len(out) >= limit:
                 return out
+    border = None
+    for (r, c) in sorted(cells):                          # an arrowhead that stops short of its box
+        t = get(r, c)
+        if t not in HEADS or (r, c) in by_cell or len(out) >= limit:
+            continue
+        d = HEADS[t]
+        dr, dc = DIRS[d]
+        tail = get(r - dr, c - dc)
+        if tail not in ARMS or d not in ARMS[tail]:
+            continue
+        k = 1
+        while k <= 10 and get(r + k * dr, c + k * dc) == " ":
+            k += 1
+        if not 3 <= k <= 10:
+            continue                                      # touching, or one space off: fine
+        if border is None:
+            border = box_border(find_boxes(get, nrows, ncols))
+        if (r + k * dr, c + k * dc) in border:
+            out.append({"row": r + 1, "col": c + 1, "char": t, "line": line(r), "code": "short_arrow",
+                        "issue": f"the arrow stops {k - 1} cells short of the box it points at",
+                        "hint": f"the box edge is at {at(r + k * dr, c + k * dc)}; carry the line on so "
+                                f"the arrowhead touches it (or run with --repair)"})
     return out
 
 
@@ -1804,8 +1826,9 @@ def box_warnings(cells, drawn, origin=(0, 0)):
         c2 = c + 1
         while ch(r, c2) == "-":
             c2 += 1
-        if ch(r, c2) != "+" or c2 - c < 3 or ch(r + 1, c) not in "|+" or ch(r + 1, c2) not in "|+":
-            continue
+        wall = lambda rr, x: ch(rr, x) in ("|", "+")
+        if ch(r, c2) != "+" or c2 - c < 3 or not wall(r + 1, c) or not (wall(r + 1, c2) or wall(r + 2, c2)):
+            continue                                      # (a long first line may hide the right wall)
         why = None
         for rr in range(r + 1, nrows + 1):
             a, b = ch(rr, c), ch(rr, c2)
@@ -1901,7 +1924,7 @@ def _box_candidates(g):
         if ct is None or ct - c < 2:
             continue
         rb, drift = None, []
-        wall = (lambda t: t in "|+") if ascii_box else (lambda t: t in _VWALL)
+        wall = (lambda t: t in ("|", "+")) if ascii_box else (lambda t: t in _VWALL)
         for rr in range(r + 1, g.nrows + 1):
             lw = g.ch(rr, c)
             if (not ascii_box and lw in _BL) or (ascii_box and lw == "+" and g.ch(rr, c + 1) == "-"
@@ -1909,7 +1932,9 @@ def _box_candidates(g):
                 rb = rr
                 break
             if not wall(lw):
-                p = next((x for x in (c + 1, c - 1, c + 2, c - 2) if g.ch(rr, x) in ("|" if ascii_box else "│║")), None)
+                wall_t = "|" if ascii_box else "│║"
+                p = next((x for k in range(1, 7) for x in (c + k, c - k) if g.ch(rr, x) in wall_t and
+                          (k < 3 or all(g.free(rr, y) for y in range(min(x, c) + 1, max(x, c))))), None)
                 if p is None:
                     break
                 drift.append((rr, p))                       # the left wall drifted on this row
@@ -1937,9 +1962,84 @@ def _fix_edge(g, row, cur, target, corner, edge):
     return True
 
 
+REACH = 12                                                  # how far off a wall, corner or edge may be
+
+
+def _plain(g, rr, a, b):
+    """Nothing but a row's own words between columns a and b: no line, wall or arrowhead
+    (a '-' or '>' inside a word, as in 'rate-limit' or '->x', is a word)."""
+    def line_like(x):
+        t, word = g.ch(rr, x), _alnum(g.ch(rr, x - 1)) or _alnum(g.ch(rr, x + 1))
+        return t in ARMS or t in HEADS or t in "|+" or (t in "-<>^v" and not word)
+    return not any(line_like(x) for x in range(min(a, b) + 1, max(a, b)))
+
+
+def _text_end(g, rr, a, b):
+    """The last column with anything on it strictly between a and b (a when there is none)."""
+    return max((x for x in range(a + 1, b) if not g.free(rr, x)), default=a)
+
+
+def _row_wall(g, rr, c, ct, wall_ok, mine):
+    """This row's right wall: at ct, the nearest within three columns, or further out (up to REACH)
+    when only the row's own words or blanks lie between it and ct."""
+    if wall_ok(g.ch(rr, ct)):
+        return ct
+    for p in sorted(range(max(c + 2, ct - 3), ct + 4), key=lambda p: (abs(p - ct), p)):
+        if p != ct and wall_ok(g.ch(rr, p)) and mine(rr, p):
+            return p
+    for p in range(ct + 4, ct + REACH + 1):                 # pushed out by a long label or wide characters
+        if wall_ok(g.ch(rr, p)):
+            return p if mine(rr, p) and _plain(g, rr, ct, p) else None
+        if g.ch(rr, p) in ARMS or g.ch(rr, p) in "+":
+            return None
+    for p in range(ct - 4, max(c + 1, ct - REACH - 1), -1):   # came early: only blanks up to ct
+        if wall_ok(g.ch(rr, p)):
+            return p if mine(rr, p) and all(g.free(rr, x) for x in range(p + 1, ct + 1)) else None
+    return None
+
+
+def _bottom_corner(g, rb, c, ct, corner_ok, edge_ok):
+    """Where the bottom edge that starts at column c ends, if that is within REACH of ct."""
+    if corner_ok(g.ch(rb, ct)):
+        return ct
+    near = next((p for p in (ct - 1, ct + 1, ct - 2, ct + 2, ct - 3, ct + 3) if corner_ok(g.ch(rb, p))), None)
+    if near is not None:
+        return near
+    x = c + 1
+    while edge_ok(g.ch(rb, x)) or (corner_ok(g.ch(rb, x)) and edge_ok(g.ch(rb, x + 1))):
+        x += 1                                              # run along the edge, through junctions
+    return x if corner_ok(g.ch(rb, x)) and abs(x - ct) <= REACH else None
+
+
+def _move_wall(g, rr, p, target, dry=False):
+    """Move one row's right wall from p to target over blanks, or out along its own connector
+    ('|------>' becomes '      |--->') as long as two cells of that connector are left."""
+    lo, hi = sorted((p, target))
+    between = range(lo + 1, hi) if p < target else range(target, p)
+    over_line = (p < target and all(g.ch(rr, x) in "-─" for x in range(p + 1, target + 1))
+                 and all(g.ch(rr, x) in "-─>▶" for x in (target + 1, target + 2)))
+    if not over_line and (not (g.free(rr, target) or target == p) or not all(g.free(rr, x) for x in between)):
+        return False
+    if not dry:
+        t = g.ch(rr, p)
+        for x in range(p, target) if p < target else (p,):
+            g.put(rr, x, " ")                               # the old wall, and any line it moved along
+        g.put(rr, target, t)
+        g.note(rr, target, f"moved the right wall '{t}' {abs(target - p)} col {'right' if target > p else 'left'}")
+    return True
+
+
+def _edge_ok(g, row, cur, target):
+    if target > cur:
+        return all(g.free(row, x) for x in range(cur + 1, target + 1))
+    return all(g.ch(row, x) in "─═-" for x in range(target, cur))
+
+
 def _repair_box_once(g):
     """Right side of one box: the top corner, each row's wall and the bottom corner vote on the
-    column; the majority wins and the stragglers move. Returns True if something changed."""
+    column and the stragglers move. A box grows instead when a row's words would not fit inside
+    the winning column (a long label, or wide characters counted as one). Returns True if
+    something changed."""
     boxes = _box_candidates(g)
     claimed = {}                                            # (row, col) -> box, for every box's own walls
     for b in boxes:
@@ -1949,20 +2049,10 @@ def _repair_box_once(g):
             claimed.setdefault((rr, ct), b)
     for b in boxes:
         r, c, ct, rb, ascii_box, drift = b
-        wall_ok = (lambda t: t in "|+") if ascii_box else (lambda t: t in _VWALL)
+        wall_ok = (lambda t: t in ("|", "+")) if ascii_box else (lambda t: t in _VWALL)
         corner_ok = (lambda t: t == "+") if ascii_box else (lambda t: t in _BR)
-        near = [ct - 1, ct + 1, ct - 2, ct + 2, ct - 3, ct + 3]
-        rows = {}
-        for rr in range(r + 1, rb):
-            if wall_ok(g.ch(rr, ct)):
-                rows[rr] = ct
-                continue
-            rows[rr] = next((p for p in near if wall_ok(g.ch(rr, p)) and claimed.get((rr, p), b) is b), None)
-        pb = ct if corner_ok(g.ch(rb, ct)) else next((p for p in near if corner_ok(g.ch(rb, p))), None)
-        votes = {}
-        for p in [ct] + [p for p in rows.values() if p is not None] + ([pb] if pb is not None else []):
-            votes[p] = votes.get(p, 0) + 1
-        target = max(votes, key=lambda k: (votes[k], k == ct))
+        edge_ok = (lambda t: t == "-") if ascii_box else (lambda t: t in "─═")
+        mine = lambda rr, p, b=b: claimed.get((rr, p), b) is b
         changed = False
         for rr, p in drift:                                 # left walls first: they anchor the row
             lo, hi = sorted((p, c))
@@ -1972,29 +2062,101 @@ def _repair_box_once(g):
                 g.put(rr, c, t)
                 g.note(rr, c, f"moved the left wall '{t}' {abs(c - p)} col {'right' if c > p else 'left'}")
                 changed = True
+        if changed:
+            return True
+        rows = {rr: _row_wall(g, rr, c, ct, wall_ok, mine) for rr in range(r + 1, rb)}
+        pb = _bottom_corner(g, rb, c, ct, corner_ok, edge_ok)
+        votes = {}
+        for p in [ct] + [p for p in rows.values() if p is not None] + ([pb] if pb is not None else []):
+            votes[p] = votes.get(p, 0) + 1
+        target = max(votes, key=lambda k: (votes[k], k == ct))
+        reach = max(_text_end(g, rr, c, p if p is not None else target) for rr, p in rows.items())
+        if reach >= target:                                 # the words don't fit: grow the box, all or nothing
+            grow = reach + 2
+            ok = _edge_ok(g, r, ct, grow) and (pb is None or _edge_ok(g, rb, pb, grow))
+            ok = ok and all(p is None and g.free(rr, grow) or p is not None and _move_wall(g, rr, p, grow, dry=True)
+                            for rr, p in rows.items())
+            if not ok:
+                continue
+            target = grow
         edge = "-" if ascii_box else ("═" if g.ch(r, c) == "╔" else "─")
         if ct != target:
             changed |= _fix_edge(g, r, ct, target, g.ch(r, ct), edge)
         for rr, p in rows.items():
             if p is None:
-                if g.free(rr, target) and g.ch(rr, target - 1) == " ":
+                if g.free(rr, target) and g.free(rr, target - 1):
                     wall = "|" if ascii_box else ("║" if edge == "═" else "│")
                     g.put(rr, target, wall)
                     g.note(rr, target, f"added the missing right wall '{wall}'")
                     changed = True
             elif p != target:
-                lo, hi = sorted((p, target))
-                if g.free(rr, target) and all(g.free(rr, x) for x in range(lo + 1, hi)):
-                    t = g.ch(rr, p)
-                    g.put(rr, p, " ")
-                    g.put(rr, target, t)
-                    g.note(rr, target, f"moved the right wall '{t}' {abs(target - p)} col {'right' if target > p else 'left'}")
-                    changed = True
+                changed |= _move_wall(g, rr, p, target)
         if pb is not None and pb != target:
             changed |= _fix_edge(g, rb, pb, target, g.ch(rb, pb), edge)
         if changed:
             return True
     return False
+
+
+def _move_piece(g, get, border, nr, nc, a):
+    """A connector running toward a stops before (nr, nc); its other half sits 3-6 cells to the
+    side, starting on this very row (or column) and running on toward a to a box. Move that whole
+    half into line, if it still reaches the same box from there. Returns True if it moved."""
+    dr, dc = DIRS[a]
+    straight = ("│", "║") if a in "UD" else ("─", "═")
+    head = {"D": "▼", "U": "▲", "R": "▶", "L": "◀"}[a]
+    for k in (3, -3, 4, -4, 5, -5, 6, -6):
+        sr, sc = (0, k) if a in "UD" else (k, 0)
+        start = (nr + sr, nc + sc)
+        if get(*start) not in straight + (head,) or not g.free(start[0] - dr, start[1] - dc):
+            continue                                        # not the loose start of a line along a
+        piece, p = [], start
+        while get(*p) in straight:
+            piece.append(p)
+            p = (p[0] + dr, p[1] + dc)
+        if get(*p) == head:
+            piece.append(p)
+            p = (p[0] + dr, p[1] + dc)
+        if p not in border:
+            continue                                        # it has to end on (or point into) a box
+        side = ("L", "R") if a in "UD" else ("U", "D")
+        if any(get(x + DIRS[s][0], y + DIRS[s][1]) in ARMS for x, y in piece for s in side):
+            continue                                        # something joins it from the side: leave it
+        moved = [(x - sr, y - sc) for x, y in piece]
+        if not all(g.free(*q) for q in moved) or (p[0] - sr, p[1] - sc) not in border:
+            continue
+        for (x, y), q in zip(piece, moved):
+            t = g.ch(x, y)
+            g.put(x, y, " ")
+            g.put(*q, t)
+        axis = "col" if a in "UD" else "line"
+        g.note(nr, nc, f"moved a {len(piece)}-cell piece of the line {abs(k)} {axis}s "
+                       f"{('left' if k > 0 else 'right') if a in 'UD' else ('up' if k > 0 else 'down')} to join it up")
+        return True
+    return False
+
+
+def _extend_head(g, get, border, r, c, reach=10):
+    """An arrowhead that stops 2-10 blank cells short of the box it points at: carry its line
+    across the gap so it touches. Returns True if it moved."""
+    t = get(r, c)
+    d = HEADS[t]
+    dr, dc = DIRS[d]
+    tail = get(r - dr, c - dc)
+    if tail not in ARMS or d not in ARMS[tail]:
+        return False
+    k = 1
+    while k <= reach and g.free(r + k * dr, c + k * dc):
+        k += 1
+    if k < 3 or k > reach or (r + k * dr, c + k * dc) not in border:
+        return False                                        # one cell short is the older, looser rule
+    raw = g.ch(r, c)
+    shaft = ("|" if d in "UD" else "-") if raw in "v^<>" else ("│" if d in "UD" else "─")
+    for j in range(0, k - 1):
+        g.put(r + j * dr, c + j * dc, shaft)
+    g.put(r + (k - 1) * dr, c + (k - 1) * dc, raw)
+    g.note(r + (k - 1) * dr, c + (k - 1) * dc, f"carried the arrow {k - 1} cells on so it touches the box")
+    return True
 
 
 def _repair_connector_once(g):
@@ -2035,11 +2197,18 @@ def _repair_connector_once(g):
                     g.note(nr, nc, f"moved '{q}' {abs(sc)} col {'left' if sc > 0 else 'right'} to line it up"
                            if sr == 0 else f"moved '{q}' {abs(sr)} line {'up' if sr > 0 else 'down'} to line it up")
                     return True
+            if _move_piece(g, get, border, nr, nc, a):      # the other half is 3-6 cells to the side
+                return True
             # a gap of one or two cells before a line, a box or an arrowhead: fill it
+            same = ("│", "║") if a in "UD" else ("─", "═")
             for k in (2, 3):
                 ahead = get(r + k * dr, c + k * dc)
                 if ahead == " ":
                     continue
+                beside = [(r + j * dr + (0 if a in "UD" else s), c + j * dc + (s if a in "UD" else 0))
+                          for j in range(1, k) for s in range(-6, 7) if s]
+                if any(get(*q) in same for q in beside):
+                    break                                   # a drifted half of this line is nearby: don't double it
                 if (ahead in ARMS or ahead in HEADS) and all(g.free(r + j * dr, c + j * dc) for j in range(1, k)):
                     fill = ("|" if a in "UD" else "-") if raw in "|-+" else \
                            (("║" if a in "UD" else "═") if t in DOUBLE else axis[a])
@@ -2063,6 +2232,8 @@ def _repair_connector_once(g):
             g.put(r, c, shaft)
             g.put(*n1, raw)
             g.note(n1[0], n1[1], f"moved '{raw}' one cell so it touches what it points at")
+            return True
+        if _extend_head(g, get, border, r, c):
             return True
     return False
 
@@ -2301,6 +2472,7 @@ WARNING_CODES = {
     "escaped_newlines": "one-line input containing literal \\n; pass real newlines or add --unescape",
     "no_structure": "ASCII box pieces were found but no closed box, so everything stayed text",
     "unclosed_box": "an ASCII box starts (+---+) but never closes, so it stays text; hint names the broken wall",
+    "short_arrow": "an arrowhead stops 2-9 blank cells short of the box it points at; --repair carries it on",
 }
 REPORT_FIELDS = {
     "status": "ok | warnings | self_check_failed | bad_input | usage_error",

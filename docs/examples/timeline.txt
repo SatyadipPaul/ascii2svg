@@ -3,10 +3,15 @@
                                             ▲
                                             ╎
                                             ╎
-                Firefox, Safari             ╎             bigger repairs,
-               and cairo checks         ┌╌╌╌┴╌╌╌┐         a JS / npm port
+                                            ╎             Firefox, Safari
+                a JS / npm port         ┌╌╌╌┴╌╌╌┐        and cairo checks
                        ◇╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
                                         └╌╌╌┬╌╌╌┘
+                                            ▲
+                                            │       bigger repairs: boxes grow,
+                                        ┌───┴───┐       split lines join up
+                                        │ 1.14  ├┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈◆
+                                        └───┬───┘
                                             ▲
           ASCII UML heads up and down:      │
                      /_\   <>   *       ┌───┴───┐
