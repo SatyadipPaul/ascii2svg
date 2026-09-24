@@ -3,10 +3,15 @@
                                             ▲
                                             ╎
                                             ╎
-           vertical ASCII UML heads,        ╎            a JS / npm port,
-                bigger repairs          ┌╌╌╌┴╌╌╌┐    Firefox and Safari checks
+                Firefox, Safari             ╎             bigger repairs,
+               and cairo checks         ┌╌╌╌┴╌╌╌┐         a JS / npm port
                        ◇╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
                                         └╌╌╌┬╌╌╌┘
+                                            ▲
+          ASCII UML heads up and down:      │
+                     /_\   <>   *       ┌───┴───┐
+                           ◆┈┈┈┈┈┈┈┈┈┈┈┈┤ 1.13  │
+                                        └───┬───┘
                                             ▲
                                             │       arrows between plain words,
                                         ┌───┴───┐      labels set into lines

@@ -54,6 +54,7 @@ EXAMPLES = [
     ("Dashed and dotted ASCII lines", "tests/fixtures/dashed_ascii.txt"),
     ("Rounded ASCII corners and bends: .--.  '--'", "tests/fixtures/rounded_ascii.txt"),
     ("Arrows between plain words: A --HTTP--> B", "tests/fixtures/floating.txt"),
+    ("UML heads up and down in ASCII: /_\\  <>  *", "tests/fixtures/uml_vertical.txt"),
     ("ER diagram with crow's feet", "tests/fixtures/er_crowsfoot.txt"),
     ("Mermaid-style: state", "docs/examples/mermaid/state.txt"),
     ("Mermaid-style: C4 with a dashed boundary", "docs/examples/mermaid/c4-dashed-boundary.txt"),

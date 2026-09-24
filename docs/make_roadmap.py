@@ -12,8 +12,8 @@ SHIPPED = [("1.0 – 1.2 foundations", "boxes, arrows, 1:1", "colour · themes �
            ("1.4 everywhere", "browser playground", "MCP server · skill"),
            ("1.5 repair", "--repair for LLMs", "Fix alignment button"),
            ("1.6 – 1.7 shapes", "block charts, diamonds", "dashed lines"),
-           ("1.8 – 1.12 notation", "UML, ER, curves, dashes", "arrows between words")]
-NEXT = [("vertical ASCII", "UML heads"), ("bigger repairs", "(3+ cells off)"),
+           ("1.8 – 1.13 notation", "UML, ER, curves, dashes", "arrows between words")]
+NEXT = [ ("bigger repairs", "(3+ cells off)"),
         ("JS / npm port", ""), ("Firefox, Safari", "and cairo checks")]
 
 
@@ -100,7 +100,8 @@ def roadmap():
 
     # next: dashed, reached by a dashed arrow from the last shipped milestone
     top = 21
-    k.box(top, 0, top + 12, right, title="Next, in no particular order", dashed=True)
+    bottom = top + 2 + 5 * -(-len(NEXT) // 3)            # one row of boxes per three items
+    k.box(top, 0, bottom, right, title="Next, in no particular order", dashed=True)
     nx = cols[0] + W // 2
     k.arrow(15, nx, top - 2, nx, ((top - 1, nx), "▼"))
     k.dashed |= {(r, nx) for r in range(16, top - 1) if r != 18}
@@ -109,7 +110,7 @@ def roadmap():
         r = top + 2 + (i // 3) * 5
         k.box(r, cols[i % 3], r + 3, cols[i % 3] + W - 1, [a, b], dashed=True)
 
-    k.text(top + 14, 1, "── shipped    ╌╌ planned    the arrows run in the order things shipped")
+    k.text(bottom + 2, 1, "── shipped    ╌╌ planned    the arrows run in the order things shipped")
     return k.render()
 
 

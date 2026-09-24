@@ -835,6 +835,22 @@ def test_free_floating_connectors_between_words():
         assert draw == cells, words
 
 
+def test_vertical_ascii_uml_heads():
+    text = fx("uml_vertical.txt")
+    cells, draw, svg, stats, _ = pipeline(text)
+    assert a2s.self_check(svg, draw, cells) == [] and stats["arrowheads"] == 4
+    assert svg.count('class="uml tri3"') == 2 and svg.count("pair-r") == 1 and "uml solid" in svg
+    _, r = a2s.render(text, describe=True, repair=True)
+    assert r["status"] == "ok" and not r["warnings"] and "repairs" not in r, r
+    edges = [(e["from"]["name"], e["to"]["name"], e["kind"]) for e in r["diagram"]["edges"]]
+    assert edges == [("Car", "Vehicle", "inheritance"), ("Truck", "Vehicle", "inheritance"),
+                     ("Driver", "<<iface>>", "inheritance"), ("Wheel", "Car", "aggregation"),
+                     ("Cargo", "Truck", "composition")], edges
+    for words in ("emoticon /_\\ and <> and * bullets", "a * b <> c /_\\ d", "+---+\n| a |\n+---+\n /_\\"):
+        cells, draw, *_ = pipeline(words)
+        assert not {"△", "◇", "◆"} & {t for t, _ in draw.values()}, words
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0

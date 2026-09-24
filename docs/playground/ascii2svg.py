@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.12.0"
+__version__ = "1.13.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -203,6 +203,7 @@ CORR["<"] |= {"◁", "◇", "╴"}                             # ASCII UML heads
 CORR[">"] |= {"▷", "◇", "╶"}
 CORR["|"] |= {"╶", "╴"}
 CORR["*"] = {"◆"}
+CORR["_"] = {"△"}                                        # '/_\' under a box: a triangle across three cells
 CORR["."] |= {"╭", "╮", "┬"}                             # ASCII rounded corners: .--.  '--'  `--'
 CORR["'"] = {"╰", "╯", "┴"}
 CORR["`"] = {"╰", "┴"}
@@ -401,6 +402,36 @@ def interpret(cells, nrows, ncols):
             uml[(r, c)], uml[(r, c + 1)] = "╴", ("▷" if t == "|" else "◇")
         elif t == "*" and ((t2 in "-." and boxward(r, c, -1)) or (ch(r, c - 1) in "-." and boxward(r, c, 1))):
             uml[(r, c)] = "◆"
+
+    # ... and on a vertical connector leaving a box's top or bottom edge:
+    #     '/_\' under the parent (inheritance), '<>' (aggregation) and '*' (composition), with the
+    #     line on the far side: '|' or ':' under (or over) the '_', the '*', or either half of '<>'
+    def hedge(r, c):
+        t = ch(r, c)
+        return ((r, c) in struct and t in "-+") or (t in ARMS and {"L", "R"} <= ARMS[t])
+
+    def vline(r, c):
+        t = ch(r, c)
+        return (t in "|:" and (r, c) not in struct) or (t in ARMS and {"U", "D"} <= ARMS[t])
+
+    uml_arm = {}                                            # a vertical head's cell -> the side its line is on
+    for (r, c) in sorted(cells):
+        t = ch(r, c)
+        if (r, c) in struct or (r, c) in uml or _alnum(ch(r, c - 1)) or _alnum(ch(r, c + 2 if t == "<" else c + 1)):
+            continue
+        for box, line in ((-1, 1), (1, -1)):                # box edge above and line below, or the other way
+            side = "D" if line == 1 else "U"
+            if t == "*" and hedge(r + box, c) and vline(r + line, c):
+                uml[(r, c)], uml_arm[(r, c)] = "◆", side
+            elif (t == "<" and ch(r, c + 1) == ">" and hedge(r + box, c) and hedge(r + box, c + 1)
+                  and (vline(r + line, c) != vline(r + line, c + 1))):
+                on = c if vline(r + line, c) else c + 1
+                uml[(r, c)] = uml[(r, c + 1)] = "◇"
+                uml_arm[(r, on)] = side
+            elif (t == "_" and box == -1 and ch(r, c - 1) == "/" and ch(r, c + 1) == "\\"
+                  and all(hedge(r - 1, x) for x in (c - 1, c, c + 1)) and vline(r + 1, c)):
+                uml[(r, c - 1)], uml[(r, c)], uml[(r, c + 1)] = "╱", "△", "╲"
+                uml_arm[(r, c)] = "D"
     struct.update(uml)
 
     # 2) connectors grow outward from structure until nothing changes
@@ -709,6 +740,8 @@ def interpret(cells, nrows, ncols):
         back = OPP[d]
         if er.get(n, "─") not in ("─", "│"):
             return False                                    # ER marks sit on the line; walls get no arm to them
+        if n in uml_arm or (n in uml and uml[n] in ("◇", "╱", "╲") and n[0] != r):
+            return uml_arm.get(n) == back                   # a vertical head joins its line, not the box
         perpendicular = (own == "-" and d in "UD") or (own == "|" and d in "LR")
         if n in struct and t in ROUNDC:
             if own in ROUNDC:
@@ -1038,7 +1071,25 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     def half(r, c, a):                                  # the half line of a two-cell head on side a
         return get(r + DIRS[a][0], c + DIRS[a][1]) == HALF_AWAY[a]
 
+    def tri3(r, c):                                     # '╱△╲' with its line below: one wide triangle
+        return get(r, c) == "△" and get(r, c - 1) == "╱" and get(r, c + 1) == "╲" and back(r, c, "D")
+
+    def twin(r, c):
+        """'◇◇' on a vertical line: the side the other half is on, if this half carries the line."""
+        t = get(r, c)
+        if t not in ("◇", "◆") or not (back(r, c, "U") or back(r, c, "D")) or back(r, c, "L") or back(r, c, "R"):
+            return None
+        for s in "LR":
+            n = (r + DIRS[s][0], c + DIRS[s][1])
+            if get(*n) == t and not (back(*n, "U") or back(*n, "D")):
+                return s
+        return None
+
     def mark_kind(r, c, t):
+        if t == "△" and tri3(r, c):
+            return "tri3"
+        if twin(r, c):
+            return "pair"
         if t in UML_DIR:
             tail = OPP[UML_DIR[t]]
             return "tri" if back(r, c, tail) or half(r, c, tail) else None
@@ -1050,6 +1101,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
             return "foot" if link(r, c, FEET[t]) else None
         return None
     diag = {"/": set(), "\\": set()}
+    parts = {(r, c + s) for (r, c), (t, _) in cells.items() if t == "△" and tri3(r, c) for s in (-1, 1)}
+    parts |= {(r, c + DIRS[twin(r, c)][1]) for (r, c), (t, _) in cells.items() if twin(r, c)}
     round_ok = not square and not any(t in ROUNDED for t, _ in cells.values())
     anim = animate != "none"
     timed = animate in ("draw", "flow")              # "scroll" leaves the timing to the host page
@@ -1119,6 +1172,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                     add(st, "v", cx, cy, y0 + CH + ext)
         elif t in HEADS:
             heads.append((r, c, HEADS[t]))
+        elif (r, c) in parts:
+            continue                                    # the far part of a wide triangle or diamond
         elif t in MARKS and mark_kind(r, c, t):
             marks.append((r, c, t, mark_kind(r, c, t)))
         elif t in DIAG:
@@ -1271,7 +1326,20 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
             x0, y0 = PAD + c * CW, PAD + r * CH
             cx, cy = x0 + CW / 2, y0 + CH / 2
             tm = timing(y0)
-            if kind == "tri" and half(r, c, OPP[UML_DIR[t]]):   # '<|' / '|>': the base sits on the half line
+            if kind == "tri3":                              # '/_\': the tip on the box edge, the base across 3 cells
+                tip = y0 - (CH / 2 if line_like(r - 1, c) else 0)
+                base = y0 + 10
+                pts = ((cx, tip), (cx - 10.5, base), (cx + 10.5, base))
+                o.append(ext(cx, base, cx, y0 + CH, y0))
+                o.append(f'<polygon points="{" ".join(f"{x:g},{y:g}" for x, y in pts)}" class="uml tri3"{tm}/>')
+            elif kind == "pair":                            # '<>' on a vertical line: centred on the line
+                top = y0 - (CH / 2 if reach(r, c, "U") else 0)
+                bot = y0 + CH + (CH / 2 if reach(r, c, "D") else 0)
+                mid = (top + bot) / 2
+                pts = ((cx, top), (cx + 7, mid), (cx, bot), (cx - 7, mid))
+                cls = f'uml{" solid" if t == "◆" else ""} pair-{twin(r, c).lower()}'
+                o.append(f'<polygon points="{" ".join(f"{x:g},{y:g}" for x, y in pts)}" class="{cls}"{tm}/>')
+            elif kind == "tri" and half(r, c, OPP[UML_DIR[t]]):   # '<|' / '|>': the base sits on the half line
                 d = UML_DIR[t]
                 s = {"L": -1, "R": 1, "U": -1, "D": 1}[d]
                 if d in "LR":
@@ -1397,7 +1465,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
            f'data-generator="ascii2svg {__version__}"><title>{html.escape(title)}</title>'
            f'<style>{css}</style><rect width="100%" height="100%" fill="{pal["bg"]}" class="bg"/>'
            + "".join(body) + "</svg>\n")
-    return svg, {"boxes": len(boxes), "text_cells": len(texts), "arrowheads": len(heads) + sum(k in ("tri", "dia") for *_, k in marks),
+    return svg, {"boxes": len(boxes), "text_cells": len(texts), "arrowheads": len(heads) + sum(k in ("tri", "dia", "tri3", "pair") for *_, k in marks),
                  "flows": len(routes)}
 
 
@@ -1591,6 +1659,14 @@ def read_back(svg: str) -> dict:
             out[cell(mx, my)] = {v: k for k, v in UML_DIR.items()}[d]
         else:
             out[cell(sum(x for x, _ in xy) / 4, sum(y for _, y in xy) / 4)] = "◆" if solid else "◇"
+    for tx, _, by in re.findall(r'<polygon points="([\d.]+),([\d.]+) [\d.]+,([\d.]+) [\d.]+,[\d.]+" '
+                                   r'class="uml tri3"', svg):
+        r, c = cell(float(tx), float(by))                  # the base's row, the tip's column
+        out[(r, c - 1)], out[(r, c)], out[(r, c + 1)] = "╱", "△", "╲"
+    for tx, ty, by, solid, side in re.findall(r'<polygon points="([\d.]+),([\d.]+) [\d.]+,[\d.]+ [\d.]+,([\d.]+) '
+                                              r'[\d.]+,[\d.]+" class="uml( solid)? pair-(l|r)"', svg):
+        r, c = cell(float(tx), (float(ty) + float(by)) / 2)
+        out[(r, c)] = out[(r, c + (1 if side == "r" else -1))] = "◆" if solid else "◇"
     for x, y in re.findall(r'<circle cx="([\d.]+)" cy="([\d.]+)" r="[\d.]+" class="ring"', svg):
         out[cell(float(x), float(y))] = "○"
     for ax, ay, ex, rest in re.findall(r'<path d="M([\d.]+) ([\d.]+)L([\d.]+) ([^"]*)" class="foot"', svg):
@@ -2286,6 +2362,7 @@ what gets drawn:
   so are rounded corners: . on top and ' below (.--. over '--', or ---. over |).
   Between plain words, a line is drawn when it ends in an arrowhead pointing at a word
   and each loose end rests on a word: A --> B, A --HTTP--> B, or | and v under a label.
+  UML heads in ASCII: <|-- --|> <>-- *-- across, and /_\\ <> * on a line up or down.
   Everything else (hyphens in words, a->b, user_id, markdown tables) stays text,
   in exactly the same cell. When unsure, it stays text.
 
