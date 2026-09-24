@@ -1060,6 +1060,32 @@ def test_svg_is_compact():
     assert len(svg.encode()) < 50_000, len(svg.encode())                        # 87 KB before 1.16
 
 
+# ── the skill's composing guide ──────────────────────────────────────────────
+ROOT = os.path.dirname(HERE)
+
+
+def test_composing_guide_examples_render_cleanly():
+    guide = open(os.path.join(ROOT, "references", "composing.md"), encoding="utf-8").read()
+    blocks = re.findall(r"```text\n(.*?)```", guide, re.S)
+    assert len(blocks) >= 20, len(blocks)                                       # catalog + recipes
+    for text in blocks:
+        _, r = a2s.render(text, describe=True)
+        assert r["status"] == "ok" and not r["warnings"], (text[:80], r["warnings"][:2])
+        assert r["cols"] <= 100, (text[:80], r["cols"])                         # reads on a laptop
+    for heading in ("## 1. Take inventory", "## 2. Match each kind to a notation", "## Catalog",
+                    "## Recipes", "## When to split instead"):
+        assert heading in guide, heading
+
+
+def test_skill_points_to_the_guide_and_ships_it():
+    import zipfile
+    skill = open(os.path.join(ROOT, "SKILL.md"), encoding="utf-8").read()
+    assert "references/composing.md" in skill and "|--` file trees are left exactly" not in skill
+    subprocess.run([sys.executable, os.path.join(ROOT, "tools", "package_skill.py")], check=True, capture_output=True)
+    names = zipfile.ZipFile(os.path.join(ROOT, "dist", "ascii2svg.skill")).namelist()
+    assert names == ["ascii2svg/SKILL.md", "ascii2svg/scripts/ascii2svg.py", "ascii2svg/references/composing.md"], names
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0
