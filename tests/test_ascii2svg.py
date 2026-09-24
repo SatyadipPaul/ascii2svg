@@ -855,7 +855,7 @@ def test_vertical_ascii_uml_heads():
 def test_npm_package_has_the_same_version():
     pkg = json.load(open(os.path.join(os.path.dirname(HERE), "npm", "package.json"), encoding="utf-8"))
     assert pkg["version"] == a2s.__version__, "bump npm/package.json with __version__"
-    assert pkg["name"] == "@satyadippaul/ascii2svg" and pkg["bin"]["ascii2svg"] == "cli.js"
+    assert pkg["name"] == "@satyadip28/asciitosvg" and pkg["bin"]["ascii2svg"] == "cli.js"
 
 
 def test_repair_reaches_bigger_offsets():

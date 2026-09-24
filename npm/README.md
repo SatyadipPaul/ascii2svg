@@ -1,4 +1,4 @@
-# @satyadippaul/ascii2svg
+# @satyadip28/asciitosvg
 
 Render ASCII and Unicode box diagrams as clean SVG, with every character in its exact cell and a
 1:1 self-check that reads the drawing back. This is the [ascii2svg](https://github.com/SatyadipPaul/ascii2svg)
@@ -7,7 +7,7 @@ WebAssembly). You get the same drawing, the same `--repair` and the same JSON re
 `pip install ascii2svg`, in Node and in the browser, with no Python install.
 
 ```bash
-npm install @satyadippaul/ascii2svg
+npm install @satyadip28/asciitosvg
 ```
 
 New to it? The [guide](https://github.com/SatyadipPaul/ascii2svg/blob/main/GUIDE.md) explains, in plain language, how to draw diagrams that render
@@ -18,7 +18,7 @@ well, which look to pick, and how to read and fix warnings.
 ## Library
 
 ```js
-import { render } from "@satyadippaul/ascii2svg";
+import { render } from "@satyadip28/asciitosvg";
 
 const { markup, report } = await render(`
 +--------+      +--------+
@@ -49,9 +49,9 @@ downloads about 12 MB, which the browser then caches. The
 ## Command line
 
 ```bash
-npx @satyadippaul/ascii2svg diagram.txt -o diagram.svg --preset readme
-npx @satyadippaul/ascii2svg draft.txt --check --describe      # validate + structure, write nothing
-cat diagram.txt | npx @satyadippaul/ascii2svg - --repair --json
+npx @satyadip28/asciitosvg diagram.txt -o diagram.svg --preset readme
+npx @satyadip28/asciitosvg draft.txt --check --describe      # validate + structure, write nothing
+cat diagram.txt | npx @satyadip28/asciitosvg - --repair --json
 ```
 
 It is the Python CLI, flag for flag. Files are read and written where you point, stdin works,
@@ -61,7 +61,7 @@ warnings). The one exception is `--png`, which needs the Python package and cair
 **MCP server** for Claude Code and other agents:
 
 ```bash
-claude mcp add ascii2svg -- npx -y @satyadippaul/ascii2svg --mcp
+claude mcp add ascii2svg -- npx -y @satyadip28/asciitosvg --mcp
 ```
 
 ## Same output as Python, by test

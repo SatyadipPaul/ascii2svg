@@ -2,7 +2,7 @@ name: publish
 
 # Publishing a GitHub release (tag vX.Y.Z) builds the package, uploads it to PyPI with
 # Trusted Publishing (no tokens stored anywhere) and attaches ascii2svg.skill to the release.
-# The npm package (@satyadippaul/ascii2svg) goes out the same way, once the repository variable
+# The npm package (@satyadip28/asciitosvg) goes out the same way, once the repository variable
 # NPM_PUBLISH is "true" (after the first publish by hand and linking this workflow on npmjs.com).
 
 on:

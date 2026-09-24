@@ -1,4 +1,4 @@
-// @satyadippaul/ascii2svg: the ascii2svg Python library, running unchanged in Pyodide (CPython
+// @satyadip28/asciitosvg: the ascii2svg Python library, running unchanged in Pyodide (CPython
 // compiled to WebAssembly). Same drawing, same 1:1 self-check and same JSON report as
 // `pip install ascii2svg`, in Node and in the browser.
 import { loadPyodide } from "pyodide";

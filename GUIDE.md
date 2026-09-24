@@ -43,7 +43,7 @@ Everything runs on your own computer, and nothing is uploaded.
 pip install ascii2svg                          # Python 3.9 or newer
 ascii2svg diagram.txt -o diagram.svg
 
-npx @satyadippaul/ascii2svg diagram.txt -o diagram.svg   # Node 18 or newer, no install step
+npx @satyadip28/asciitosvg diagram.txt -o diagram.svg   # Node 18 or newer, no install step
 ```
 
 **From your own code**, in Python or JavaScript. See [section 7](#7-using-it-from-code).
@@ -303,7 +303,7 @@ This works in Claude Code, Claude Desktop, Cursor and other MCP clients:
 
 ```bash
 claude mcp add ascii2svg -- ascii2svg --mcp                      # with the Python package
-claude mcp add ascii2svg -- npx -y @satyadippaul/ascii2svg --mcp  # or with Node
+claude mcp add ascii2svg -- npx -y @satyadip28/asciitosvg --mcp  # or with Node
 ```
 
 This gives the assistant two tools: `check_diagram` validates and describes a diagram, and
@@ -328,10 +328,10 @@ if report["status"] != "self_check_failed":
 print(report["summary"])
 ```
 
-**JavaScript** (Node or a browser), after `npm install @satyadippaul/ascii2svg`:
+**JavaScript** (Node or a browser), after `npm install @satyadip28/asciitosvg`:
 
 ```js
-import { render } from "@satyadippaul/ascii2svg";
+import { render } from "@satyadip28/asciitosvg";
 
 const { markup, report } = await render(diagramText, { preset: "readme", repair: true });
 console.log(report.summary);

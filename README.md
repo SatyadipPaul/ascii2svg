@@ -61,7 +61,7 @@ pip install ascii2svg
 ascii2svg diagram.txt -o diagram.svg --preset readme     # colour, light/dark, animation
 ```
 
-**From JavaScript**, no Python needed: `npm install @satyadippaul/ascii2svg` (see [Install](#install)).
+**From JavaScript**, no Python needed: `npm install @satyadip28/asciitosvg` (see [Install](#install)).
 
 **With Claude:** add the [skill](https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill),
 then just ask *"turn this diagram into an image for my slides"*. Or connect the MCP server:
@@ -271,18 +271,18 @@ It is a single file with no dependencies, so you can also just copy
 **Node and the browser**, with no Python install:
 
 ```bash
-npm install @satyadippaul/ascii2svg
-npx @satyadippaul/ascii2svg diagram.txt -o diagram.svg --preset readme
+npm install @satyadip28/asciitosvg
+npx @satyadip28/asciitosvg diagram.txt -o diagram.svg --preset readme
 ```
 
 ```js
-import { render } from "@satyadippaul/ascii2svg";
+import { render } from "@satyadip28/asciitosvg";
 const { markup, report } = await render(diagram, { preset: "readme", repair: true });
 ```
 
 The npm package runs this same Python module in [Pyodide](https://pyodide.org) (CPython on
 WebAssembly). Its tests render every test diagram in five looks both ways and require
-byte-identical SVG and reports. The CLI and the MCP server (`npx -y @satyadippaul/ascii2svg --mcp`)
+byte-identical SVG and reports. The CLI and the MCP server (`npx -y @satyadip28/asciitosvg --mcp`)
 work as with pip; only `--png` needs the Python package. Details:
 [npm/README.md](https://github.com/SatyadipPaul/ascii2svg/blob/main/npm/README.md).
 
@@ -472,7 +472,7 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 - [x] ASCII rounded corners and bends (`.--.` `'--'`)
 - [x] Arrows between plain words (`A --> B`, `A --HTTP--> B`, `|` and `v` under a label)
 - [x] Vertical ASCII UML heads (`/_\` `<>` `*` under or over a box)
-- [x] On npm: `@satyadippaul/ascii2svg`, the same module in WebAssembly, byte-identical by test
+- [x] On npm: `@satyadip28/asciitosvg`, the same module in WebAssembly, byte-identical by test
 
 Everything planned has shipped. Have an idea, or a diagram that doesn't render the way you meant?
 [Open an issue](https://github.com/SatyadipPaul/ascii2svg/issues).
