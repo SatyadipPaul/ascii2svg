@@ -1075,6 +1075,11 @@ def test_composing_guide_examples_render_cleanly():
     for heading in ("## 1. Take inventory", "## 2. Match each kind to a notation", "## Catalog",
                     "## Recipes", "## When to split instead"):
         assert heading in guide, heading
+    helper = re.search(r"```python\n(.*?)```", guide, re.S).group(1)       # the grid helper runs as printed
+    out = subprocess.run([sys.executable, "-c", helper], capture_output=True, text=True, check=True).stdout
+    _, r = a2s.render(out, describe=True)
+    assert r["status"] == "ok" and [(e["from"]["name"], e["to"]["name"]) for e in r["diagram"]["edges"]] == \
+        [("Checkout", "Payment provider")], (out, r["diagram"]["edges"])
 
 
 def test_skill_points_to_the_guide_and_ships_it():

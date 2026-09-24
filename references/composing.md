@@ -72,8 +72,59 @@ longest label plus two spaces. For example:
 | Mail service box / lifeline | 60 / 67 | 16 |
 
 Then draw the vertical lines first, run `--check`, and only then add the labels and messages
-between them. A generated diagram (a script that prints the text) is fine for anything regular:
-many boxes in a row, a timeline, bars.
+between them.
+
+**For anything over about 30 rows, or mixing three or more notations, generate the text with a
+short script** instead of typing it. Counting columns by eye is where most drafts go wrong. This
+helper is enough for boxes, lines and labels; add a function per notation you need:
+
+```python
+grid = {}                                   # (row, col) -> character
+
+
+def put(r, c, text):                        # write text starting at row r, column c
+    for i, ch in enumerate(text):
+        grid[(r, c + i)] = ch
+
+
+def box(r, c, lines, width=None):           # a box whose top-left corner is (r, c); returns its size
+    w = width or max(map(len, lines)) + 4
+    put(r, c, "┌" + "─" * (w - 2) + "┐")
+    for i, line in enumerate(lines, 1):
+        put(r + i, c, "│ " + line.ljust(w - 4) + " │")
+    put(r + len(lines) + 1, c, "└" + "─" * (w - 2) + "┘")
+    return len(lines) + 2, w
+
+
+def down(r1, r2, c, head=True):             # a vertical line in column c, rows r1..r2
+    for r in range(r1, r2 + 1):
+        grid[(r, c)] = "▼" if head and r == r2 else "│"
+
+
+def across(r, c1, c2, head=True):           # a horizontal line on row r, columns c1..c2
+    for c in range(c1, c2 + 1):
+        grid[(r, c)] = "▶" if head and c == c2 else "─"
+
+
+def show():
+    rows = max(r for r, _ in grid) + 1
+    return "\n".join("".join(grid.get((r, c), " ") for c in range(max(
+        [c for rr, c in grid if rr == r] or [-1]) + 1)).rstrip() for r in range(rows))
+
+
+h, w = box(0, 0, ["Checkout"])
+down(h, h + 1, w // 2)                      # from the middle of the box's bottom edge
+grid[(h - 1, w // 2)] = "┬"                 # the edge opens where the line leaves
+box(h + 2, 0, ["Payment provider"])
+print(show())
+```
+
+Two sizing rules the script makes easy:
+- **Place each box by its centre.** A branch's line lands at the centre of its box, so compute the
+  width first, then the left edge (`centre - width // 2`).
+- **Spread a decision's branches by the boxes they lead to.** When the outcome boxes differ in
+  width, the distance between the two branch columns must be at least half of each box's width
+  plus two, or the boxes overlap.
 
 ## 4. Say the plan
 
@@ -109,9 +160,16 @@ Look for these yourself:
   use a box that ends in `?`.
 - **A label that cuts a line.** Text written across a lifeline or connector breaks it into two
   pieces, silently. Keep every label between the lines it sits between; shorten it or add a row.
-- **A lifeline that stops early.** Every lifeline runs from its box to the bottom of the sequence.
-  Show a choice as a guard on the message, `[email known] send link`, not a diamond that swallows
-  the lifeline (recipe G).
+- **A lifeline that stops early.** A lifeline runs from its box down to that actor's last message.
+  It may end once the actor is done (the Cache in recipe B), but never while messages to or from
+  it are still to come. Show a choice as a guard on the message, `[email known] send link`, not a
+  diamond that swallows the lifeline (recipe G).
+- **A path that ends somewhere untrue.** Trace every path from start to end and ask whether that
+  is really what happens. A retry that can succeed needs a way back to the success box, not only a
+  way on to the failure box.
+- **A character you meant to draw, overwritten.** A box placed one row too high silently replaces
+  the arrowhead above it, and the check still passes. Compare the report's `boxes` and
+  `arrowheads` with your plan, and look at the rendered picture.
 - **A sequence inside a container.** The container becomes every message's end in `--describe`.
   Put the title as plain text above a sequence instead of framing it.
 
@@ -123,7 +181,9 @@ Look for these yourself:
 - [ ] At least two spaces (or one empty row) between regions; nothing touches by accident.
 - [ ] More than two kinds of line or box? Add a legend (16).
 - [ ] At most about 100 columns wide, so it reads on a laptop and scales down on a phone.
-- [ ] Numbers are to scale; every note points at its subject; every label reads on its own.
+- [ ] Numbers are to scale and right-aligned; every note points at its subject; every label reads
+  on its own; every path ends where it really ends.
+- [ ] You looked at the rendered picture, and the report's box and arrow counts match your plan.
 - [ ] `status` is `ok`, and `diagram.edges` / `diagram.tree` say what you meant. Then render with the preset for where it's going
   (a tree or mind map on its own: `--preset explore`, so its branches fold).
 
@@ -303,7 +363,7 @@ Service goals ──┼── Uptime ──── 99.95 %
 **Use it for** quantities side by side. Put the number at the end of each bar.  
 **Watch out:** Scale the longest bar to about 20 cells and every other bar in proportion
 (value ÷ largest × 20, rounded). `█` is the value; `░` only for what's left of a target (progress);
-a value under one cell is `▏` or `▌`, never an empty bar.
+a value under one cell is `▏` or `▌`, never an empty bar. Right-align the numbers after the bars.
 
 ```text
 Build time by stage (s)
@@ -382,7 +442,8 @@ Launch                     ████
 
 **Use it for** the one thing the reader must notice: an anomaly, a risk, a decision. A dotted box, and a dotted leader to what it's about.  
 **Watch out:** The leader starts on a wall or a line (`┴`), never in open space, and ends on the
-thing the note is about. To point at a label (a tree branch, a table cell), end the leader in an
+thing the note is about. A note on the same rows right beside its subject needs no leader, as
+long as nothing else is as close to it. To point at a label (a tree branch, a table cell), end the leader in an
 arrowhead one space from it, on the same row (below).
 
 ```text
@@ -407,8 +468,10 @@ Payments revamp (Nov)
 
 **Use it for** whenever you use more than two kinds of line or box. Show each one between words, as it appears.  
 **Watch out:** Sample lines need a word at both ends (`A ───▶ B`), or they read as broken lines.
-Only use samples like these (no `├──` or corners), and keep the legend one empty row and two
-columns away from everything else, so its samples can't line up with real lines.
+Only use samples like these, and keep the legend one empty row and two columns away from
+everything else, so its samples can't line up with real lines. Never show tree branches in a
+legend, in Unicode or ASCII: two `├──` rows *are* a tree. Describe them in words ("indented list:
+parts of a whole").
 
 ```text
 ╭─ Legend ─────────────────────────────╮
