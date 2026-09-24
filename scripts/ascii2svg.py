@@ -2136,6 +2136,58 @@ def _move_piece(g, get, border, nr, nc, a):
     return False
 
 
+def _shift_run(g, get, border, pr, pc, a, sr, sc):
+    """The line at (pr, pc), off to the side by (sr, sc), runs on toward a into a corner that
+    turns back into another line. Moving only its first cell would open the same gap on the
+    other side (and the next pass would move it back), so move the whole run and its corner
+    into line, shortening or lengthening the corner's other line. Returns True if it moved."""
+    dr, dc = DIRS[a]
+    k, (ur, uc) = max(abs(sr), abs(sc)), ((sr > 0) - (sr < 0), (sc > 0) - (sc < 0))
+    ur, uc = -ur, -uc                                       # one step toward where the run belongs
+    run, e = [], (pr, pc)
+    while get(*e) == get(pr, pc) and g.ch(*e) == get(*e):
+        run.append(e)
+        e = (e[0] + dr, e[1] + dc)
+    corner = get(*e)
+    if OPP[a] not in ARMS.get(corner, ()) or len(ARMS[corner]) != 2 or g.ch(*e) != corner or e in border:
+        return False                                        # a loose end, a junction or a box: not this
+    (h,) = ARMS[corner] - {OPP[a]}
+    hr, hc = DIRS[h]
+    along = ("─", "═") if h in "LR" else ("│", "║")
+    for x, y in run:
+        for s in ("L", "R") if a in "UD" else ("U", "D"):
+            if OPP[s] in ARMS.get(get(x + DIRS[s][0], y + DIRS[s][1]), ()):
+                return False                                # something joins the run from the side
+    if not all(g.free(x + k * ur, y + k * uc) for x, y in run):
+        return False
+    steps = [(e[0] + j * ur, e[1] + j * uc) for j in range(1, k + 1)]
+    if (hr, hc) == (ur, uc):                                # the corner slides back along its own line
+        after = (e[0] + (k + 1) * ur, e[1] + (k + 1) * uc)
+        if not all(get(*q) in along and g.ch(*q) == get(*q) for q in steps) \
+                or OPP[h] not in ARMS.get(get(*after), ()):
+            return False
+        fill = " "
+    elif (hr, hc) == (-ur, -uc):                            # the corner moves away: its line grows
+        fill = g.ch(e[0] + hr, e[1] + hc)
+        if not all(g.free(*q) for q in steps) or fill not in along:
+            return False
+    else:
+        return False
+    t = g.ch(*run[0])
+    for x, y in run:
+        g.put(x, y, " ")
+    for x, y in run:
+        g.put(x + k * ur, y + k * uc, t)
+    for j in range(k):
+        g.put(e[0] + j * ur, e[1] + j * uc, fill)
+    g.put(*steps[-1], corner)
+    axis = "col" if a in "UD" else "line"
+    way = ("left" if uc < 0 else "right") if a in "UD" else ("up" if ur < 0 else "down")
+    g.note(pr + k * ur, pc + k * uc, f"moved {len(run)} cell{'s' * (len(run) > 1)} of the line and its corner "
+                                     f"'{corner}' {k} {axis} {way} to line it up")
+    return True
+
+
 def _extend_head(g, get, border, r, c, reach=10):
     """An arrowhead that stops 2-10 blank cells short of the box it points at: carry its line
     across the gap so it touches. Returns True if it moved."""
@@ -2191,6 +2243,8 @@ def _repair_connector_once(g):
                     or p == ("|" if a in "UD" else "-")
                 if (p in want or straight) and (pr, pc) not in border and g.free(nr, nc) \
                         and g.cells.get((pr, pc), (" ", 1))[1] == 1:
+                    if straight and _shift_run(g, get, border, pr, pc, a, sr, sc):
+                        return True
                     q = g.ch(pr, pc)
                     g.put(pr, pc, " ")
                     g.put(nr, nc, q)
@@ -2261,8 +2315,15 @@ def grid_text(cells):
 def repair(cells, limit=200):
     """Fix typical misalignment. Returns (cells, edits); edits carry 1-based grid row/col."""
     g = _Grid(cells)
+    seen = {}                                               # every grid so far -> edits made by then
+    state = lambda: frozenset(kv for kv in g.cells.items() if kv[1] != (" ", 1))
     for _ in range(limit):
+        seen[state()] = len(g.edits)
         if not (_repair_box_once(g) or _repair_connector_once(g)):
+            break
+        back = seen.get(state())
+        if back is not None:                                # a fix undid an earlier one: drop the loop, stop
+            del g.edits[back:]
             break
     return g.cells, g.edits
 

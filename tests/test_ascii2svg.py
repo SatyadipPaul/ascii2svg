@@ -878,6 +878,47 @@ def test_repair_reaches_bigger_offsets():
     assert r["status"] == "ok" and r["repair"]["text"].split("\n")[3:7] == ["     |"] * 3 + ["     v"]
 
 
+
+def test_repair_moves_a_line_with_its_corner_instead_of_oscillating():
+    # the '│' and '┘' agree on a column one right of the box's '┬': moving the '│' alone opened
+    # the same gap at the '┘', the next pass moved it back, and repair ping-ponged 200 times
+    bad = ("    │  ┌──────┴───────┐       ┌──────┴───────┐\n"
+           "    │  │ Reply now    │       │ Price engine │\n"
+           "    │  └──────┬───────┘       └──────┬───────┘\n"
+           "    │         │                       │\n"
+           "    │◀────────┴───────────────────────┘")
+    _, r = a2s.render(bad, repair=True)
+    assert r["status"] == "ok" and not r["warnings"], r["warnings"]
+    assert 1 <= len(r["repair"]["edits"]) <= 5, r["repair"]["edits"]
+    assert r["repair"]["text"].split("\n")[3:] == ["│         │                      │",
+                                                    "│◀────────┴──────────────────────┘"]
+    # the corner can also move away from its line, which then grows by a cell
+    grow = "┌──────┐\n│  A   │\n└───┬──┘\n   │\n───┘"
+    _, r = a2s.render(grow, repair=True)
+    assert r["status"] == "ok" and r["repair"]["text"].split("\n")[3:] == ["    │", "────┘"]
+    # whatever it can't fix, repair stops rather than undoing its own edit
+    _, r = a2s.render(bad, repair=True)
+    fixes = [(e["line"], e["col"]) for e in r["repair"]["edits"]]
+    assert len(fixes) == len(set(fixes)), fixes
+
+
+def test_repair_stops_when_a_fix_would_undo_an_earlier_one():
+    flip = {"n": 0}
+    def ping_pong(g):                                       # a fixer that always undoes itself
+        flip["n"] += 1
+        a, b = ((0, 0), (0, 1)) if flip["n"] % 2 else ((0, 1), (0, 0))
+        g.put(*b, g.ch(*a))
+        g.put(*a, " ")
+        g.note(*b, "moved")
+        return True
+    saved = a2s._repair_connector_once
+    a2s._repair_connector_once = ping_pong
+    try:
+        cells, edits = a2s.repair({(0, 0): ("x", 1)})
+    finally:
+        a2s._repair_connector_once = saved
+    assert flip["n"] == 2 and edits == [] and cells[(0, 0)] == ("x", 1), (flip, edits)
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0
