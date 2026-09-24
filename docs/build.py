@@ -11,6 +11,7 @@ LIVE = ["--theme", "auto", "--color", "--animate", "flow"]
 IMAGES = [
     ("docs/examples/banner.txt", "docs/banner.svg",       # docs/make_banner.py writes it; static, so it
      ["--theme", "auto", "--color", "--title", "ascii2svg"]),  # shows even where animation never starts
+    ("docs/examples/timeline.txt", "docs/timeline.svg", LIVE + ["--title", "ascii2svg, release by release"]),  # make_timeline.py
     ("docs/examples/roadmap.txt", "docs/roadmap.svg", LIVE + ["--title", "ascii2svg roadmap"]),   # docs/make_roadmap.py
     ("docs/examples/how-it-works.txt", "docs/how-it-works.svg", LIVE),
     ("docs/examples/workflow.txt", "docs/workflow.svg", LIVE),
@@ -61,6 +62,7 @@ EXAMPLES = [
     ("Mermaid-style: bar chart", "docs/examples/mermaid/bar-chart.txt"),
     ("Mermaid-style: XY line chart", "docs/examples/mermaid/xy-line-chart.txt"),
     ("Mermaid-style: quadrant", "docs/examples/mermaid/quadrant.txt"),
+    ("Release timeline", "docs/examples/timeline.txt"),
     ("This project's roadmap", "docs/examples/roadmap.txt"),
     ("Workflow (plain ASCII)", "docs/examples/workflow.txt"),
     ("How ascii2svg works", "docs/examples/how-it-works.txt"),

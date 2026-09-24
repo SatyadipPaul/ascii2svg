@@ -411,9 +411,17 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 
 ## Roadmap
 
-<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/roadmap.svg" width="880" alt="The ascii2svg roadmap drawn by ascii2svg: a progress bar in block characters, six shipped milestones (1.0 to 1.8) snaking through a solid container with flowing arrows, and six planned items in dashed boxes inside a dashed container"></p>
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/timeline.svg" width="700" alt="ascii2svg release by release, drawn by ascii2svg: a vertical spine of version boxes from 1.0 at the bottom to 1.8, each with a dotted leader to a diamond marker and what it shipped, arrows flowing upward, and a dashed next box at the top with the planned work"></p>
 
-<p align="center"><sub>Drawn by ascii2svg from <a href="https://github.com/SatyadipPaul/ascii2svg/blob/main/docs/examples/roadmap.txt">plain text</a>: block-character progress, border titles, flowing arrows, dashed boxes for what's planned, and colour that follows your theme.</sub></p>
+<p align="center"><sub>Drawn by ascii2svg from <a href="https://github.com/SatyadipPaul/ascii2svg/blob/main/docs/examples/timeline.txt">plain text</a>: version boxes on a spine, dotted leaders ending in diamond markers (hollow for what's planned), pulses flowing from each release to the next, and the dashed future on top.</sub></p>
+
+<details>
+<summary><b>The same roadmap as a board</b></summary>
+<br>
+
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/roadmap.svg" width="820" alt="The ascii2svg roadmap as a board: a block-character progress bar, six shipped milestones snaking through a solid container, and six planned items in dashed boxes"></p>
+
+</details>
 
 <details>
 <summary><b>The roadmap as a checklist</b></summary>

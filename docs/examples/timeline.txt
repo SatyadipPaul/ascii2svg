@@ -1,0 +1,57 @@
+                              ascii2svg, release by release
+
+                                            ▲
+                                            ╎
+                                            ╎
+            vertical ER connectors,         ╎             bigger repairs,
+                ASCII UML heads         ┌╌╌╌┴╌╌╌┐         a JS / npm port
+                       ◇╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
+                                        └╌╌╌┬╌╌╌┘
+                                            ▲
+                                            │                       UML heads,
+                                        ┌───┴───┐                 ER crow's feet
+                                        │  1.8  ├┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈◆
+                                        └───┬───┘
+                                            ▲
+                     dashed lines,          │
+                     dashed boxes       ┌───┴───┐
+                           ◆┈┈┈┈┈┈┈┈┈┈┈┈┤  1.7  │
+                                        └───┬───┘
+                                            ▲
+                                            │          block charts, diagonals,
+                                        ┌───┴───┐              diamonds
+                                        │  1.6  ├┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈◆
+                                        └───┬───┘
+                                            ▲
+         --repair for                       │
+      LLM-drawn diagrams                ┌───┴───┐
+               ◆┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┤  1.5  │
+                                        └───┬───┘
+                                            ▲
+                                            │     browser playground,
+                                        ┌───┴───┐     MCP server
+                                        │  1.4  ├┈┈┈┈┈┈┈┈┈┈◆
+                                        └───┬───┘
+                                            ▲
+         agent CLI: JSON reports,           │
+             hints, --describe          ┌───┴───┐
+                     ◆┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┤  1.3  │
+                                        └───┬───┘
+                                            ▲
+                                            │                on PyPI, library API,
+                                        ┌───┴───┐                 MIT licence
+                                        │  1.2  ├┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈◆
+                                        └───┬───┘
+                                            ▲
+                 colour, light / dark,      │
+               draw and flow animation  ┌───┴───┐
+                             ◆┈┈┈┈┈┈┈┈┈┈┤  1.1  │
+                                        └───┬───┘
+                                            ▲
+                                            │         first release: CLI,
+                                        ┌───┴───┐   Claude skill, 1:1 check
+                                        │  1.0  ├┈┈┈┈┈┈┈┈┈┈┈┈┈┈◆
+                                        └───┬───┘
+                                            ▲
+                                            │
+                                            ●
