@@ -226,6 +226,7 @@ ascii2svg focuses on box diagrams, a verified 1:1 result, and agent workflows.
 | ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ╭ ╮ ╰ ╯ ═ ║ ╔ ╗ ╚ ╝ ╪ ▼ ▲ ▶︎ ◀︎ | always | – |
 | Dashed ╌ ╎ ┄ ┆ ┈ ┊ | always, with 2, 3 or 4 dashes per cell; they join, box and carry arrows like any line | – |
 | ASCII `+` `-` `\|` | they form a closed box, or attach to one directly or through `+` junctions | stay text |
+| ASCII rounded corners `.` above, `'` or `` ` `` below | they close a box (`.--.` over `'--'`), or bend a connector that is drawn (`---.` over `\|`) | stay text (`It's`, `a.b`, `tree` output) |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
 | ╱ ╲ ╳, and ASCII `/` `\` | Unicode always; ASCII when two or more run along their own slope, with no letter or digit beside them | stay text |
 | ASCII UML heads `<\|` `\|>` `<>` `*` | on a line that touches a box (or comes one space short): inheritance, aggregation, composition, drawn across both cells | stay text |
@@ -438,7 +439,8 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 - [x] ER crow's feet on vertical connectors (`-+-` ticks, `o` rings, `/|\` and `\|/` feet)
 - [x] ASCII UML heads (`<|--` `<>--` `*--`) and ASCII dashed and dotted lines (`- - ->` `....>` `:`)
 - [ ] Repairing bigger misalignments (today: pieces up to two cells off, walls up to three)
-- [ ] ASCII rounded corners (`.-'`) and free-floating connectors between plain words
+- [x] ASCII rounded corners and bends (`.--.` `'--'`)
+- [ ] Free-floating connectors between plain words, and vertical ASCII UML heads
 - [ ] A JS/npm port
 - [ ] Every look checked in Firefox, Safari and cairo (`--png`); today: Chromium, with the static look in cairo and resvg
 
@@ -450,7 +452,7 @@ Issues and pull requests are welcome, and a diagram that renders wrongly is the 
 report there is: paste the text and say what you expected.
 
 ```bash
-python3 tests/test_ascii2svg.py        # 60 tests over 28 test diagrams; or: python3 -m pytest tests
+python3 tests/test_ascii2svg.py        # 61 tests over 29 test diagrams; or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image on this page and the playground files
 ```
 

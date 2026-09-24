@@ -64,10 +64,13 @@ put it back in the user's file, so their source matches the picture.
 - ASCII `+ - |` and arrowheads `v ^ < >`: only when they form a closed box or attach to
   one (directly, or through `+` junctions). Otherwise they stay text — so `a->b`,
   `--dry-run`, `user_id`, markdown tables and `|--` file trees are left exactly as written.
+- ASCII rounded corners, `.` on top and `'` (or a backtick) below: they close a box
+  (`.---.` over `'---'`) or bend a connector that is drawn (`---.` over `|`), drawn as `╭ ╮ ╰ ╯`.
 
 ## Writing diagrams that render well
 
-- Close every box: `+---+` / `|   |` / `+---+`, or `┌───┐` / `│   │` / `└───┘`.
+- Close every box: `+---+` / `|   |` / `+---+`, or `┌───┐` / `│   │` / `└───┘`
+  (`.---.` / `|   |` / `'---'` for rounded corners; `--square` keeps only these rounded).
 - Keep one space between a label and the box wall.
 - Use `+` where a connector meets a box edge or branches; end arrows with `v ^ < >`
   (or `▼ ▲ ▶ ◀`) touching, or one space from, the target box.

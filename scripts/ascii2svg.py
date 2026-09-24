@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.10.0"
+__version__ = "1.11.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -203,6 +203,12 @@ CORR["<"] |= {"◁", "◇", "╴"}                             # ASCII UML heads
 CORR[">"] |= {"▷", "◇", "╶"}
 CORR["|"] |= {"╶", "╴"}
 CORR["*"] = {"◆"}
+CORR["."] |= {"╭", "╮", "┬"}                             # ASCII rounded corners: .--.  '--'  `--'
+CORR["'"] = {"╰", "╯", "┴"}
+CORR["`"] = {"╰", "┴"}
+ROUND_TOP, ROUND_BOTTOM = {"."}, {"'", "`"}
+ROUNDC = ROUND_TOP | ROUND_BOTTOM
+ROUND_OF = {"┌": "╭", "┐": "╮", "└": "╰", "┘": "╯"}
 
 
 def _block_table():
@@ -275,20 +281,21 @@ def interpret(cells, nrows, ncols):
                 out[(r, y)] = er_map[ch(r, y)]
         return out
 
-    # 1) closed boxes: '+' corners, '-' edges (a title may sit on the top edge), '|' walls
+    # 1) closed boxes: '+' corners, '-' edges (a title may sit on the top edge), '|' walls;
+    #    rounded corners are a dot on top and a quote or backtick below
     for (r, c) in sorted(cells):
-        if ch(r, c) != "+" or ch(r, c + 1) != "-":
+        if ch(r, c) not in {"+"} | ROUND_TOP or ch(r, c + 1) != "-":
             continue
         for c2 in range(c + 2, ncols):
             t2 = ch(r, c2)
             if t2 in ("|", ""):
                 break
-            if t2 != "+" or ch(r, c2 - 1) != "-":
+            if t2 not in {"+"} | ROUND_TOP or ch(r, c2 - 1) != "-":
                 continue
             r2 = None
             for rr in range(r + 1, nrows):
                 a, b = ch(rr, c), ch(rr, c2)
-                if (a == "+" and b == "+" and rr > r + 1
+                if (a in {"+"} | ROUND_BOTTOM and b in {"+", "'"} and rr > r + 1
                         and all(ch(rr, x) in "-+" for x in range(c + 1, c2))):
                     r2 = rr
                     break
@@ -418,6 +425,26 @@ def interpret(cells, nrows, ncols):
                 vruns.append((c, a, r - 1))
             else:
                 r += 1
+    def bend(r, c):
+        """A rounded bend on a connector: a dot with '|' (or a 'v' head) below, a quote or backtick with
+        '|' (or a '^' head) above, and a '-' on exactly one side (the other side blank, an arrowhead
+        or the edge of the grid)."""
+        t = ch(r, c)
+        if (r, c) in struct or t not in ROUNDC or (t == "`" and ch(r, c + 1) != "-"):
+            return None
+        v = "D" if t == "." else "U"
+        dr = DIRS[v][0]
+        if ch(r + dr, c) not in ("|", "v" if v == "D" else "^") or ch(r - dr, c) == "|":
+            return None
+        sides = [d for d in "LR" if ch(r, c + DIRS[d][1]) == "-"]
+        other = ch(r, c + (1 if sides == ["L"] else -1))
+        if len(sides) != 1 or other not in (" ", "<", ">", ""):
+            return None
+        return {v, sides[0]}
+
+    bends = {k: bend(*k) for k in sorted(cells)}
+    bends = {k: a for k, a in bends.items() if a}
+
     # dashed and dotted: '-.-.-' / '.....' (any dot makes the run dotted), '- - -' (spaced dashes),
     # and ':' down a column; they join like '-' and '|' runs do
     dash = {}
@@ -425,8 +452,12 @@ def interpret(cells, nrows, ncols):
     for r in range(nrows):
         line = "".join(ch(r, c) or " " for c in range(ncols))
         for m in re.finditer(r"[-.]{3,}", line):
-            if "." in m.group() and all((r, c) not in struct for c in range(m.start(), m.end())):
-                druns.append((r, m.start(), m.end() - 1))
+            a, b = m.start(), m.end() - 1
+            a += (r, a) in bends
+            b -= (r, b) in bends
+            if (b - a >= 2 and "." in line[a:b + 1]
+                    and all((r, c) not in struct for c in range(a, b + 1))):
+                druns.append((r, a, b))
         for m in re.finditer(r"-(?: -){2,}", line):
             if all((r, c) not in struct for c in range(m.start(), m.end())):
                 sruns.append((r, m.start(), m.end() - 1))
@@ -442,6 +473,7 @@ def interpret(cells, nrows, ncols):
             else:
                 r += 1
     pluses = [k for k, (t, _) in sorted(cells.items()) if t == "+" and k not in struct]
+
     heads = [k for k, (t, _) in sorted(cells.items()) if t in ASCII_HEADS and k not in struct]
 
     def head_ok(r, c):
@@ -464,6 +496,8 @@ def interpret(cells, nrows, ncols):
         n = (r + dr, c + dc)
         tn = ch(*n)
         if n in struct:
+            if n in bends:                                   # the far end of a rounded bend
+                return (tn == "." and side == "U") or (tn != "." and side == "D")
             return tn == "+" or (tn in "|:" and side in "UD") or (tn in "-." and side in "LR")
         return tn in ARMS and OPP[side] in ARMS[tn]
 
@@ -488,7 +522,7 @@ def interpret(cells, nrows, ncols):
             if is_s(r, cc):
                 ok = True
                 ends.append("S")
-            elif t == "+" or t == " ":
+            elif t == "+" or t == " " or (r, cc) in bends:
                 ends.append("O")
             elif t == want and head_ok(r, cc):
                 ends.append(("A", cc))
@@ -547,6 +581,8 @@ def interpret(cells, nrows, ncols):
                 t = ch(rr, c)
                 if is_s(rr, c):
                     ok = True
+                elif (rr, c) in bends:
+                    pass                                    # joins once the bend does
                 elif t == want and head_ok(rr, c):
                     marks.append((rr, c))
                     if points_into(rr, c):
@@ -567,6 +603,10 @@ def interpret(cells, nrows, ncols):
             if solid and len(cand) >= 2:
                 struct.add((r, c))
                 changed = True
+        for (r, c), arms in bends.items():
+            if (r, c) not in struct and any(is_s(r + DIRS[d][0], c + DIRS[d][1]) for d in arms):
+                struct.add((r, c))
+                changed = True
         for (r, c) in heads:
             if (r, c) not in struct and head_ok(r, c) and tail_ok(r, c):
                 struct.add((r, c))
@@ -580,6 +620,12 @@ def interpret(cells, nrows, ncols):
         if er.get(n, "─") not in ("─", "│"):
             return False                                    # ER marks sit on the line; walls get no arm to them
         perpendicular = (own == "-" and d in "UD") or (own == "|" and d in "LR")
+        if n in struct and t in ROUNDC:
+            if own in ROUNDC:
+                return False                                # two corners side by side don't join
+            if perpendicular:
+                return False
+            return d in "LR" or (d == "U" and t in ROUND_TOP) or (d == "D" and t in ROUND_BOTTOM)
         if n in struct:
             if t == "-":
                 return d in "LR"
@@ -605,6 +651,12 @@ def interpret(cells, nrows, ncols):
             continue
         if t in ASCII_HEADS:
             drawn[(r, c)] = ASCII_HEADS[t]
+            continue
+        if t in ROUNDC:
+            arms = {"D" if t in ROUND_TOP else "U"} | {d for d in "LR" if conn(r, c, d, t)}
+            if len(arms) > 1:
+                g = SINGLE_OF[frozenset(arms)]
+                drawn[(r, c)] = ROUND_OF.get(g, g)
             continue
         arms = set("LR" if t == "-" else "UD" if t == "|" else "")
         arms |= {d for d in "UDLR" if conn(r, c, d, t)}
@@ -2103,7 +2155,8 @@ looks (all optional, and all keep the 1:1 guarantee):
 
 what gets drawn:
   Unicode lines ─│┌┐└┘├┤┬┴┼╭╮╰╯═║╔╗╚╝╪ and arrows ▼▲▶◀ are drawn as lines.
-  ASCII + - | and v ^ < > are drawn only when they form a box or attach to one.
+  ASCII + - | and v ^ < > are drawn only when they form a box or attach to one;
+  so are rounded corners: . on top and ' below (.--. over '--', or ---. over |).
   Everything else (hyphens in words, a->b, user_id, markdown tables) stays text,
   in exactly the same cell. When unsure, it stays text.
 

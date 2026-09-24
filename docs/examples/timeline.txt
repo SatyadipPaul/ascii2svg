@@ -3,10 +3,15 @@
                                             ▲
                                             ╎
                                             ╎
-            ASCII rounded corners,          ╎             bigger repairs,
-           free-floating connectors     ┌╌╌╌┴╌╌╌┐         a JS / npm port
+                bigger repairs,             ╎        free-floating connectors,
+                a JS / npm port         ┌╌╌╌┴╌╌╌┐    vertical ASCII UML heads
                        ◇╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
                                         └╌╌╌┬╌╌╌┘
+                                            ▲
+               ASCII rounded corners        │
+                 and rounded bends      ┌───┴───┐
+                         ◆┈┈┈┈┈┈┈┈┈┈┈┈┈┈┤ 1.11  │
+                                        └───┬───┘
                                             ▲
                                             │       ASCII UML heads <|  <>  *,
                                         ┌───┴───┐ dashed  - - ->  and dotted  ...>

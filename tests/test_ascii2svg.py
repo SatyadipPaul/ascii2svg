@@ -793,6 +793,26 @@ def test_ascii_dashed_and_dotted_lines():
         assert not glyphs & {t for t, _ in draw.values()}, words
 
 
+def test_ascii_rounded_corners():
+    text = fx("rounded_ascii.txt")
+    cells, draw, svg, stats, _ = pipeline(text)
+    assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 7
+    drawn = [t for t, _ in draw.values()]
+    assert drawn.count("╭") == 6 and drawn.count("╯") == 7              # six boxes, one bend each way
+    assert drawn.count("┌") == 1                                           # a '+' box stays square beside them
+    _, r = a2s.render(text, describe=True)
+    assert r["status"] == "ok" and not r["warnings"], r["warnings"]
+    edges = [(e["from"]["name"], e["to"]["name"]) for e in r["diagram"]["edges"]]
+    assert edges == [("Ingress", "Web app"), ("Web app", "Worker"), ("Cron", "Worker"), ("Backup", "Postgres")], edges
+    _, _, sq, _, _ = pipeline(text, square=True)
+    plates = sorted(re.findall(r'rx="([\d.]+)" class="fill"', sq))
+    assert plates == ["0"] + ["4"] * 6, plates                             # --square: only '+' corners go sharp
+    for words in ("It's done. Don't -- fine.", "a.b.c --- 'quoted' `code`", "He said '---' and left.",
+                  "project\n|-- src\n|   `-- main.py\n`-- README.md", ".\n|\n'"):
+        cells, draw, svg, _, _ = pipeline(words)
+        assert not set("╭╮╰╯") & {t for t, _ in draw.values()}, words
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0
