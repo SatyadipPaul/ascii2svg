@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.14.0"
+__version__ = "1.15.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -2648,6 +2648,12 @@ def schema():
             "library": "ascii2svg.render(text, **options) -> (markup, report)"}
 
 
+# Where files really are. The npm package runs this module in Pyodide (CPython on WebAssembly),
+# whose filesystem is virtual: its CLI mounts the host's drives and sets these two, so a host path
+# opens through the mount (_fs) and reports still show the path as the user gave it (_host).
+_fs = _host = lambda path: path
+
+
 def _read_stdin(explicit):
     """Read stdin. Implicit stdin (no input argument) gives up if nothing arrives within
     STDIN_WAIT seconds, so an agent that forgot the file gets an error instead of a hang."""
@@ -2655,6 +2661,12 @@ def _read_stdin(explicit):
         raise ValueError("no diagram given: pass a file path, '-' with stdin, or --text")
     if explicit:
         return sys.stdin.buffer.read()
+    if sys.platform == "emscripten":                      # no threads here: the npm CLI waits for stdin itself
+        data = sys.stdin.buffer.read()
+        if not data:
+            raise ValueError("no diagram given: nothing arrived on stdin. Pass a file path, "
+                             "'-' to wait for stdin, or --text")
+        return data
     import os
     import threading
     got, parts, fd = threading.Event(), [], sys.stdin.fileno()
@@ -2690,7 +2702,7 @@ def _sources(args):
             else:
                 label = name
                 try:
-                    data = open(name, "rb").read()
+                    data = open(_fs(name), "rb").read()
                 except OSError as e:
                     raise ValueError(f"cannot read {name}: {e.strerror}")
         except ValueError as e:
@@ -2931,10 +2943,11 @@ def _mcp_call(name, a):
         return _failed({"input": "diagram"}, str(e))
     kind = "html" if report["html"] else "svg"
     if path:
-        path = os.path.abspath(path)
+        path = os.path.abspath(_fs(path))
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8", newline="") as f:
             f.write(markup)
+        path = _host(path)
         report[kind] = path
         report["summary"] = report["summary"].replace("; 1:1", f" to {path}; 1:1", 1)
     else:
@@ -2946,52 +2959,55 @@ def serve_mcp():
     """Serve MCP on stdin/stdout until stdin closes."""
     if hasattr(sys.stdin, "reconfigure"):
         sys.stdin.reconfigure(encoding="utf-8")
-    names = {t["name"] for t in MCP_TOOLS}
-
-    def send(msg):
-        sys.stdout.write(json.dumps(msg) + "\n")
-        sys.stdout.flush()
-
     for line in sys.stdin:
-        if not line.strip():
-            continue
-        try:
-            msg = json.loads(line)
-        except ValueError:
-            send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}})
-            continue
-        mid, method, params = msg.get("id"), msg.get("method"), msg.get("params") or {}
-        if mid is None:
-            continue                                        # a notification: nothing to answer
-        reply = {"jsonrpc": "2.0", "id": mid}
-        try:
-            if method == "initialize":
-                asked = params.get("protocolVersion")
-                reply["result"] = {
-                    "protocolVersion": asked if asked in MCP_VERSIONS else MCP_VERSIONS[0],
-                    "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": {"name": "ascii2svg", "version": __version__},
-                    "instructions": "Render text box diagrams as SVG, 1:1. Draft the diagram, call check_diagram, "
-                                    "apply the hints until status is ok and the edges are what you meant, then "
-                                    "call render_diagram with a preset for the destination."}
-            elif method == "ping":
-                reply["result"] = {}
-            elif method == "tools/list":
-                reply["result"] = {"tools": MCP_TOOLS}
-            elif method == "tools/call":
-                if params.get("name") not in names:
-                    reply["error"] = {"code": -32602, "message": f"unknown tool: {params.get('name')}"}
-                else:
-                    report = _mcp_call(params["name"], params.get("arguments") or {})
-                    reply["result"] = {"content": [{"type": "text", "text": json.dumps(report, ensure_ascii=False)}],
-                                       "isError": report["status"] in ("bad_input", "usage_error", "self_check_failed")}
-            else:
-                reply["error"] = {"code": -32601, "message": f"method not found: {method}"}
-        except Exception as e:                              # never let one request kill the server
-            reply.pop("result", None)
-            reply["error"] = {"code": -32603, "message": f"internal error: {e}"}
-        send(reply)
+        out = mcp_reply(line)
+        if out is not None:
+            sys.stdout.write(out + "\n")
+            sys.stdout.flush()
     return 0
+
+
+def mcp_reply(line):
+    """The JSON-RPC reply to one line of MCP input, or None when there is nothing to answer."""
+    names = {t["name"] for t in MCP_TOOLS}
+    send = json.dumps
+    if not line.strip():
+        return None
+    try:
+        msg = json.loads(line)
+    except ValueError:
+        return send({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}})
+    mid, method, params = msg.get("id"), msg.get("method"), msg.get("params") or {}
+    if mid is None:
+        return None                                     # a notification: nothing to answer
+    reply = {"jsonrpc": "2.0", "id": mid}
+    try:
+        if method == "initialize":
+            asked = params.get("protocolVersion")
+            reply["result"] = {
+                "protocolVersion": asked if asked in MCP_VERSIONS else MCP_VERSIONS[0],
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": "ascii2svg", "version": __version__},
+                "instructions": "Render text box diagrams as SVG, 1:1. Draft the diagram, call check_diagram, "
+                                "apply the hints until status is ok and the edges are what you meant, then "
+                                "call render_diagram with a preset for the destination."}
+        elif method == "ping":
+            reply["result"] = {}
+        elif method == "tools/list":
+            reply["result"] = {"tools": MCP_TOOLS}
+        elif method == "tools/call":
+            if params.get("name") not in names:
+                reply["error"] = {"code": -32602, "message": f"unknown tool: {params.get('name')}"}
+            else:
+                report = _mcp_call(params["name"], params.get("arguments") or {})
+                reply["result"] = {"content": [{"type": "text", "text": json.dumps(report, ensure_ascii=False)}],
+                                   "isError": report["status"] in ("bad_input", "usage_error", "self_check_failed")}
+        else:
+            reply["error"] = {"code": -32601, "message": f"method not found: {method}"}
+    except Exception as e:                              # never let one request kill the server
+        reply.pop("result", None)
+        reply["error"] = {"code": -32603, "message": f"internal error: {e}"}
+    return send(reply)
 
 
 def _usage_hint(message):
@@ -3069,7 +3085,7 @@ def main(argv=None) -> int:
     except ValueError as e:
         return fail(1, "bad_input", str(e))
     many = len(jobs) > 1 or args.all_blocks
-    outdir = args.output if args.output and (args.output.endswith(("/", "\\")) or os.path.isdir(args.output)) else None
+    outdir = args.output if args.output and (args.output.endswith(("/", "\\")) or os.path.isdir(_fs(args.output))) else None
     writes = not args.check
     ext = ".html" if args.html else ".svg"
     if many and args.output and not outdir:
@@ -3081,12 +3097,15 @@ def main(argv=None) -> int:
     if writes and args.png is not None:
         if not args.output and not args.png:
             return fail(1, "usage_error", "--png needs a path when -o is not given", "add -o NAME.svg or --png NAME.png")
+        if sys.platform == "emscripten":
+            return fail(1, "usage_error", "--png is not available in the npm package",
+                        "use the Python package for PNG: pip install ascii2svg cairosvg")
         try:
             import cairosvg
         except ImportError:
             return fail(1, "usage_error", "--png needs cairosvg", "pip install cairosvg")
     if outdir and writes:
-        os.makedirs(outdir, exist_ok=True)
+        os.makedirs(_fs(outdir), exist_ok=True)
 
     results, skipped, used = [], [], set()
     for i, job in enumerate(jobs, 1):
@@ -3106,7 +3125,7 @@ def main(argv=None) -> int:
         out = to_html(svg, args.title, args.theme) if args.html else svg
         target = os.path.join(outdir, _out_name(job, i, ext, used)) if outdir else args.output
         if writes and target:
-            with open(target, "w", encoding="utf-8", newline="") as f:   # same bytes on every OS
+            with open(_fs(target), "w", encoding="utf-8", newline="") as f:   # same bytes on every OS
                 f.write(out)
             report["html" if args.html else "svg"] = target
         if writes and args.png is not None:
@@ -3150,7 +3169,9 @@ def main(argv=None) -> int:
         emit(agg)
     else:
         for r in reports:
-            print(f"ascii2svg: {r['source']}: {r['summary']}", file=sys.stderr)
+            src = r["source"]
+            where = src.get("input", "?") + (f" block {src['block']} (line {src['line']})" if src.get("block") else "")
+            print(f"ascii2svg: {where}: {r['summary']}", file=sys.stderr)
         print(f"ascii2svg: {summary}", file=sys.stderr)
     return code
 

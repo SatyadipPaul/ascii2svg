@@ -2,6 +2,8 @@ name: publish
 
 # Publishing a GitHub release (tag vX.Y.Z) builds the package, uploads it to PyPI with
 # Trusted Publishing (no tokens stored anywhere) and attaches ascii2svg.skill to the release.
+# The npm package (@satyadippaul/ascii2svg) goes out the same way, once the repository variable
+# NPM_PUBLISH is "true" (after the first publish by hand and linking this workflow on npmjs.com).
 
 on:
   release:
@@ -57,3 +59,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" dist/ascii2svg.skill --clobber
+
+  npm:
+    needs: build
+    if: vars.NPM_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write                                   # npm trusted publishing (OIDC), with provenance
+    defaults:
+      run:
+        working-directory: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      - run: npm install -g npm@latest                  # trusted publishing needs npm 11.5.1 or later
+      - name: Release tag matches the npm package version
+        run: |
+          v="v$(node -p 'require("./package.json").version')"
+          if [ "$v" != "$GITHUB_REF_NAME" ]; then echo "tag $GITHUB_REF_NAME != npm package $v"; exit 1; fi
+      - run: npm ci
+      - run: npm test
+      - run: npm publish

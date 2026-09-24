@@ -4,9 +4,14 @@
                                             ╎
                                             ╎
                                             ╎             Firefox, Safari
-                a JS / npm port         ┌╌╌╌┴╌╌╌┐        and cairo checks
-                       ◇╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
+                                        ┌╌╌╌┴╌╌╌┐        and cairo checks
+                                        ╎ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
                                         └╌╌╌┬╌╌╌┘
+                                            ▲
+              on npm: the same module       │
+                  in WebAssembly        ┌───┴───┐
+                         ◆┈┈┈┈┈┈┈┈┈┈┈┈┈┈┤ 1.15  │
+                                        └───┬───┘
                                             ▲
                                             │       bigger repairs: boxes grow,
                                         ┌───┴───┐       split lines join up

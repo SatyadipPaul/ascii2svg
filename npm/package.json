@@ -1,0 +1,28 @@
+{
+  "name": "@satyadippaul/ascii2svg",
+  "version": "1.15.0",
+  "description": "Render ASCII and Unicode box diagrams as clean SVG, every character in its exact cell, with a 1:1 self-check. The ascii2svg Python library running in WebAssembly.",
+  "keywords": ["ascii", "diagram", "svg", "ascii-art", "unicode", "box-drawing", "llm", "mcp", "pyodide", "wasm"],
+  "homepage": "https://satyadippaul.github.io/ascii2svg/",
+  "repository": { "type": "git", "url": "git+https://github.com/SatyadipPaul/ascii2svg.git", "directory": "npm" },
+  "bugs": "https://github.com/SatyadipPaul/ascii2svg/issues",
+  "license": "MIT",
+  "author": "Satyadip Paul",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.js" },
+    "./ascii2svg.py": "./ascii2svg.py"
+  },
+  "types": "./index.d.ts",
+  "bin": { "ascii2svg": "cli.js" },
+  "files": ["index.js", "index.d.ts", "cli.js", "ascii2svg.py", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "dependencies": { "pyodide": "314.0.7" },
+  "scripts": {
+    "sync": "node -e \"const fs=require('fs');fs.copyFileSync('../scripts/ascii2svg.py','ascii2svg.py');fs.copyFileSync('../LICENSE','LICENSE')\"",
+    "pretest": "npm run sync",
+    "prepack": "npm run sync",
+    "test": "node --test"
+  },
+  "publishConfig": { "access": "public" }
+}

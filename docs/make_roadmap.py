@@ -9,11 +9,11 @@ import os
 
 SHIPPED = [("1.0 – 1.2 foundations", "boxes, arrows, 1:1", "colour · themes · motion"),
            ("1.3 agent CLI", "JSON reports · hints", "--describe · --schema"),
-           ("1.4 everywhere", "browser playground", "MCP server · skill"),
+           ("1.4 · 1.15 everywhere", "playground · npm", "MCP server · skill"),
            ("1.5 · 1.14 repair", "--repair for LLMs", "up to 12 columns off"),
            ("1.6 – 1.7 shapes", "block charts, diamonds", "dashed lines"),
            ("1.8 – 1.13 notation", "UML, ER, curves, dashes", "arrows between words")]
-NEXT = [("JS / npm port", ""), ("Firefox, Safari", "and cairo checks")]
+NEXT = [("Firefox, Safari", "and cairo checks")]
 
 
 class Canvas:

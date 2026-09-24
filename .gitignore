@@ -7,3 +7,8 @@ dist/
 .pytest_cache/
 tests/_tmp_out/
 dist/
+# npm package: the Python source and licence are copied in when testing or packing
+npm/node_modules/
+npm/ascii2svg.py
+npm/LICENSE
+npm/*.tgz

@@ -56,6 +56,8 @@ pip install ascii2svg
 ascii2svg diagram.txt -o diagram.svg --preset readme     # colour, light/dark, animation
 ```
 
+**From JavaScript**, no Python needed: `npm install @satyadippaul/ascii2svg` (see [Install](#install)).
+
 **With Claude:** add the [skill](https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill),
 then just ask *"turn this diagram into an image for my slides"*. Or connect the MCP server:
 `claude mcp add ascii2svg -- ascii2svg --mcp`.
@@ -264,6 +266,24 @@ pip install "ascii2svg[width,png]"    # optional: wcwidth (character widths) + c
 It is a single file with no dependencies, so you can also just copy
 [`scripts/ascii2svg.py`](https://github.com/SatyadipPaul/ascii2svg/blob/main/scripts/ascii2svg.py) into your project.
 
+**Node and the browser**, with no Python install:
+
+```bash
+npm install @satyadippaul/ascii2svg
+npx @satyadippaul/ascii2svg diagram.txt -o diagram.svg --preset readme
+```
+
+```js
+import { render } from "@satyadippaul/ascii2svg";
+const { markup, report } = await render(diagram, { preset: "readme", repair: true });
+```
+
+The npm package runs this same Python module in [Pyodide](https://pyodide.org) (CPython on
+WebAssembly). Its tests render every test diagram in five looks both ways and require
+byte-identical SVG and reports. The CLI and the MCP server (`npx -y @satyadippaul/ascii2svg --mcp`)
+work as with pip; only `--png` needs the Python package. Details:
+[npm/README.md](https://github.com/SatyadipPaul/ascii2svg/blob/main/npm/README.md).
+
 <details>
 <summary><b>As a Python library</b></summary>
 <br>
@@ -450,7 +470,7 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 - [x] ASCII rounded corners and bends (`.--.` `'--'`)
 - [x] Arrows between plain words (`A --> B`, `A --HTTP--> B`, `|` and `v` under a label)
 - [x] Vertical ASCII UML heads (`/_\` `<>` `*` under or over a box)
-- [ ] A JS/npm port
+- [x] On npm: `@satyadippaul/ascii2svg`, the same module in WebAssembly, byte-identical by test
 - [ ] Every look checked in Firefox, Safari and cairo (`--png`); today: Chromium, with the static look in cairo and resvg
 
 </details>
@@ -461,7 +481,7 @@ Issues and pull requests are welcome, and a diagram that renders wrongly is the 
 report there is: paste the text and say what you expected.
 
 ```bash
-python3 tests/test_ascii2svg.py        # 64 tests over 32 test diagrams; or: python3 -m pytest tests
+python3 tests/test_ascii2svg.py        # 65 tests over 32 test diagrams, plus the npm package's parity tests; or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image on this page and the playground files
 ```
 
