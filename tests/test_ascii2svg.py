@@ -1076,7 +1076,8 @@ def test_composing_guide_examples_render_cleanly():
                     "## Recipes", "## When to split instead"):
         assert heading in guide, heading
     helper = re.search(r"```python\n(.*?)```", guide, re.S).group(1)       # the grid helper runs as printed
-    out = subprocess.run([sys.executable, "-c", helper], capture_output=True, text=True, check=True).stdout
+    out = subprocess.run([sys.executable, "-c", helper], capture_output=True, check=True,     # UTF-8 on any console
+                         env={**os.environ, "PYTHONIOENCODING": "utf-8"}).stdout.decode("utf-8")
     _, r = a2s.render(out, describe=True)
     assert r["status"] == "ok" and [(e["from"]["name"], e["to"]["name"]) for e in r["diagram"]["edges"]] == \
         [("Checkout", "Payment provider")], (out, r["diagram"]["edges"])
