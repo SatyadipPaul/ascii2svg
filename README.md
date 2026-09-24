@@ -228,6 +228,8 @@ ascii2svg focuses on box diagrams, a verified 1:1 result, and agent workflows.
 | ASCII `+` `-` `\|` | they form a closed box, or attach to one directly or through `+` junctions | stay text |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
 | ╱ ╲ ╳, and ASCII `/` `\` | Unicode always; ASCII when two or more run along their own slope, with no letter or digit beside them | stay text |
+| ASCII UML heads `<\|` `\|>` `<>` `*` | on a line that touches a box (or comes one space short): inheritance, aggregation, composition, drawn across both cells | stay text |
+| ASCII dashed `- - ->` and dotted `....>` `-.-.->`, `:` down a column | they join a box or end in an arrowhead that points into one; flow pulses hop the gaps | stay text (`Loading...`, dot leaders, `- - -`) |
 | UML heads △ ▽ ◁ ▷ ◇ ◆ | a line joins them: triangles touch the parent, diamonds sit on the whole | stay text (bullets, symbols) |
 | ER marks `\|` `o` `<` `>` `{` `}`, and `-+-` `o` `/\|\` `\\|/` on vertical lines | on a connector between two boxes: across (`+--\|\|--o<`, even with a foot set in the wall) or up and down | stay text |
 | Block elements █ ▓ ▒ ░ ▀ ▄ ▌ ▐ ▁ ▂ ▃ ▅ ▆ ▇ ▏ ▎ ▍ ▋ ▊ ▉ ▖ ▗ ▘ ▝ ▚ ▞ ▙ ▛ ▜ ▟ | always, as exact rectangles, so bars and shading have no seams | – |
@@ -434,7 +436,7 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 - [x] `--repair` for LLM-drawn diagrams
 - [x] Block-element charts, diagonals and diamonds, dashed lines, UML heads, ER crow's feet
 - [x] ER crow's feet on vertical connectors (`-+-` ticks, `o` rings, `/|\` and `\|/` feet)
-- [ ] ASCII UML heads (`<|--`), ASCII dashed lines (`- - ->`)
+- [x] ASCII UML heads (`<|--` `<>--` `*--`) and ASCII dashed and dotted lines (`- - ->` `....>` `:`)
 - [ ] Repairing bigger misalignments (today: pieces up to two cells off, walls up to three)
 - [ ] ASCII rounded corners (`.-'`) and free-floating connectors between plain words
 - [ ] A JS/npm port
@@ -448,7 +450,7 @@ Issues and pull requests are welcome, and a diagram that renders wrongly is the 
 report there is: paste the text and say what you expected.
 
 ```bash
-python3 tests/test_ascii2svg.py        # 58 tests over 26 test diagrams; or: python3 -m pytest tests
+python3 tests/test_ascii2svg.py        # 60 tests over 28 test diagrams; or: python3 -m pytest tests
 python3 docs/build.py                  # regenerate every image on this page and the playground files
 ```
 
@@ -470,7 +472,8 @@ must round-trip exactly in every style and look. That's the one rule: never a wr
 - no false alarms on sequence diagrams, timelines, charts and dashed boundaries; real mistakes still warn
 - `--repair`: every LLM fixture repaired to `ok`, text provably unchanged, good diagrams untouched
 - block elements as exact rectangles; `/ \` only as runs, never inside `yes/no` or `C:\Users`
-- dashed lines keep their dash count, form boxes and carry arrows
+- dashed lines keep their dash count, form boxes and carry arrows; ASCII `- - ->`, `....>` and `:` too,
+  while `Loading...`, dot leaders and `- - -` stay text; ASCII UML heads `<|` `<>` `*` are drawn and described
 - UML triangles and diamonds, ER ticks, rings and crow's feet across and up and down; `--describe` names each relationship and its cardinality
 
 They pass with and without the optional packages.

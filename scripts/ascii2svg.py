@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.9.0"
+__version__ = "1.10.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -165,7 +165,11 @@ ARMS = {k: frozenset(v) for k, v in {
     "─": "LR", "│": "UD", "┌": "RD", "┐": "LD", "└": "UR", "┘": "UL", "├": "UDR", "┤": "UDL",
     "┬": "LRD", "┴": "LRU", "┼": "UDLR", "╭": "RD", "╮": "LD", "╰": "UR", "╯": "UL",
     "═": "LR", "║": "UD", "╔": "RD", "╗": "LD", "╚": "UR", "╝": "UL", "╪": "UDLR",
-    "╌": "LR", "╎": "UD", "┄": "LR", "┆": "UD", "┈": "LR", "┊": "UD"}.items()}
+    "╌": "LR", "╎": "UD", "┄": "LR", "┆": "UD", "┈": "LR", "┊": "UD",
+    "╴": "L", "╶": "R", "╵": "U", "╷": "D"}.items()}
+# half lines: the base of a two-cell ASCII UML head ('<|', '<>'), running on toward its connector
+HALF_AWAY = {"R": "╶", "L": "╴", "D": "╷", "U": "╵"}         # the half line on side X of a head points away
+HALF_FAMILY = {"╶": "─", "╴": "─", "╵": "│", "╷": "│"}         # read back from the SVG, a half line is a line
 DOUBLE = set("═║╔╗╚╝")
 # dashed lines join like any other line; they're drawn dashed, 2, 3 or 4 dashes per cell
 DASHED = {"╌": "2", "╎": "2", "┄": "3", "┆": "3", "┈": "4", "┊": "4"}
@@ -193,6 +197,12 @@ MARKS = UML | set(FEET) | {"○"}
 CORR = {"-": set("─┬┴┼"), "|": set("│├┤┼"), "+": set("┌┐└┘├┤┬┴┼─│"),
         "v": {"▼"}, "^": {"▲"}, ">": {"▶", FOOT_L}, "<": {"◀", FOOT_R}, "/": {"╱"}, "\\": {"╲"},
         "o": {"○"}, "{": {FOOT_R}, "}": {FOOT_L}}
+CORR["-"] |= {"╌", "┈"}                                  # ASCII dashed and dotted lines
+CORR["."], CORR[":"] = {"┈"}, {"┊"}
+CORR["<"] |= {"◁", "◇", "╴"}                             # ASCII UML heads: <|  |>  <>  *
+CORR[">"] |= {"▷", "◇", "╶"}
+CORR["|"] |= {"╶", "╴"}
+CORR["*"] = {"◆"}
 
 
 def _block_table():
@@ -364,6 +374,28 @@ def interpret(cells, nrows, ncols):
     uni = lambda r, c: ch(r, c) in ARMS or ch(r, c) in HEADS or ch(r, c) in UML
     is_s = lambda r, c: (r, c) in struct or uni(r, c)
 
+    # 1c) ASCII UML heads on a horizontal connector, touching a box (or one space from it):
+    #     <|--  --|>  inheritance,  <>--  --<>  aggregation,  *--  --*  composition
+    def vwall(r, c):
+        t = ch(r, c)
+        return ((r, c) in struct and t in "|+") or (t in ARMS and {"U", "D"} <= ARMS[t])
+
+    def boxward(r, c, d):                                   # a box wall at d from (r, c), touching or 1 space off
+        return vwall(r, c + d) or (ch(r, c + d) == " " and vwall(r, c + 2 * d))
+
+    uml = {}
+    for (r, c) in sorted(cells):
+        t, t2 = ch(r, c), ch(r, c + 1)
+        if (r, c) in struct or (r, c + 1) in struct:
+            continue
+        if t == "<" and t2 in "|>" and ch(r, c + 2) in "-." and boxward(r, c, -1):
+            uml[(r, c)], uml[(r, c + 1)] = ("◁" if t2 == "|" else "◇"), "╶"
+        elif t2 == ">" and t in "|<" and ch(r, c - 1) in "-." and boxward(r, c + 1, 1):
+            uml[(r, c)], uml[(r, c + 1)] = "╴", ("▷" if t == "|" else "◇")
+        elif t == "*" and ((t2 in "-." and boxward(r, c, -1)) or (ch(r, c - 1) in "-." and boxward(r, c, 1))):
+            uml[(r, c)] = "◆"
+    struct.update(uml)
+
     # 2) connectors grow outward from structure until nothing changes
     hruns, vruns = [], []
     for r in range(nrows):
@@ -384,6 +416,29 @@ def interpret(cells, nrows, ncols):
                 while ch(r, c) == "|" and (r, c) not in struct:
                     r += 1
                 vruns.append((c, a, r - 1))
+            else:
+                r += 1
+    # dashed and dotted: '-.-.-' / '.....' (any dot makes the run dotted), '- - -' (spaced dashes),
+    # and ':' down a column; they join like '-' and '|' runs do
+    dash = {}
+    druns, sruns, cruns = [], [], []
+    for r in range(nrows):
+        line = "".join(ch(r, c) or " " for c in range(ncols))
+        for m in re.finditer(r"[-.]{3,}", line):
+            if "." in m.group() and all((r, c) not in struct for c in range(m.start(), m.end())):
+                druns.append((r, m.start(), m.end() - 1))
+        for m in re.finditer(r"-(?: -){2,}", line):
+            if all((r, c) not in struct for c in range(m.start(), m.end())):
+                sruns.append((r, m.start(), m.end() - 1))
+    for c in range(ncols):
+        r = 0
+        while r < nrows:
+            if ch(r, c) == ":" and (r, c) not in struct:
+                a = r
+                while ch(r, c) == ":" and (r, c) not in struct:
+                    r += 1
+                if r - a >= 2:
+                    cruns.append((c, a, r - 1))
             else:
                 r += 1
     pluses = [k for k, (t, _) in sorted(cells.items()) if t == "+" and k not in struct]
@@ -409,7 +464,7 @@ def interpret(cells, nrows, ncols):
         n = (r + dr, c + dc)
         tn = ch(*n)
         if n in struct:
-            return tn == "+" or (tn == "|" and side in "UD") or (tn == "-" and side in "LR")
+            return tn == "+" or (tn in "|:" and side in "UD") or (tn in "-." and side in "LR")
         return tn in ARMS and OPP[side] in ARMS[tn]
 
     def compat(t, side):
@@ -425,27 +480,59 @@ def interpret(cells, nrows, ncols):
             return ASCII_TAIL[t] == need
         return t in ARMS and need in ARMS[t]
 
+    def row_ends(r, a, b):
+        """How a horizontal run's two ends meet the world: None if it may not be drawn."""
+        ends, ok = [], False
+        for cc, want in ((a - 1, "<"), (b + 1, ">")):
+            t = ch(r, cc)
+            if is_s(r, cc):
+                ok = True
+                ends.append("S")
+            elif t == "+" or t == " ":
+                ends.append("O")
+            elif t == want and head_ok(r, cc):
+                ends.append(("A", cc))
+                if points_into(r, cc):
+                    ok = True
+            else:
+                ends.append("T")
+        return None if "T" in ends or not ok else ends
+
     changed = True
     while changed:
         changed = False
+        for runs, glyph in ((druns, "┈"), (sruns, "╌")):
+            for r, a, b in runs:
+                if (r, a) in struct:
+                    continue
+                ends = row_ends(r, a, b)
+                if ends is None:
+                    continue
+                cols = [x for x in range(a, b + 1) if ch(r, x) != " "]
+                struct.update((r, x) for x in cols)
+                dash.update({(r, x): glyph for x in cols})
+                struct.update((r, e[1]) for e in ends if isinstance(e, tuple))
+                changed = True
+        for c, a, b in cruns:
+            if (a, c) in struct:
+                continue
+            ok, marks = False, []
+            for rr, want in ((a - 1, "^"), (b + 1, "v")):
+                if is_s(rr, c):
+                    ok = True
+                elif ch(rr, c) == want and head_ok(rr, c):
+                    marks.append((rr, c))
+                    ok = ok or points_into(rr, c)
+            if ok:
+                struct.update((x, c) for x in range(a, b + 1))
+                dash.update({(x, c): "┊" for x in range(a, b + 1)})
+                struct.update(marks)
+                changed = True
         for r, a, b in hruns:
             if (r, a) in struct:
                 continue
-            ends, ok = [], False
-            for cc, want in ((a - 1, "<"), (b + 1, ">")):
-                t = ch(r, cc)
-                if is_s(r, cc):
-                    ok = True
-                    ends.append("S")
-                elif t == "+" or t == " ":
-                    ends.append("O")
-                elif t == want and head_ok(r, cc):
-                    ends.append(("A", cc))
-                    if points_into(r, cc):
-                        ok = True
-                else:
-                    ends.append("T")
-            if "T" in ends or not ok:
+            ends = row_ends(r, a, b)
+            if ends is None:
                 continue
             struct.update((r, x) for x in range(a, b + 1))
             for e in ends:
@@ -513,8 +600,8 @@ def interpret(cells, nrows, ncols):
     drawn = {}
     for (r, c) in sorted(struct):
         t = ch(r, c)
-        if (r, c) in er:
-            drawn[(r, c)] = er[(r, c)]
+        if (r, c) in er or (r, c) in uml or (r, c) in dash:
+            drawn[(r, c)] = er.get((r, c)) or uml.get((r, c)) or dash[(r, c)]
             continue
         if t in ASCII_HEADS:
             drawn[(r, c)] = ASCII_HEADS[t]
@@ -656,6 +743,13 @@ def trace_routes(get, heads, boxes, limit=200):
             t, back = get(*n), OPP[step]
             if t in HEADS:
                 continue                                        # leads into another arrow: not a source
+            if t == " " and get(cr, cc) in DASHED:              # a gap in '- - ->': hop to the next dash
+                n2 = (n[0] + DIRS[step][0], n[1] + DIRS[step][1])
+                if get(*n2) in DASHED and back in ARMS[get(*n2)]:
+                    seq, n, t = seq + [n], n2, get(*n2)
+            if t in HALF_FAMILY and ARMS[t] == {step} and n not in seq:
+                stack.append((n, step, seq + [n], climbed))     # the base of '<|' / '<>' runs on
+                continue
             if t not in ARMS or back not in ARMS[t] or n in seq:
                 if len(seq) > 1:                                # line starts in open space
                     out.append(((r, c, d), seq, "open", step))
@@ -796,11 +890,15 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
             return "edge"
         return "touch" if touches(a, n) else None
 
+    def half(r, c, a):                                  # the half line of a two-cell head on side a
+        return get(r + DIRS[a][0], c + DIRS[a][1]) == HALF_AWAY[a]
+
     def mark_kind(r, c, t):
         if t in UML_DIR:
-            return "tri" if back(r, c, OPP[UML_DIR[t]]) else None
+            tail = OPP[UML_DIR[t]]
+            return "tri" if back(r, c, tail) or half(r, c, tail) else None
         if t in ("◇", "◆"):
-            return "dia" if any(back(r, c, a) for a in "UDLR") else None
+            return "dia" if any(back(r, c, a) or half(r, c, a) for a in "UDLR") else None
         if t == "○":
             return "ring" if (link(r, c, "L") and link(r, c, "R")) or (link(r, c, "U") and link(r, c, "D")) else None
         if t in FEET:
@@ -1028,7 +1126,28 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
             x0, y0 = PAD + c * CW, PAD + r * CH
             cx, cy = x0 + CW / 2, y0 + CH / 2
             tm = timing(y0)
-            if kind == "tri":                               # tip first, then the two base corners
+            if kind == "tri" and half(r, c, OPP[UML_DIR[t]]):   # '<|' / '|>': the base sits on the half line
+                d = UML_DIR[t]
+                s = {"L": -1, "R": 1, "U": -1, "D": 1}[d]
+                if d in "LR":
+                    tip = (cx + s * CW / 2) + s * (CW / 2 if line_like(r, c + s) else 0)
+                    base = cx - s * CW
+                    pts = ((tip, cy), (base, cy - 6), (base, cy + 6))
+                else:
+                    tip = (cy + s * CH / 2) + s * (CH / 2 if line_like(r + s, c) else 0)
+                    base = cy - s * CH
+                    pts = ((cx, tip), (cx - 6, base), (cx + 6, base))
+                o.append(f'<polygon points="{" ".join(f"{x:g},{y:g}" for x, y in pts)}" class="uml wide"{tm}/>')
+            elif kind == "dia" and (half(r, c, "L") or half(r, c, "R")):   # '<>': one diamond over two cells
+                far_side = "R" if half(r, c, "R") else "L"
+                s = 1 if far_side == "R" else -1
+                far = cx + s * (CW / 2 + CW)
+                near = cx - s * CW / 2 - s * (CW / 2 if reach(r, c, OPP[far_side]) else 0)
+                mid = (far + near) / 2
+                pts = ((far, cy), (mid, cy - 6), (near, cy), (mid, cy + 6))
+                cls = "uml solid wide" if t == "◆" else "uml wide"
+                o.append(f'<polygon points="{" ".join(f"{x:g},{y:g}" for x, y in pts)}" class="{cls}"{tm}/>')
+            elif kind == "tri":                             # tip first, then the two base corners
                 d = UML_DIR[t]
                 if d in "UD":
                     s = -1 if d == "U" else 1
@@ -1306,9 +1425,21 @@ def read_back(svg: str) -> dict:
     for k, p in pieces.items():
         out[k] = BLOCK_OF.get(tuple(sorted(p)), "?")
     cell = lambda x, y: (int((y - pad) // chh), int((x - pad) // cw))
-    for pts, solid in re.findall(r'<polygon points="([^"]+)" class="uml( solid)?"', svg):
+    for pts, solid, wide in re.findall(r'<polygon points="([^"]+)" class="uml( solid)?( wide)?"', svg):
         xy = [tuple(map(float, q.split(","))) for q in pts.split()]
-        if len(xy) == 3:                                   # tip, base, base
+        if wide and len(xy) == 3:                          # tip, base, base: the base is on the next cell's centre
+            (tx, ty), (ax, ay), (bx, by) = xy
+            mx, my = (ax + bx) / 2, (ay + by) / 2
+            vertical = abs(ty - my) > abs(tx - mx)
+            d = ("D" if ty > my else "U") if vertical else ("R" if tx > mx else "L")
+            br, bc = cell(mx, my)
+            out[(br + DIRS[d][0], bc + DIRS[d][1])] = {v: k for k, v in UML_DIR.items()}[d]
+        elif wide:                                         # far tip, top, near tip, bottom
+            (fx, fy), _, (nx, _), _ = xy
+            d = 1 if nx > fx else -1
+            hr, hc = cell(fx + d * 0.01, fy)               # the half-line cell, then one step toward the box
+            out[(hr, hc + d)] = "◆" if solid else "◇"
+        elif len(xy) == 3:                                 # tip, base, base
             (tx, ty), (ax, ay), (bx, by) = xy
             mx, my = (ax + bx) / 2, (ay + by) / 2
             d = ("D" if ty > my else "U") if abs(ty - my) > abs(tx - mx) else ("R" if tx > mx else "L")
@@ -1336,7 +1467,7 @@ def self_check(svg, drawn_cells, original_cells):
     want = {k: t for k, (t, w) in drawn_cells.items() if w and t != " "}
     for k in sorted(set(got) | set(want)):
         g, w = got.get(k, " "), want.get(k, " ")
-        if g != w and not (w in ROUNDED and corner_family.get(g) == w):
+        if g != w and not (w in ROUNDED and corner_family.get(g) == w) and HALF_FAMILY.get(w) != g:
             problems.append({"row": k[0] + 1, "col": k[1] + 1, "expected": w, "svg_has": g})
     for k, (t, w) in original_cells.items():
         d = drawn_cells[k][0]
@@ -1400,6 +1531,8 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
         if t not in ARMS:
             continue
         joined = lambda s: get(r + DIRS[s][0], c + DIRS[s][1]) in ARMS and OPP[s] in ARMS[get(r + DIRS[s][0], c + DIRS[s][1])]
+        if t in DASHED and any(get(r + 2 * DIRS[a][0], c + 2 * DIRS[a][1]) in DASHED for a in ARMS[t]):
+            continue                                      # '- - -': the gaps are the dashes' spacing
         if t == "─" and {get(r, c - 1), get(r, c + 1)} & {"┼"} and not (joined("L") and joined("R")):
             continue                                      # one side of a '-+-' tick across a line
         for a in sorted(ARMS[t]):
@@ -1652,8 +1785,8 @@ def _repair_connector_once(g):
     axis = {"U": "│", "D": "│", "L": "─", "R": "─"}
     for (r, c) in sorted(cells):
         t = get(r, c)
-        if t not in ARMS:
-            continue
+        if t not in ARMS or t in DASHED:
+            continue                                        # a dashed line's gaps are meant to be there
         raw = g.ch(r, c)
         for a in sorted(ARMS[t]):
             dr, dc = DIRS[a]
@@ -1810,8 +1943,9 @@ def describe(cells, nrows, ncols):
         return {"cell": [cell[0] + 1, cell[1] + 1]}
 
     heads = [(r, c, HEADS[t]) for (r, c), (t, _) in sorted(cells.items()) if t in HEADS]
-    joins = lambda r, c, a: get(r + DIRS[a][0], c + DIRS[a][1]) in ARMS and \
-        OPP[a] in ARMS[get(r + DIRS[a][0], c + DIRS[a][1])]
+    joins = lambda r, c, a: (get(r + DIRS[a][0], c + DIRS[a][1]) in ARMS and
+                             OPP[a] in ARMS[get(r + DIRS[a][0], c + DIRS[a][1])]) or \
+        get(r + DIRS[a][0], c + DIRS[a][1]) == HALF_AWAY[a]
     kinds = {}
     for (r, c), (t, _) in sorted(cells.items()):          # UML heads: the triangle or diamond marks the target
         if t in UML_DIR and joins(r, c, OPP[UML_DIR[t]]):

@@ -764,6 +764,35 @@ def test_er_crows_foot_runs_vertically_too():
         assert 'class="ring"' not in svg and a2s.self_check(svg, draw, cells) == [], plain
 
 
+def test_ascii_uml_heads():
+    cells, draw, svg, stats, _ = pipeline(fx("uml_ascii.txt"), color=True)
+    assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 8
+    assert svg.count('class="uml wide"') == 3 and svg.count('class="uml solid"') == 1   # <| <> |> span two cells
+    assert not re.findall(r"<text[^>]*>(&lt;|&gt;|\||\*)</text>", svg)
+    kinds = [(e["from"]["name"], e["to"]["name"], e.get("kind"))
+             for e in a2s.render(fx("uml_ascii.txt"), describe=True)[1]["diagram"]["edges"]]
+    assert kinds == [("Dog", "Animal", "inheritance"), ("Wheel", "Car", "aggregation"),
+                     ("LineItem", "Order", "composition"), ("Cat", "Pet", "inheritance")], kinds
+    for words in ("a <| b", "x <> y", "* bullet item", "2*3-4", "if a<|b-- then"):   # no box: stays text
+        cells, draw, svg, _, _ = pipeline(words)
+        assert "uml" not in "".join(t for t, _ in draw.values() if t in a2s.UML) and 'class="uml' not in svg, words
+
+
+def test_ascii_dashed_and_dotted_lines():
+    text = fx("dashed_ascii.txt")
+    cells, draw, svg, stats, _ = pipeline(text, animate="flow")
+    assert a2s.self_check(svg, draw, cells) == [] and stats["flows"] == 4      # pulses hop the gaps in '- - ->'
+    glyphs = {"╌", "┈", "┊"}
+    assert glyphs <= {t for t, _ in draw.values()}
+    _, r = a2s.render(text, describe=True)
+    assert r["status"] == "ok" and not r["warnings"], r["warnings"]
+    edges = [(e["from"]["name"], e["to"]["name"]) for e in r["diagram"]["edges"]]
+    assert edges == [("API", "Queue"), ("API", "Worker"), ("Worker", "Cache"), ("Retry", "DLQ")], edges
+    for words in ("Loading...", "Intro ........ 3", "- - -", "wait... then go", "a: b: c", "x - y - z"):
+        cells, draw, svg, _, _ = pipeline(words)
+        assert not glyphs & {t for t, _ in draw.values()}, words
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0

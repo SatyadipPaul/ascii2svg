@@ -3,10 +3,15 @@
                                             ▲
                                             ╎
                                             ╎
-               ASCII UML heads,             ╎             bigger repairs,
-              ASCII dashed lines        ┌╌╌╌┴╌╌╌┐         a JS / npm port
+            ASCII rounded corners,          ╎             bigger repairs,
+           free-floating connectors     ┌╌╌╌┴╌╌╌┐         a JS / npm port
                        ◇╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
                                         └╌╌╌┬╌╌╌┘
+                                            ▲
+                                            │       ASCII UML heads <|  <>  *,
+                                        ┌───┴───┐ dashed  - - ->  and dotted  ...>
+                                        │ 1.10  ├┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈◆
+                                        └───┬───┘
                                             ▲
                   ER crow's feet            │
                 running up and down     ┌───┴───┐

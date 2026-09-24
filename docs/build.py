@@ -50,6 +50,8 @@ EXAMPLES = [
     ("Mermaid-style: sequence", "docs/examples/mermaid/sequence.txt"),
     ("Mermaid-style: class", "docs/examples/mermaid/class.txt"),
     ("UML: composition, aggregation, realization", "tests/fixtures/uml.txt"),
+    ("UML in plain ASCII: <|  <>  *", "tests/fixtures/uml_ascii.txt"),
+    ("Dashed and dotted ASCII lines", "tests/fixtures/dashed_ascii.txt"),
     ("ER diagram with crow's feet", "tests/fixtures/er_crowsfoot.txt"),
     ("Mermaid-style: state", "docs/examples/mermaid/state.txt"),
     ("Mermaid-style: C4 with a dashed boundary", "docs/examples/mermaid/c4-dashed-boundary.txt"),

@@ -10,9 +10,9 @@
 │                                                                                    │               │
 │                                                                                    ▼               │
 │  ┌──────────────────────────┐      ┌──────────────────────────┐      ┌──────────────────────────┐  │
-│  │    1.8 – 1.9 notation    │      │     1.6 – 1.7 shapes     │      │        1.5 repair        │  │
-│  │    UML heads, ER feet    │◀─────┤  block charts, diamonds  │◀─────┤    --repair for LLMs     │  │
-│  │   ER up, down, across    │      │       dashed lines       │      │   Fix alignment button   │  │
+│  │   1.8 – 1.10 notation    │      │     1.6 – 1.7 shapes     │      │        1.5 repair        │  │
+│  │  UML and ER, both ways   │◀─────┤  block charts, diamonds  │◀─────┤    --repair for LLMs     │  │
+│  │    ASCII UML · dashed    │      │       dashed lines       │      │   Fix alignment button   │  │
 │  └─────────────┬────────────┘      └──────────────────────────┘      └──────────────────────────┘  │
 │                ╎                                                                                   │
 │                ╎                                                                                   │
@@ -22,8 +22,8 @@
 ┌╌ Next, in no particular order ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
 ╎                                                                                                    ╎
 ╎  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐      ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐      ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐  ╎
-╎  ╎      free-floating       ╎      ╎     ASCII UML heads      ╎      ╎      bigger repairs      ╎  ╎
-╎  ╎     ASCII connectors     ╎      ╎     and dashed lines     ╎      ╎      (3+ cells off)      ╎  ╎
+╎  ╎      free-floating       ╎      ╎      vertical ASCII      ╎      ╎      bigger repairs      ╎  ╎
+╎  ╎     ASCII connectors     ╎      ╎        UML heads         ╎      ╎      (3+ cells off)      ╎  ╎
 ╎  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘      └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘      └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘  ╎
 ╎                                                                                                    ╎
 ╎  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐      ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐      ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐  ╎
