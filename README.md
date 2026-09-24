@@ -411,6 +411,14 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 
 ## Roadmap
 
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/roadmap.svg" width="880" alt="The ascii2svg roadmap drawn by ascii2svg: a progress bar in block characters, six shipped milestones (1.0 to 1.8) snaking through a solid container with flowing arrows, and six planned items in dashed boxes inside a dashed container"></p>
+
+<p align="center"><sub>Drawn by ascii2svg from <a href="https://github.com/SatyadipPaul/ascii2svg/blob/main/docs/examples/roadmap.txt">plain text</a>: block-character progress, border titles, flowing arrows, dashed boxes for what's planned, and colour that follows your theme.</sub></p>
+
+<details>
+<summary><b>The roadmap as a checklist</b></summary>
+<br>
+
 - [x] Boxes, arrows and junctions, in ASCII and Unicode, verified 1:1
 - [x] Colour, light/dark/auto themes, draw and flow animation, scroll-reveal pages
 - [x] Agent CLI: JSON reports, hints, `--describe`, presets, `--schema`, MCP server, Claude skill
@@ -422,6 +430,8 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 - [ ] ASCII rounded corners (`.-'`) and free-floating connectors between plain words
 - [ ] A JS/npm port
 - [ ] Every look checked in Firefox, Safari and cairo (`--png`); today: Chromium, with the static look in cairo and resvg
+
+</details>
 
 ## Contributing
 
