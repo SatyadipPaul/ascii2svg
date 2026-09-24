@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/ascii2svg/"><img src="https://img.shields.io/pypi/v/ascii2svg?style=flat-square&color=0969da&label=pypi" alt="PyPI version"></a>
+  <a href="https://www.npmjs.com/package/@satyadip28/asciitosvg"><img src="https://img.shields.io/npm/v/@satyadip28/asciitosvg?style=flat-square&color=cb3837&label=npm" alt="npm version"></a>
   <a href="https://pypi.org/project/ascii2svg/"><img src="https://img.shields.io/pypi/pyversions/ascii2svg?style=flat-square" alt="Python 3.9+"></a>
   <a href="https://github.com/SatyadipPaul/ascii2svg/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/SatyadipPaul/ascii2svg/test.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
   <img src="https://img.shields.io/badge/dependencies-0-2ea44f?style=flat-square" alt="Zero dependencies">
