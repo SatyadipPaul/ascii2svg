@@ -16,6 +16,8 @@ const LOOKS = [
   { color: true, theme: "dark", describe: true },
   { repair: true, describe: true },
   { html: true, animate: "scroll", style: "shadow", square: true },
+  { preset: "explore", fold: 1, describe: true },
+  { portable: true, style: "flat" },
 ];
 
 // One Python run renders every case with the Python package (wcwidth kept out, as in Pyodide).

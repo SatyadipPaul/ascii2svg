@@ -1,6 +1,6 @@
 export interface RenderOptions {
   /** A look for a destination: readme, slides, chat, print, dark, page. Explicit options still win. */
-  preset?: "readme" | "slides" | "chat" | "print" | "dark" | "page";
+  preset?: "readme" | "slides" | "chat" | "print" | "dark" | "page" | "explore";
   style?: "glow" | "shadow" | "flat";
   square?: boolean;
   theme?: "light" | "dark" | "auto";
@@ -22,6 +22,12 @@ export interface RenderOptions {
   strict?: boolean;
   /** Fix typical LLM misalignment first; report.repair lists every edit and the corrected text. */
   repair?: boolean;
+  /** Trees and mind maps fold when a node is clicked (where scripts run: a page, <object>, the file itself). */
+  interactive?: boolean;
+  /** With interactive: start with nodes at this depth folded (1 = only the root's children show). */
+  fold?: number;
+  /** One <text> per character, for design tools (Inkscape, Figma); browsers don't need it. */
+  portable?: boolean;
 }
 
 export interface Warning {
@@ -45,8 +51,21 @@ export interface Report {
   warnings: Warning[];
   version: string;
   repair?: { edits: { line: number; col: number; fix: string }[]; text?: string };
-  diagram?: { boxes: object[]; edges: object[] };
+  /** The number of nodes that fold (0 without interactive, or when no tree was found). */
+  folds?: number;
+  /** Size of the SVG in bytes. */
+  bytes?: number;
+  diagram?: { boxes: object[]; edges: object[]; tree?: TreeNode[] };
   [field: string]: unknown;
+}
+
+export interface TreeNode {
+  name: string;
+  /** The box id, when the node is a box. */
+  box?: string;
+  row: number;
+  col: number;
+  children?: TreeNode[];
 }
 
 export interface LoadOptions {

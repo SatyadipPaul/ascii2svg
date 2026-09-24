@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.15.0"
+__version__ = "1.16.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -3100,6 +3100,7 @@ examples:
   ascii2svg diagram.txt --check --describe  # validate + list boxes and arrows; writes nothing
   ascii2svg notes.md -o out.svg --preset readme   # a ```fenced``` block is unwrapped automatically
   ascii2svg d.txt -o d.html --preset page         # a page that reveals as you scroll
+  tree src | ascii2svg - -o src.svg --preset explore   # a tree whose branches fold when clicked
   ascii2svg README.md --all-blocks -o out/  # every diagram in a markdown file -> out/README-N.svg
   ascii2svg a.txt b.txt -o out/ --check     # several files, one report each
   ascii2svg d.txt -o d.svg --accent '#e8590c' --font 'JetBrains Mono' --width 800
@@ -3110,6 +3111,7 @@ presets (pick the destination; explicit flags still win):
   readme  --theme auto --color --animate flow     slides  --color --animate draw
   chat    --color (add --png for apps without SVG) print   --style flat --square
   dark    --theme dark --color                    page    --html --theme auto --color --animate scroll
+  explore --theme auto --color --interactive      (trees and mind maps fold; branches get colours)
 
 looks (all optional, and all keep the 1:1 guarantee):
   --theme light|dark|auto   auto follows the viewer's light/dark setting
@@ -3118,6 +3120,9 @@ looks (all optional, and all keep the 1:1 guarantee):
   --animate flow            ...then pulses keep travelling along every arrow
   --animate scroll          web page only: parts appear as the reader scrolls to them
   --html / -o NAME.html     write a standalone web page with the diagram inline
+  --interactive             trees and mind maps fold: click a node, or Tab + Enter (in a browser;
+                            as an <img> it is the full drawing). --fold N starts folded at depth N
+  --portable                one <text> per character, for design tools (Inkscape, Figma)
   PNG output is always the finished drawing (auto theme -> light).
 
 what gets drawn:
@@ -3127,6 +3132,7 @@ what gets drawn:
   Between plain words, a line is drawn when it ends in an arrowhead pointing at a word
   and each loose end rests on a word: A --> B, A --HTTP--> B, or | and v under a label.
   UML heads in ASCII: <|-- --|> <>-- *-- across, and /_\\ <> * on a line up or down.
+  ASCII trees as `tree` and `cargo tree` print them (|-- and `--) are drawn too.
   Everything else (hyphens in words, a->b, user_id, markdown tables) stays text,
   in exactly the same cell. When unsure, it stays text.
 

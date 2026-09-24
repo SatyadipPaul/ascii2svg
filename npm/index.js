@@ -51,7 +51,7 @@ const SNAKE = { tabSize: "tab_size" };
 /**
  * Render a text diagram. Options match the Python library and the CLI:
  * preset, style, square, theme, color, animate, html, accent, font, width, title, tabSize,
- * describe, unescape, strict, repair.
+ * describe, unescape, strict, repair, interactive, fold, portable.
  * Resolves to { markup, report }: markup is the SVG (or a web page with html: true), and report is
  * what `ascii2svg --json` prints. Check report.status: "ok" or "warnings" are usable,
  * "self_check_failed" is not. Rejects with an Error for empty or oversized input and bad options.

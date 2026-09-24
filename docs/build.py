@@ -33,6 +33,7 @@ IMAGES = [
     ("docs/examples/cache-sequence.txt", "docs/cache-sequence.svg", LIVE + ["--title", "Cache lookup"]),
     ("docs/examples/mermaid/sequence.txt", "docs/sequence.svg", LIVE + ["--title", "Create an order"]),
     ("docs/examples/mindmap.txt", "docs/mindmap.svg", ["--preset", "explore", "--title", "Decision-making process"]),
+    ("docs/examples/mermaid/mindmap-tree.txt", "docs/mindmap-boxes.svg", ["--theme", "auto", "--color", "--title", "Product plan"]),
     ("docs/examples/call-tree.txt", "docs/call-tree.svg", ["--preset", "explore", "--fold", "2", "--title", "place_order call tree"]),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/default.svg", []),
     ("tests/fixtures/ascii_fanout.txt", "docs/looks/color.svg", ["--color"]),

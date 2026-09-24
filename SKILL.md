@@ -98,6 +98,7 @@ Most people won't name options. Choose from the destination; if it isn't clear, 
 | Slack, email, Jira, chat apps | `--preset chat --png` | `--color` (+ PNG, needs `pip install cairosvg`) |
 | Print, PDF, formal docs | `--preset print` | `--style flat --square` |
 | Dark-mode page or app | `--preset dark` | `--theme dark --color` |
+| A tree, call tree, file tree or mind map to explore | `--preset explore` (+ `--fold 1` for a big one) | `--theme auto --color --interactive` |
 | The user wants it plain | no preset | |
 
 - Explicit flags override a preset: `--preset readme --no-color`, `--preset slides --theme dark`.
@@ -106,12 +107,17 @@ Most people won't name options. Choose from the destination; if it isn't clear, 
   and offer the `page` version as well. The report's `tips` suggests this; pass it on.
 - Animation never changes the final picture, stops under *reduce motion*, and PNGs are always
   the finished still drawing.
+- Folding (`explore` / `--interactive`) runs a script inside the SVG: it folds when the file is opened
+  in a browser, as a `-o NAME.html` page or in an `<object>`; as an `<img>` it is the full tree. If the
+  report says `folds: 0`, no tree was found: draw branches with `├──` / `└──` (or `|--` / `` `-- ``) and
+  no arrowheads, parent above or left of its children, and check `diagram.tree` with `--describe`.
 - Tell the user what you picked in one line, e.g. "animated, colour, follows dark mode",
   so they can ask for something else.
 
 ## Options
 
-`--preset readme|slides|chat|print|dark|page` · `--check` · `--describe` · `--brief` · `--json` ·
+`--preset readme|slides|chat|print|dark|page|explore` · `--interactive` · `--fold N` · `--portable` ·
+`--check` · `--describe` · `--brief` · `--json` ·
 `--color / --no-color` · `--theme light|dark|auto` · `--animate [draw|flow|scroll]` · `--html` ·
 `--style glow|shadow|flat` · `--square` · `--png [PATH]` · `--strict` · `--unescape` ·
 `--repair` · `--all-blocks` · `--block N` · `--accent #HEX` · `--font NAME` · `--width PX` ·

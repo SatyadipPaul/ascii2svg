@@ -1,6 +1,6 @@
 {
   "name": "@satyadip28/asciitosvg",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "Render ASCII and Unicode box diagrams as clean SVG, every character in its exact cell, with a 1:1 self-check. The ascii2svg Python library running in WebAssembly.",
   "keywords": ["ascii", "diagram", "svg", "ascii-art", "unicode", "box-drawing", "llm", "mcp", "pyodide", "wasm"],
   "homepage": "https://satyadippaul.github.io/ascii2svg/",

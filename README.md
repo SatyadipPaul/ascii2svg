@@ -42,6 +42,8 @@ so what you drew is exactly what you get. And the banner at the top of this page
 - **Faithful, provably** // every character lands in its exact cell, verified by reading the SVG back. A mismatch is an error, never a quiet surprise.
 - **Fixes LLM diagrams** // `--repair` lines up the walls, connectors and arrowheads a chat model got one column wrong, without touching a word.
 - **Alive** // lines draw themselves, pulses flow along arrows, tall diagrams unfold as you scroll. Nothing moves for readers who ask for reduced motion.
+- **Trees that fold** // call trees, file trees, `npm ls` / `cargo tree` output and mind maps become an SVG whose branches fold when clicked, with a colour per branch. No JSON, no DSL: the text you already have.
+- **Small** // one element per word, not per letter, and one path per line style: files are about half the size they were in 1.15.
 - **More than boxes** // flowcharts, sequence and state diagrams, C4, UML, ER crow's feet, Gantt and bar charts, diamonds, dashed lines.
 - **Agent-native** // one JSON report for every outcome, hints that say exactly what to move, an MCP server and a Claude skill.
 - **Zero dependencies** // one Python file for Python 3.9+. The same file runs in your browser and on npm via WebAssembly.
@@ -124,6 +126,42 @@ ascii2svg diagram.txt -o diagram.svg --repair --json
 
 In the playground, a diagram with warnings shows a **Fix alignment** button.
 
+## Trees and mind maps that fold
+
+Call trees, dependency trees, file trees and mind maps are usually drawn with a JavaScript library
+fed a hand-written JSON tree. Here the tree *is* the text: what `tree`, `npm ls` or `cargo tree`
+print, a call tree from a profiler or an LLM, or a mind map you sketch with `├──` and `╰──`.
+
+<p align="center"><a href="https://satyadippaul.github.io/ascii2svg/mindmap.svg"><img src="https://satyadippaul.github.io/ascii2svg/mindmap.svg" width="820" alt="A decision-making mind map drawn by ascii2svg: the root on a dark pill, five main branches each in its own colour, rounded branches fanning out to the right"></a>
+<br><sub>Plain text (<a href="https://github.com/SatyadipPaul/ascii2svg/blob/main/docs/examples/mindmap.txt">source</a>).
+<a href="https://satyadippaul.github.io/ascii2svg/mindmap.svg">Open it</a> and click any node to fold its branch; the rows close up.</sub></p>
+
+```bash
+tree src | ascii2svg - -o src.svg --preset explore          # colour per branch, branches fold
+cargo tree | ascii2svg - -o deps.svg --preset explore --fold 1   # start with only the top level open
+ascii2svg calls.txt --check --describe                        # the hierarchy as JSON: report.diagram.tree
+```
+
+- **What counts as a tree:** plain connectors between words or boxes, with the parent above or to
+  the left of its children: `├──` `└──` `│` in Unicode, `|--` and `` `-- `` in ASCII, `├─┬` as `npm ls`
+  draws it, a box whose `┬` fans out to other boxes, or branches going right as in a mind map.
+  A diagram with arrowheads stays a flowchart.
+- **Folding** (`--interactive`, or `--preset explore`): click a node or its ⊖ button, or Tab to it and
+  press Enter. Shift folds or unfolds the whole branch. `--fold N` starts with depth N folded.
+  Hover lights up the branch below a node.
+- **Where it folds:** wherever the SVG's own script may run: the file opened in a browser, a page
+  made with `-o tree.html`, an `<object>` or `<iframe>`, the playground. As an `<img>` (GitHub, most
+  docs sites) scripts never run, and the reader sees the full drawing, still 1:1 and self-checked.
+- **Colours** (`--color` on a tree with no arrows): one colour per main branch, used for its lines
+  and a tint behind its label; the root sits on a dark pill; boxes take their branch's tint.
+
+<table>
+  <tr>
+    <td width="50%" align="center"><a href="https://satyadippaul.github.io/ascii2svg/call-tree.svg"><img src="https://satyadippaul.github.io/ascii2svg/call-tree.svg" width="380" alt="A call tree of OrderService.place_order, each top-level call in its own colour, two calls folded"></a><br><sub><b>Call tree</b>, <code>--fold 2</code>: <a href="https://satyadippaul.github.io/ascii2svg/call-tree.svg">open</a> to unfold</sub></td>
+    <td width="50%" align="center"><img src="https://satyadippaul.github.io/ascii2svg/mindmap-boxes.svg" width="380" alt="A mind map of boxes: Product plan fans out to Growth, Quality and Platform, each tinted with its branch colour"><br><sub><b>Boxes fanning out</b>, tinted by branch</sub></td>
+  </tr>
+</table>
+
 ## Gallery
 
 All plain text, all 1:1. The sources are in [`docs/examples/`](https://github.com/SatyadipPaul/ascii2svg/tree/main/docs/examples), and every one is in the [playground](https://satyadippaul.github.io/ascii2svg/playground.html)'s example picker.
@@ -171,12 +209,13 @@ Same diagram, same guarantee, five ways:
 | <img src="https://satyadippaul.github.io/ascii2svg/looks/default.svg" width="150" alt="default look"> | <img src="https://satyadippaul.github.io/ascii2svg/looks/color.svg" width="150" alt="colour look"> | <img src="https://satyadippaul.github.io/ascii2svg/looks/dark.svg" width="150" alt="dark look"> | <img src="https://satyadippaul.github.io/ascii2svg/looks/flat.svg" width="150" alt="flat print look"> | <img src="https://satyadippaul.github.io/ascii2svg/looks/flow.svg" width="150" alt="animated look"> |
 | *(no options)* | `--color` | `--theme dark`<br>`--color` | `--style flat`<br>`--square` | `--animate`<br>`--color`<br>`--theme auto` |
 
-Or let the destination decide: `--preset readme|slides|chat|print|dark|page`.
+Or let the destination decide: `--preset readme|slides|chat|print|dark|page|explore`.
 
 | Destination | Use |
 |---|---|
 | GitHub README, docs site | `--preset readme` (`--theme auto --color --animate`), then commit the `.svg` |
 | A tall diagram people scroll through | `--preset page` → an `.html` page that [reveals as you scroll](https://satyadippaul.github.io/ascii2svg/architecture.html) |
+| A tree or mind map people explore | `--preset explore` → branches that [fold when clicked](https://satyadippaul.github.io/ascii2svg/mindmap.svg) |
 | Slides (Keynote, Google Slides, PowerPoint) | `--color --animate draw` for a live build; `--color --png` for a still |
 | Slack, email, Jira: anywhere SVG isn't shown | `--color --png` (needs `pip install cairosvg`) |
 | Printed docs, a PDF | `--style flat --square` |
@@ -197,6 +236,8 @@ Or let the destination decide: `--preset readme|slides|chat|print|dark|page`.
 | `--style glow\|shadow\|flat` | Depth under the boxes. The glow shrinks automatically so it never sits behind a label. |
 | `--square` | Keep corners square (they are rounded by default). |
 | `--repair` | Fix typical misalignment first (see [LLM diagrams, fixed](#llm-diagrams-fixed)). |
+| `--interactive` · `--fold N` | Trees and mind maps fold when clicked (see [Trees and mind maps that fold](#trees-and-mind-maps-that-fold)). |
+| `--portable` | One `<text>` per character instead of one per word, for design tools (Inkscape, Figma) and non-browser renderers. Browsers draw both the same; PNG output always uses it. |
 | `--accent #hex` · `--font NAME` · `--width PX` | Your brand colour for arrows and animation, a font to try first (e.g. `JetBrains Mono`), and the output width. |
 
 The animation is careful about where it runs:
@@ -222,6 +263,9 @@ The animation is careful about where it runs:
 | Output | SVG: sharp at any size, light and dark, animated | SVG where the renderer is supported | pixels: blurry when scaled, one theme |
 | Proof it's faithful | reads its own SVG back, cell by cell | – | – |
 | Misaligned LLM output | `--repair` fixes it and says what moved | – | shows the mistakes |
+| Collapsible trees and mind maps | click to fold, from plain text (`--interactive`) | fixed layout, nothing folds | – |
+| Output of `tree`, `npm ls`, `cargo tree` | pipe it in as it is | needs converting | works, as pixels |
+| Where the picture goes | exactly where you drew it | the layout engine decides | where you drew it |
 
 Choose a DSL when you want the layout done for you. Choose ascii2svg when the text diagram
 already exists, or when an LLM writes it, and you want it to look designed without changing
@@ -239,6 +283,7 @@ ascii2svg focuses on box diagrams, a verified 1:1 result, and agent workflows.
 | ASCII rounded corners `.` above, `'` or `` ` `` below | they close a box (`.--.` over `'--'`), or bend a connector that is drawn (`---.` over `\|`) | stay text (`It's`, `a.b`, `tree` output) |
 | ASCII lines between plain words: `A --> B`, `A --HTTP--> B`, `\|` and `v` under a label | an arrowhead points at a word and every loose end rests on one (with a space between on a row); a label set into the line is carried over and reported | stay text (`a-->b`, `x -> y`, `p->next`, `--dry-run`) |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
+| ASCII trees `\|--` `` `-- `` `+--` | a column of `\|` under the start of a label, branches `\|-- name`, ending in `` `-- name `` (as `tree` and `cargo tree` print them) | stay text (markdown tables, `\|--flag`) |
 | ╱ ╲ ╳, and ASCII `/` `\` | Unicode always; ASCII when two or more run along their own slope, with no letter or digit beside them | stay text |
 | ASCII UML heads `<\|` `\|>` `<>` `*`, and `/_\` `<>` `*` on a vertical line | on a line that touches a box (across, or one space short), or right against a box's top or bottom edge with `\|` or `:` on the other side: inheritance, aggregation, composition | stay text |
 | ASCII dashed `- - ->` and dotted `....>` `-.-.->`, `:` down a column | they join a box or end in an arrowhead that points into one; flow pulses hop the gaps | stay text (`Loading...`, dot leaders, `- - -`) |
@@ -401,10 +446,11 @@ JSON string, so the escaped-newline problem can't happen. Tested against the off
 | `exit_code`, `ok` | See exit codes; `ok` is false only when the self-check failed |
 | `roundtrip` | `exact`: the output was read back and matches the input cell for cell |
 | `warnings` | `{code, row, col, char, line, issue, hint}`; codes: `dangling_line`, `broken_join`, `short_arrow`, `unclosed_box`, `escaped_newlines`, `no_structure` |
-| `diagram` | With `--describe`: `{boxes: [...], edges: [{from, to, kind?, cardinality?, label?}]}`; an endpoint is `{box, name}`, `{text}` or `{cell}` |
+| `diagram` | With `--describe`: `{boxes: [...], edges: [{from, to, kind?, cardinality?, label?}], tree?}`; an endpoint is `{box, name}`, `{text}` or `{cell}`; `tree` is the hierarchy, nested `{name, box?, row, col, children?}`, and each parent → child is an edge of kind `branch` |
 | `repair` | With `--repair`: `{edits: [{line, col, fix}], text}` |
 | `rows`, `cols`, `boxes`, `arrowheads`, `flows`, `text_cells` | What was found |
-| `style`, `theme`, `color`, `animate`, `html`, `preset` | The look that was rendered |
+| `folds`, `bytes` | Nodes that fold (with `--interactive`), and the size of the output |
+| `style`, `theme`, `color`, `animate`, `html`, `interactive`, `preset` | The look that was rendered |
 | `normalized` | Every clean-up applied (tabs, odd spaces, zero-width and control characters, colour codes, code fence, indentation, bad UTF-8, `--unescape`) |
 | `tips` | Suggestions, e.g. `--animate scroll` when a timed animation would finish off-screen |
 | `svg` / `html`, `png` | Output paths, or the markup itself when there is no `-o` (unless `--brief` / `--check`) |
@@ -473,6 +519,8 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 - [x] Arrows between plain words (`A --> B`, `A --HTTP--> B`, `|` and `v` under a label)
 - [x] Vertical ASCII UML heads (`/_\` `<>` `*` under or over a box)
 - [x] On npm: `@satyadip28/asciitosvg`, the same module in WebAssembly, byte-identical by test
+- [x] Trees and mind maps that fold (`--interactive`, `--preset explore`), a colour per branch, ASCII `tree` output, `--describe` trees
+- [x] SVGs about half the size: a `<text>` per word, one path per line style, a lighter glow
 
 Everything planned has shipped. Have an idea, or a diagram that doesn't render the way you meant?
 [Open an issue](https://github.com/SatyadipPaul/ascii2svg/issues).
@@ -485,7 +533,7 @@ Issues and pull requests are welcome, and a diagram that renders wrongly is the 
 report there is: paste the text and say what you expected.
 
 ```bash
-python3 tests/test_ascii2svg.py        # 65 tests over 32 test diagrams (or: python3 -m pytest tests)
+python3 tests/test_ascii2svg.py        # 73 tests over 36 test diagrams (or: python3 -m pytest tests)
 cd npm && npm install && npm test      # the npm package: byte-identical to Python on every test diagram
 python3 docs/build.py                  # regenerate every image on this page and the playground files
 ```
@@ -512,6 +560,9 @@ must round-trip exactly in every style and look. That's the one rule: never a wr
 - dashed lines keep their dash count, form boxes and carry arrows; ASCII `- - ->`, `....>` and `:` too,
   while `Loading...`, dot leaders and `- - -` stay text; ASCII UML heads `<|` `<>` `*` are drawn and described
 - UML triangles and diamonds, ER ticks, rings and crow's feet across and up and down; `--describe` names each relationship and its cardinality
+- trees: call trees, `npm ls`, `cargo tree` and `tree` output, left-to-right mind maps and box fan-outs read into
+  the right hierarchy; flowcharts and timelines are not trees; an interactive SVG is the static drawing plus
+  a script; fold data is escaped; branch colours only on pure trees; PNG frames place every character alone
 - ASCII UML heads up and down (`/_\` `<>` `*`), drawn and described; rounded ASCII boxes and bends; arrows between plain words and labels set into lines, while `a-->b`,
   `x -> y`, `p->next`, `--dry-run`, markdown tables and `print("  -->")` stay text
 

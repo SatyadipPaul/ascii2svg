@@ -171,11 +171,32 @@ mean unmistakable.
 - **Charts and timelines:** block characters (█ ▓ ▒ ░ and the eighths ▁ ▂ ▃ ▌ ▐) are drawn as
   exact rectangles, so bars and Gantt charts have no gaps between cells.
 
+### Trees and mind maps
+
+Anything shaped like a tree can fold open and shut: a call tree, a folder listing, the output of
+`npm ls` or `cargo tree`, a mind map. Draw it the way these tools print it:
+
+```
+main()
+├── load_config()
+│   ├── read_file()
+│   └── parse_yaml()
+└── run_server()
+    └── serve_forever()
+```
+
+- **The parent goes above or to the left** of its children, joined by plain lines (no arrowheads).
+  A mind map can grow to the right: `Root ───┤` with `╭── child`, `├── child` and `╰── child` on the
+  line where it splits. Boxes work too: a box whose bottom edge `┬` fans out to other boxes.
+- **ASCII is fine:** `|--` for a branch and `` `-- `` for the last one, as `tree` prints them.
+- **Notes after a label stay with it:** `Sku.lookup(sku)    × 3` folds away together.
+- Check it with `--describe`: the report's `diagram.tree` lists every node under its parent.
+
 ### Things that deliberately stay text
 
 Hyphens in words, `a->b`, `--dry-run`, `user_id`, `C:\temp`, `yes/no`, `It's`, `Loading...`,
-markdown tables and `|--` file trees are all left exactly as written. You don't have to avoid
-them.
+markdown tables and a stray `|--` are all left exactly as written. You don't have to avoid
+them. (A real ASCII file tree, with its closing `` `-- ``, is drawn as lines: see above.)
 
 ### Emoji and other wide characters
 
@@ -197,6 +218,7 @@ The simplest way is to say where the image will be used, with `--preset`:
 | Print or PDF | `--preset print` | Flat and square, no shadows |
 | A dark app or page | `--preset dark` | Dark background, colour |
 | A long diagram people scroll through | `--preset page -o diagram.html` | A web page where each part appears as you scroll to it |
+| A tree or mind map people explore | `--preset explore` | A colour per branch; click a node to fold its branch |
 
 You can also set things one by one. `--color` adds tints and blue arrows. `--theme light`,
 `dark` or `auto` sets the colours. `--animate draw` draws the diagram once, and `--animate flow`
@@ -211,6 +233,12 @@ A few things are good to know:
   play animation.
 - **PNG output needs the Python package** and `pip install cairosvg`. It isn't available in the
   npm package.
+- **Folding needs somewhere scripts run.** Open the `.svg` in a browser, make a page with
+  `-o tree.html`, or embed it with `<object>`. As an `<img>` (GitHub, most wikis) it shows the whole
+  tree, unfolded. Click a node or its ⊖ to fold, or Tab to it and press Enter; hold Shift to fold or
+  open everything below it. `--fold 1` starts with only the first level open.
+- **Pasting into a design tool** (Inkscape, Figma)? Add `--portable`: every character gets its own
+  text element, which those tools place most reliably. Browsers don't need it.
 
 ---
 
