@@ -251,12 +251,13 @@
     <label>For <select id="preset">
       <option value="">custom</option><option value="readme">README / docs</option><option value="slides">slides</option>
       <option value="chat">chat / email</option><option value="print">print</option><option value="dark">dark page</option>
-      <option value="page">scroll page</option></select></label>
+      <option value="page">scroll page</option><option value="explore">explore (fold trees)</option></select></label>
     <label>Theme <select id="theme"><option>light</option><option>dark</option><option>auto</option></select></label>
     <label>Animate <select id="animate"><option>none</option><option>draw</option><option>flow</option><option>scroll</option></select></label>
     <label>Depth <select id="style"><option>glow</option><option>shadow</option><option>flat</option></select></label>
     <label><input type="checkbox" id="color"> Colour</label>
     <label><input type="checkbox" id="square"> Square corners</label>
+    <label title="Trees and mind maps: click a node to fold its branch"><input type="checkbox" id="interactive"> Fold</label>
     <label>Accent <input type="color" id="accent" value="#0969da"></label>
   </div>
 
@@ -348,10 +349,10 @@ column right; move one of them
   const PRESETS = {
     readme: { theme: "auto", color: true, animate: "flow" }, slides: { color: true, animate: "draw" },
     chat: { color: true }, print: { style: "flat", square: true }, dark: { theme: "dark", color: true },
-    page: { theme: "auto", color: true, animate: "scroll" },
+    page: { theme: "auto", color: true, animate: "scroll" }, explore: { theme: "auto", color: true, interactive: true },
   };
-  const DEFAULTS = { theme: "light", animate: "none", style: "glow", color: false, square: false };
-  const controls = ["theme", "animate", "style", "color", "square", "accent"];
+  const DEFAULTS = { theme: "light", animate: "none", style: "glow", color: false, square: false, interactive: false };
+  const controls = ["theme", "animate", "style", "color", "square", "interactive", "accent"];
   const src = $("src"), preview = $("preview");
   let examples = {}, current = null, url = null, seq = 0, busy = false, queued = false, timer = null;
   const pending = new Map();
@@ -382,7 +383,8 @@ column right; move one of them
 
   function options() {
     const o = { theme: $("theme").value, animate: $("animate").value, style: $("style").value,
-                color: $("color").checked, square: $("square").checked, describe: true, title: "Diagram" };
+                color: $("color").checked, square: $("square").checked, interactive: $("interactive").checked,
+                describe: true, title: "Diagram" };
     const acc = $("accent").value.toLowerCase();
     if (acc !== "#0969da") o.accent = acc;
     o.html = o.animate === "scroll";
@@ -392,7 +394,7 @@ column right; move one of them
   function applyPreset(name) {
     const p = { ...DEFAULTS, ...(PRESETS[name] || {}) };
     $("theme").value = p.theme; $("animate").value = p.animate; $("style").value = p.style;
-    $("color").checked = p.color; $("square").checked = p.square;
+    $("color").checked = p.color; $("square").checked = p.square; $("interactive").checked = p.interactive;
   }
 
   function schedule(delay = 350) {
@@ -423,11 +425,12 @@ column right; move one of them
     current = res;
     if (url) URL.revokeObjectURL(url);
     preview.querySelectorAll("img,iframe").forEach((n) => n.remove());
-    if (r.html) {
+    if (r.html || (r.interactive && r.folds)) {           // a script runs: a sandboxed frame, never the page itself
       const f = document.createElement("iframe");
       f.setAttribute("sandbox", "allow-scripts");
-      f.setAttribute("title", "Scroll-reveal page preview");
-      f.srcdoc = res.markup;
+      f.setAttribute("title", r.html ? "Scroll-reveal page preview" : "Foldable diagram: click a node");
+      f.srcdoc = r.html ? res.markup : `<!doctype html><meta charset="utf-8"><body style="margin:0;display:flex;` +
+        `justify-content:center;background:transparent">${res.markup.replace(/(<svg[^>]*?) width="[\d.]+" height="[\d.]+"/, "$1 style=\"max-width:100%;height:auto\"")}`;
       preview.appendChild(f);
     } else {
       url = URL.createObjectURL(new Blob([res.markup], { type: "image/svg+xml" }));
@@ -559,7 +562,7 @@ column right; move one of them
     q.set("d", await pack(src.value));
     if ($("preset").value) q.set("p", $("preset").value);
     for (const k of ["theme", "animate", "style"]) q.set(k, o[k]);
-    q.set("color", o.color ? 1 : 0); q.set("square", o.square ? 1 : 0);
+    q.set("color", o.color ? 1 : 0); q.set("square", o.square ? 1 : 0); q.set("fold", o.interactive ? 1 : 0);
     if (o.accent) q.set("accent", o.accent.slice(1));
     const link = location.href.split("#")[0] + "#" + q.toString();
     history.replaceState(null, "", link);
@@ -594,6 +597,7 @@ column right; move one of them
       $("preset").value = q.get("p") || "";
       for (const k of ["theme", "animate", "style"]) if (q.get(k)) $(k).value = q.get(k);
       $("color").checked = q.get("color") === "1"; $("square").checked = q.get("square") === "1";
+      $("interactive").checked = q.get("fold") === "1";
       if (q.get("accent")) $("accent").value = "#" + q.get("accent");
       addEventListener("load", () => $("tool").scrollIntoView({ behavior: "instant" }));   // a shared diagram skips the intro
     } else {

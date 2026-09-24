@@ -1,0 +1,21 @@
+OrderService.place_order(cart)
+├── validate(cart)
+│   ├── Cart.items()
+│   ├── Sku.lookup(sku)          × 3
+│   └── Rules.check_limits(user)
+├── Inventory.reserve(items)
+│   ├── Warehouse.nearest(address)
+│   │   └── Geo.distance(a, b)   × 12
+│   └── Stock.decrement(sku, n)  × 3
+├── Pricing.quote(items)
+│   ├── Tax.for_region("IN-MH")
+│   ├── Discounts.apply(user)
+│   │   ├── Coupons.find(code)
+│   │   └── Loyalty.tier(user)
+│   └── Currency.round(total)
+├── Payments.charge(user, total)
+│   ├── Gateway.authorize(card)  312 ms
+│   └── Gateway.capture(auth)
+└── Events.publish(OrderPlaced)
+    ├── Kafka.send(topic, msg)
+    └── Audit.log(order_id)
