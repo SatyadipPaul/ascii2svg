@@ -30,7 +30,7 @@ RELEASES = [  # oldest first: (version, side, label lines, leader length)
     ("1.14", "R", ["bigger repairs: boxes grow,", "split lines join up"], 16),
     ("1.15", "L", ["on npm: the same module", "in WebAssembly"], 14),
 ]
-NEXT = [("R", ["Firefox, Safari", "and cairo checks"], 16)]
+NEXT = [("R", ["your idea next?", "open an issue"], 16)]
 S = 44                                    # the spine's column
 HALF = 4                                  # a version box spans S-HALF .. S+HALF
 

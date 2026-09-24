@@ -75,6 +75,8 @@ put it back in the user's file, so their source matches the picture.
 
 ## Writing diagrams that render well
 
+(The full guide for people is [GUIDE.md](https://github.com/SatyadipPaul/ascii2svg/blob/main/GUIDE.md).)
+
 - Close every box: `+---+` / `|   |` / `+---+`, or `┌───┐` / `│   │` / `└───┘`
   (`.---.` / `|   |` / `'---'` for rounded corners; `--square` keeps only these rounded).
 - Keep one space between a label and the box wall.

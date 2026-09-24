@@ -10,6 +10,9 @@ WebAssembly). You get the same drawing, the same `--repair` and the same JSON re
 npm install @satyadippaul/ascii2svg
 ```
 
+New to it? The [guide](https://github.com/SatyadipPaul/ascii2svg/blob/main/GUIDE.md) explains, in plain language, how to draw diagrams that render
+well, which look to pick, and how to read and fix warnings.
+
 <img src="https://satyadippaul.github.io/ascii2svg/looks/color.svg" width="420" alt="A rendered diagram: three tinted boxes joined by arrows">
 
 ## Library

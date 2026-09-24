@@ -15,6 +15,7 @@
 
 <p align="center">
   <a href="https://satyadippaul.github.io/ascii2svg/playground.html"><b>Playground</b></a> ·
+  <a href="https://github.com/SatyadipPaul/ascii2svg/blob/main/GUIDE.md"><b>Guide</b></a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#gallery">Gallery</a> ·
   <a href="#llm-diagrams-fixed">Fix LLM diagrams</a> ·
@@ -43,9 +44,13 @@ so what you drew is exactly what you get. And the banner at the top of this page
 - **Alive** // lines draw themselves, pulses flow along arrows, tall diagrams unfold as you scroll. Nothing moves for readers who ask for reduced motion.
 - **More than boxes** // flowcharts, sequence and state diagrams, C4, UML, ER crow's feet, Gantt and bar charts, diamonds, dashed lines.
 - **Agent-native** // one JSON report for every outcome, hints that say exactly what to move, an MCP server and a Claude skill.
-- **Zero dependencies** // one Python file for Python 3.9+. The same file runs in your browser via WebAssembly.
+- **Zero dependencies** // one Python file for Python 3.9+. The same file runs in your browser and on npm via WebAssembly.
 
 ## Quick start
+
+> **New here?** The [guide](https://github.com/SatyadipPaul/ascii2svg/blob/main/GUIDE.md) walks you through it in plain language: how to run it,
+> how to draw diagrams that render well, which look to pick, and what to do when something
+> doesn't come out as you meant.
 
 **In your browser**, nothing to install: open the [playground](https://satyadippaul.github.io/ascii2svg/playground.html), paste a diagram, pick where it's going, download SVG, PNG or a web page. Nothing is uploaded.
 
@@ -109,13 +114,10 @@ ascii2svg diagram.txt -o diagram.svg --repair --json
             "text": "┌─────────────────────┐\n│  📱 Mobile app      │\n..."}}
 ```
 
-- **What it fixes:** ragged right walls (the top corner, every row and the bottom corner vote on
-  where the wall belongs), drifted left walls, edges one character too long or short,
-  connector pieces and arrowheads one or two columns off, arrowheads that stop a cell short,
-  and gaps of one or two cells before a box.
 - **What it never does:** change your words. Only line characters and spaces move or appear:
-  into empty cells, or, when a box grows, along that box's own connector, which gets shorter. A test strips every line character from each row, before and
-  after, and checks that what remains is identical.
+  into empty cells, or, when a box grows, along that box's own connector, which gets shorter.
+  A test strips every line character from each row, before and after, and checks that what
+  remains is identical.
 - **What you get back:** every edit with its line and column, and the corrected text in
   `repair.text`, ready to paste back where the diagram came from. Diagrams that were already
   right come back untouched.
@@ -442,7 +444,7 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 
 ## Roadmap
 
-<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/timeline.svg" width="700" alt="ascii2svg release by release, drawn by ascii2svg: a vertical spine of version boxes from 1.0 at the bottom to 1.8, each with a dotted leader to a diamond marker and what it shipped, arrows flowing upward, and a dashed next box at the top with the planned work"></p>
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/timeline.svg" width="700" alt="ascii2svg release by release, drawn by ascii2svg: a vertical spine of version boxes from 1.0 at the bottom to 1.15, each with a dotted leader to a diamond marker and what it shipped, arrows flowing upward, and a dashed next box at the top inviting ideas"></p>
 
 <p align="center"><sub>Drawn by ascii2svg from <a href="https://github.com/SatyadipPaul/ascii2svg/blob/main/docs/examples/timeline.txt">plain text</a>: version boxes on a spine, dotted leaders ending in diamond markers (hollow for what's planned), pulses flowing from each release to the next, and the dashed future on top.</sub></p>
 
@@ -450,7 +452,7 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 <summary><b>The same roadmap as a board</b></summary>
 <br>
 
-<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/roadmap.svg" width="820" alt="The ascii2svg roadmap as a board: a block-character progress bar, six shipped milestones snaking through a solid container, and six planned items in dashed boxes"></p>
+<p align="center"><img src="https://satyadippaul.github.io/ascii2svg/roadmap.svg" width="820" alt="The ascii2svg roadmap as a board: a block-character progress bar, six shipped milestones snaking through a solid container, and a dashed box inviting the next idea"></p>
 
 </details>
 
@@ -471,7 +473,9 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 - [x] Arrows between plain words (`A --> B`, `A --HTTP--> B`, `|` and `v` under a label)
 - [x] Vertical ASCII UML heads (`/_\` `<>` `*` under or over a box)
 - [x] On npm: `@satyadippaul/ascii2svg`, the same module in WebAssembly, byte-identical by test
-- [ ] Every look checked in Firefox, Safari and cairo (`--png`); today: Chromium, with the static look in cairo and resvg
+
+Everything planned has shipped. Have an idea, or a diagram that doesn't render the way you meant?
+[Open an issue](https://github.com/SatyadipPaul/ascii2svg/issues).
 
 </details>
 
@@ -481,7 +485,8 @@ Issues and pull requests are welcome, and a diagram that renders wrongly is the 
 report there is: paste the text and say what you expected.
 
 ```bash
-python3 tests/test_ascii2svg.py        # 65 tests over 32 test diagrams, plus the npm package's parity tests; or: python3 -m pytest tests
+python3 tests/test_ascii2svg.py        # 65 tests over 32 test diagrams (or: python3 -m pytest tests)
+cd npm && npm install && npm test      # the npm package: byte-identical to Python on every test diagram
 python3 docs/build.py                  # regenerate every image on this page and the playground files
 ```
 

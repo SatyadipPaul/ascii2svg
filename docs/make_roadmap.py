@@ -13,7 +13,8 @@ SHIPPED = [("1.0 – 1.2 foundations", "boxes, arrows, 1:1", "colour · themes �
            ("1.5 · 1.14 repair", "--repair for LLMs", "up to 12 columns off"),
            ("1.6 – 1.7 shapes", "block charts, diamonds", "dashed lines"),
            ("1.8 – 1.13 notation", "UML, ER, curves, dashes", "arrows between words")]
-NEXT = [("Firefox, Safari", "and cairo checks")]
+IDEA = ("your idea next?", "open an issue")
+NEXT = [IDEA]
 
 
 class Canvas:
@@ -79,9 +80,11 @@ def roadmap():
     cols = [X0 + i * (W + GAP) for i in range(3)]
     right = cols[-1] + W - 1 + 3
     # progress: one block of bar per 1/24th, full blocks for what shipped
-    done = len(SHIPPED) / (len(SHIPPED) + len(NEXT))
+    planned = [n for n in NEXT if n != IDEA]              # the open invitation isn't planned work
+    done = len(SHIPPED) / (len(SHIPPED) + len(planned))
     bar = "█" * round(24 * done) + "░" * (24 - round(24 * done))
-    k.text(0, 1, f"progress  {bar}  {len(SHIPPED)} shipped · {len(NEXT)} next")
+    k.text(0, 1, f"progress  {bar}  {len(SHIPPED)} shipped · "
+                 + (f"{len(planned)} next" if planned else "everything planned has shipped"))
 
     # shipped: a snake, left to right, then down, then right to left
     k.box(2, 0, 18, right, title="Shipped")
@@ -100,7 +103,7 @@ def roadmap():
     # next: dashed, reached by a dashed arrow from the last shipped milestone
     top = 21
     bottom = top + 2 + 5 * -(-len(NEXT) // 3)            # one row of boxes per three items
-    k.box(top, 0, bottom, right, title="Next, in no particular order", dashed=True)
+    k.box(top, 0, bottom, right, title="Next", dashed=True)
     nx = cols[0] + W // 2
     k.arrow(15, nx, top - 2, nx, ((top - 1, nx), "▼"))
     k.dashed |= {(r, nx) for r in range(16, top - 1) if r != 18}

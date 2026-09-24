@@ -1,4 +1,4 @@
-include LICENSE README.md SKILL.md
+include LICENSE README.md GUIDE.md SKILL.md
 recursive-include tests *.py *.txt *.md
 prune docs
 prune tools

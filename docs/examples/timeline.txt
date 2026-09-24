@@ -3,8 +3,8 @@
                                             ▲
                                             ╎
                                             ╎
-                                            ╎             Firefox, Safari
-                                        ┌╌╌╌┴╌╌╌┐        and cairo checks
+                                            ╎             your idea next?
+                                        ┌╌╌╌┴╌╌╌┐          open an issue
                                         ╎ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
                                         └╌╌╌┬╌╌╌┘
                                             ▲
