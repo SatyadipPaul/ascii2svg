@@ -1,0 +1,12 @@
+Browser <--> CDN ---> Origin
+                        |
+             +----------+----------+
+             |                     |
+             v                     v
+        Auth service         Orders service
+             |                     |
+             '-----> Postgres <----'
+
+request --> parse --> validate --> store
+
+Web app ---- REST ----> API --gRPC--> Billing

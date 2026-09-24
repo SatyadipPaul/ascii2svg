@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.11.0"
+__version__ = "1.12.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -532,6 +532,96 @@ def interpret(cells, nrows, ncols):
                 ends.append("T")
         return None if "T" in ends or not ok else ends
 
+    # 2a) free-floating connectors between plain words, e.g. 'Client ---> Server', or '|' and 'v'
+    #     from one label down to another. A group of connected '-', '|', '+', heads and bends that
+    #     touches no box is drawn only if an arrowhead in it points at a word (or a box) and every
+    #     loose end rests on a word: a space before it on a row ('a-->b' stays text), touching or
+    #     one blank row away in a column. A lone '->' stays text ('fn f() -> T', 'p->next').
+    #     A line may run on past a short label on its row: '--HTTP-->', '-- calls -->'.
+    def word(t):
+        return _alnum(t) or t in "()[]{}"
+
+    def word_v(r, c):                                       # part of a label, or a space inside one
+        t = ch(r, c)
+        return word(t) or (t == " " and _alnum(ch(r, c - 1)) and _alnum(ch(r, c + 1)))
+
+    def arms_of(r, c):
+        t = ch(r, c)
+        if (r, c) in struct:
+            return set()
+        if (r, c) in bends:
+            return bends[(r, c)]
+        if t in ASCII_HEADS and head_ok(r, c):
+            return {ASCII_TAIL[t]}
+        return {"-": {"L", "R"}, "|": {"U", "D"}, "+": set("UDLR")}.get(t, set())
+
+    def anchor(r, c, d, head=False):
+        """A connector leaving (r, c) toward d lands on a word or a box."""
+        dr, dc = DIRS[d]
+        if is_s(r + dr, c + dc):
+            return True
+        if d in "LR":
+            if head and _alnum(ch(r, c + dc)):
+                return True
+            for k in range(1, 4):
+                t = ch(r, c + k * dc)
+                if t != " ":
+                    return k > 1 and (word(t) or is_s(r, c + k * dc))
+            return False
+        return word_v(r + dr, c) or (ch(r + dr, c) == " " and (word_v(r + 2 * dr, c) or is_s(r + 2 * dr, c)))
+
+    def bridge(r, c, d):
+        """The piece of line that resumes past a short label on row r, going d from (r, c)."""
+        dc = DIRS[d][1]
+        x = c + dc * (1 + (ch(r, c + dc) == " "))
+        start, alnum = x, False
+        while True:
+            t = ch(r, x)
+            if t == "-" and x != start:
+                break
+            if t == " " and ch(r, x + dc) == "-" and x != start:
+                x += dc
+                break
+            if abs(x - start) > 24 or (r, x) in struct or t in ("", "-", "|", "+", "<", ">")                     or (t == " " and ch(r, x + dc) in (" ", "")):
+                return None
+            alnum = alnum or _alnum(t)
+            x += dc
+        return (r, x) if alnum and OPP[d] in arms_of(r, x) else None
+
+    floating, seen = set(), set()
+    for start in sorted(cells):
+        if start in seen or not arms_of(*start) or ch(*start) not in "-|":
+            continue
+        group, todo, ok = set(), [start], True
+        while todo:
+            r, c = todo.pop()
+            if (r, c) in group:
+                continue
+            group.add((r, c))
+            for d in arms_of(r, c):
+                n = (r + DIRS[d][0], c + DIRS[d][1])
+                if OPP[d] in arms_of(*n):
+                    todo.append(n)
+                elif ch(r, c) == "-" and bridge(r, c, d):
+                    todo.append(bridge(r, c, d))
+                elif ch(r, c) != "+" and not anchor(r, c, d):
+                    ok = False                              # a loose end that rests on nothing
+        seen |= group
+        heads_in = [k for k in group if ch(*k) in ASCII_HEADS and k not in bends]
+        if not ok or not heads_in:
+            continue
+        joined = lambda k: sum(OPP[d] in arms_of(k[0] + DIRS[d][0], k[1] + DIRS[d][1]) for d in arms_of(*k))
+        if any(ch(*k) == "+" and joined(k) < 2 for k in group):
+            continue                                        # a '+' that ends a line is not a bend
+        if not any(anchor(r, c, OPP[ASCII_TAIL[ch(r, c)]], head=True) for r, c in heads_in):
+            continue
+        short = [(r, c) for r, c in group if ch(r, c) == "-" and ch(r, c - 1) != "-" and ch(r, c + 1) != "-"
+                 and not ({ch(r, c - 1), ch(r, c + 1)} & {"+", ".", "'", "`"})]
+        if short:
+            continue                                        # 'x -> y': one dash is too little to go on
+        floating |= group
+    struct.update(floating)
+
     changed = True
     while changed:
         changed = False
@@ -793,6 +883,9 @@ def trace_routes(get, heads, boxes, limit=200):
                 continue
             n = (cr + DIRS[step][0], cc + DIRS[step][1])
             t, back = get(*n), OPP[step]
+            if t in HEADS and HEADS[t] == step and TAIL[t] == back and len(seq) > 1 and                     all(ARMS.get(get(*k)) == frozenset((step, back)) for k in seq[1:]):
+                out.append(((r, c, d), seq + [n], "open", step))  # the far head of a straight '<-->'
+                continue
             if t in HEADS:
                 continue                                        # leads into another arrow: not a source
             if t == " " and get(cr, cc) in DASHED:              # a gap in '- - ->': hop to the next dash
@@ -1601,6 +1694,8 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
                         else f"'{n}' at {at(r + dr, c + dc)} has no arm toward this line")
             elif n != " ":
                 continue                                  # an arrowhead, or a label: a fine place to end
+            elif a in "UD" and _alnum(get(r + dr, c - 1)) and _alnum(get(r + dr, c + 1)):
+                continue                                  # the space between a label's words
             else:
                 t2 = get(r + 2 * dr, c + 2 * dc)
                 if t2 not in (" ", "") and t2 not in ARMS and t2 not in HEADS:
@@ -1845,6 +1940,8 @@ def _repair_connector_once(g):
             nr, nc = r + dr, c + dc
             if get(nr, nc) != " " or is_text(get(r + 2 * dr, c + 2 * dc)):
                 continue
+            if a in "UD" and is_text(get(nr, nc - 1)) and is_text(get(nr, nc + 1)):
+                continue                                    # the space between a label's words
             # a piece one cell to the side that continues this line: move it into line
             want = {"D": "▼v", "U": "▲^", "R": "▶>", "L": "◀<"}[a]
             sides = (((0, 1), (0, -1), (0, 2), (0, -2)) if a in "UD"          # nearest first
@@ -1883,7 +1980,8 @@ def _repair_connector_once(g):
         dr, dc = DIRS[d]
         n1, n2 = (r + dr, c + dc), (r + 2 * dr, c + 2 * dc)
         tail = get(r - dr, c - dc)
-        if g.free(*n1) and (get(*n2) in ARMS or n2 in border) and tail in ARMS and d in ARMS[tail]:
+        inside_label = d in "UD" and is_text(get(n1[0], n1[1] - 1)) and is_text(get(n1[0], n1[1] + 1))
+        if g.free(*n1) and not inside_label and (get(*n2) in ARMS or n2 in border) and tail in ARMS                 and d in ARMS[tail]:
             raw = g.ch(r, c)
             shaft = ("|" if d in "UD" else "-") if raw in "v^<>" else ("│" if d in "UD" else "─")
             g.put(r, c, shaft)
@@ -1978,14 +2076,14 @@ def describe(cells, nrows, ncols):
         return min(hits, key=lambda b: (b[2] - b[0]) * (b[3] - b[1])) if hits else None
 
     def endpoint(cell, step):
-        """What sits at `cell` (or one blank cell further along `step`)."""
-        for k in (0, 1):
+        """What sits at `cell` (or one blank cell further along `step`; three across a row)."""
+        for k in range(4 if step in "LR" else 2):
             r, c = cell[0] + k * DIRS[step][0], cell[1] + k * DIRS[step][1]
             b = on_border((r, c))
             if b:
                 return {"box": ids[b], "name": info[b]["name"]}
-            if is_text(get(r, c)):
-                return {"text": text_run(r, c)}
+            if is_text(get(r, c)) or (step in "UD" and is_text(get(r, c - 1)) and is_text(get(r, c + 1))):
+                return {"text": text_run(r, c)}                # a word, or the space between two
             if get(r, c) != " ":
                 break
         around = [b for b in boxes if b[0] < cell[0] < b[2] and b[1] < cell[1] < b[3]]
@@ -1993,6 +2091,38 @@ def describe(cells, nrows, ncols):
             b = min(around, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
             return {"box": ids[b], "name": info[b]["name"]}
         return {"cell": [cell[0] + 1, cell[1] + 1]}
+
+    def label_past(cell, step):
+        """'──HTTP──▶': the text on a row between two pieces of one line -> (label, far piece)."""
+        if step not in "LR":
+            return None
+        dc = DIRS[step][1]
+        r, x = cell[0], cell[1] + dc
+        x += dc * (get(r, x) == " ")
+        first = x
+        while is_text(get(r, x)) or (get(r, x) == " " and is_text(get(r, x + dc))):
+            x += dc
+        if x == first:
+            return None
+        label = squash("".join(get(r, y) for y in sorted(range(first, x, dc))))
+        x += dc * (get(r, x) == " " and get(r, x + dc) in ARMS)
+        straight = lambda y: get(r, y) in ARMS and ARMS[get(r, y)] == frozenset("LR")
+        if straight(x) and straight(x + dc) and any(_alnum(t) for t in label):
+            return label, (r, x)                                # two cells of line at least, like '--HTTP-->'
+        return None
+
+    def source(seq, kind, step, depth=0):
+        """Where a traced route starts, and the labels it passed on the way."""
+        src = seq[-1]
+        if kind == "box":
+            b = on_border(src)
+            return ({"box": ids[b], "name": info[b]["name"]} if b else {"cell": [src[0] + 1, src[1] + 1]}), []
+        past = label_past(src, step) if depth < 4 and get(*src) in ARMS else None
+        if past:
+            for _, seq2, kind2, step2 in trace_routes(get, [(past[1][0], past[1][1], OPP[step])], boxes):
+                frm, labels = source(seq2, kind2, step2, depth + 1)
+                return frm, labels + [past[0]]
+        return endpoint((src[0] + DIRS[step][0], src[1] + DIRS[step][1]), step), []
 
     heads = [(r, c, HEADS[t]) for (r, c), (t, _) in sorted(cells.items()) if t in HEADS]
     joins = lambda r, c, a: (get(r + DIRS[a][0], c + DIRS[a][1]) in ARMS and
@@ -2013,17 +2143,13 @@ def describe(cells, nrows, ncols):
             kinds[(r, c)] = "composition" if t == "◆" else "aggregation"
     edges, seen = [], set()
     for (r, c, d), seq, kind, step in trace_routes(get, heads, boxes):
-        src = seq[-1]
-        if kind == "box":
-            b = on_border(src)
-            frm = {"box": ids[b], "name": info[b]["name"]} if b else {"cell": [src[0] + 1, src[1] + 1]}
-        else:
-            frm = endpoint((src[0] + DIRS[step][0], src[1] + DIRS[step][1]), step)
+        frm, labels = source(seq, kind, step)
         to = endpoint((r + DIRS[d][0], c + DIRS[d][1]), d)
         key = json.dumps([frm, to], sort_keys=True)
         if key not in seen:
             seen.add(key)
-            edges.append({"from": frm, "to": to, **({"kind": kinds[(r, c)]} if (r, c) in kinds else {})})
+            edges.append({"from": frm, "to": to, **({"kind": kinds[(r, c)]} if (r, c) in kinds else {}),
+                          **({"label": " / ".join(labels)} if labels else {})})
     pair = lambda e: frozenset((e["from"].get("box"), e["to"].get("box")))
     drawn = {pair(e) for e in edges}
     edges += [e for e in straight_links(get, boxes, ids, info, on_border) if pair(e) not in drawn]  # not an arrow's own line
@@ -2113,7 +2239,8 @@ REPORT_FIELDS = {
     "ascii_drawn_as_lines, ascii_line_like_kept_as_text": "how ASCII - | + v ^ < > were read",
     "style, theme, color, animate, html, preset": "the look that was rendered",
     "diagram": "with --describe: {boxes: [{id, name, title, text, row, col, rows, cols, parent}], "
-               "edges: [{from, to, kind?, cardinality?}]}; an endpoint is {box, name}, {text} or {cell}; "
+               "edges: [{from, to, kind?, cardinality?, label?}]}; an endpoint is {box, name}, {text} or "
+               "{cell}; label is the text set into the line, as in --HTTP--> ; "
                "kind is inheritance, aggregation or composition (UML heads), relationship (ER, with "
                "cardinality [from end, to end]) or link (a straight line with no arrowhead)",
     "svg / html, png": "output paths, or the markup itself when there is no -o (unless --brief or --check)",
@@ -2157,6 +2284,8 @@ what gets drawn:
   Unicode lines ─│┌┐└┘├┤┬┴┼╭╮╰╯═║╔╗╚╝╪ and arrows ▼▲▶◀ are drawn as lines.
   ASCII + - | and v ^ < > are drawn only when they form a box or attach to one;
   so are rounded corners: . on top and ' below (.--. over '--', or ---. over |).
+  Between plain words, a line is drawn when it ends in an arrowhead pointing at a word
+  and each loose end rests on a word: A --> B, A --HTTP--> B, or | and v under a label.
   Everything else (hyphens in words, a->b, user_id, markdown tables) stays text,
   in exactly the same cell. When unsure, it stays text.
 

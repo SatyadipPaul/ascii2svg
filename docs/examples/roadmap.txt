@@ -1,4 +1,4 @@
- progress  █████████████░░░░░░░░░░░  6 shipped · 5 next
+ progress  ██████████████░░░░░░░░░░  6 shipped · 4 next
 
 ┌─ Shipped ──────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                                    │
@@ -10,9 +10,9 @@
 │                                                                                    │               │
 │                                                                                    ▼               │
 │  ┌──────────────────────────┐      ┌──────────────────────────┐      ┌──────────────────────────┐  │
-│  │   1.8 – 1.11 notation    │      │     1.6 – 1.7 shapes     │      │        1.5 repair        │  │
-│  │  UML and ER, both ways   │◀─────┤  block charts, diamonds  │◀─────┤    --repair for LLMs     │  │
-│  │ ASCII UML · dash · curve │      │       dashed lines       │      │   Fix alignment button   │  │
+│  │   1.8 – 1.12 notation    │      │     1.6 – 1.7 shapes     │      │        1.5 repair        │  │
+│  │ UML, ER, curves, dashes  │◀─────┤  block charts, diamonds  │◀─────┤    --repair for LLMs     │  │
+│  │   arrows between words   │      │       dashed lines       │      │   Fix alignment button   │  │
 │  └─────────────┬────────────┘      └──────────────────────────┘      └──────────────────────────┘  │
 │                ╎                                                                                   │
 │                ╎                                                                                   │
@@ -22,14 +22,14 @@
 ┌╌ Next, in no particular order ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐
 ╎                                                                                                    ╎
 ╎  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐      ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐      ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐  ╎
-╎  ╎      free-floating       ╎      ╎      vertical ASCII      ╎      ╎      bigger repairs      ╎  ╎
-╎  ╎     ASCII connectors     ╎      ╎        UML heads         ╎      ╎      (3+ cells off)      ╎  ╎
+╎  ╎      vertical ASCII      ╎      ╎      bigger repairs      ╎      ╎      JS / npm port       ╎  ╎
+╎  ╎        UML heads         ╎      ╎      (3+ cells off)      ╎      ╎                          ╎  ╎
 ╎  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘      └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘      └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘  ╎
 ╎                                                                                                    ╎
-╎  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐      ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐                                    ╎
-╎  ╎      JS / npm port       ╎      ╎     Firefox, Safari      ╎                                    ╎
-╎  ╎                          ╎      ╎     and cairo checks     ╎                                    ╎
-╎  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘      └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘                                    ╎
+╎  ┌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┐                                                                      ╎
+╎  ╎     Firefox, Safari      ╎                                                                      ╎
+╎  ╎     and cairo checks     ╎                                                                      ╎
+╎  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘                                                                      ╎
 ╎                                                                                                    ╎
 └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
 

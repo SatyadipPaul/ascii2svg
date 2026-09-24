@@ -193,7 +193,7 @@ def test_markdown_table_and_tree_stay_text():
 
 
 def test_arrow_text_without_structure_stays_text():
-    cells, draw, *_ = pipeline("User ---> Server\nx + y = z\nC++ and a->b\n")
+    cells, draw, *_ = pipeline("x + y = z\nC++ and a->b\nmaps x -> y\nrun --dry-run\nfn f(s: &str) -> Result<T>\n")
     assert draw == cells
 
 
@@ -811,6 +811,28 @@ def test_ascii_rounded_corners():
                   "project\n|-- src\n|   `-- main.py\n`-- README.md", ".\n|\n'"):
         cells, draw, svg, _, _ = pipeline(words)
         assert not set("╭╮╰╯") & {t for t, _ in draw.values()}, words
+
+
+def test_free_floating_connectors_between_words():
+    text = fx("floating.txt")
+    cells, draw, svg, stats, _ = pipeline(text, animate="flow")
+    assert a2s.self_check(svg, draw, cells) == [] and stats["flows"] == 12
+    assert {"▶", "◀", "▼", "┴", "╰", "╯"} <= {t for t, _ in draw.values()}
+    _, r = a2s.render(text, describe=True)
+    assert r["status"] == "ok" and not r["warnings"], r["warnings"]
+    edges = [(e["from"]["text"], e["to"]["text"], e.get("label")) for e in r["diagram"]["edges"]]
+    assert edges == [("CDN", "Browser", None), ("Browser", "CDN", None), ("CDN", "Origin", None),
+                     ("Origin", "Auth service", None), ("Origin", "Orders service", None),
+                     ("Auth service", "Postgres", None), ("Orders service", "Postgres", None),
+                     ("request", "parse", None), ("parse", "validate", None), ("validate", "store", None),
+                     ("Web app", "API", "REST"), ("API", "Billing", "gRPC")], edges
+    _, r = a2s.render("+---+         +---+\n| A |--HTTP-->| B |\n+---+         +---+", describe=True)
+    assert [(e["from"]["name"], e["to"]["name"], e["label"]) for e in r["diagram"]["edges"]] == [("A", "B", "HTTP")]
+    for words in ("a-->b and x->y", "maps x -> y", "node->next = head;", "Name ---- Value", "<!-- note -->",
+                  "run --dry-run --verbose --> out", 'print("  -->", name)',
+                  "| a | b |\n|---|---|\n| 1 | 2 |", "---\ntitle: x\n---", "- item\n  - sub", "x\n|\ny"):
+        cells, draw, *_ = pipeline(words)
+        assert draw == cells, words
 
 
 if __name__ == "__main__":

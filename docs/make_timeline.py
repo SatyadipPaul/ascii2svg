@@ -25,9 +25,10 @@ RELEASES = [  # oldest first: (version, side, label lines, leader length)
     ("1.9", "L", ["ER crow's feet", "running up and down"], 14),
     ("1.10", "R", ["ASCII UML heads <|  <>  *,", "dashed  - - ->  and dotted  ...>"], 16),
     ("1.11", "L", ["ASCII rounded corners", "and rounded bends"], 14),
+    ("1.12", "R", ["arrows between plain words,", "labels set into lines"], 16),
 ]
-NEXT = [("R", ["free-floating connectors,", "vertical ASCII UML heads"], 16),
-        ("L", ["bigger repairs,", "a JS / npm port"], 16)]
+NEXT = [("L", ["vertical ASCII UML heads,", "bigger repairs"], 16),
+        ("R", ["a JS / npm port,", "Firefox and Safari checks"], 16)]
 S = 44                                    # the spine's column
 HALF = 4                                  # a version box spans S-HALF .. S+HALF
 

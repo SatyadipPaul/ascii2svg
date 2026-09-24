@@ -66,6 +66,10 @@ put it back in the user's file, so their source matches the picture.
   `--dry-run`, `user_id`, markdown tables and `|--` file trees are left exactly as written.
 - ASCII rounded corners, `.` on top and `'` (or a backtick) below: they close a box
   (`.---.` over `'---'`) or bend a connector that is drawn (`---.` over `|`), drawn as `╭ ╮ ╰ ╯`.
+- Lines between plain words, no boxes needed: `Client --> Server`, `Web --HTTP--> API`, or `|` and
+  `v` under a label. Drawn when an arrowhead points at a word and every loose end rests on a word
+  (leave a space between a word and the line on a row: `a-->b` stays text). `--describe` reports
+  the words as `{"text": ...}` endpoints and the inline label as the edge's `label`.
 
 ## Writing diagrams that render well
 
