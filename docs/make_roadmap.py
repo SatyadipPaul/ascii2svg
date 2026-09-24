@@ -12,8 +12,8 @@ SHIPPED = [("1.0 – 1.2 foundations", "boxes, arrows, 1:1", "colour · themes �
            ("1.4 everywhere", "browser playground", "MCP server · skill"),
            ("1.5 repair", "--repair for LLMs", "Fix alignment button"),
            ("1.6 – 1.7 shapes", "block charts, diamonds", "dashed lines"),
-           ("1.8 notation", "UML heads, ER feet", "--describe kinds")]
-NEXT = [("vertical ER", "connectors"), ("ASCII UML heads", "and dashed lines"), ("bigger repairs", "(3+ cells off)"),
+           ("1.8 – 1.9 notation", "UML heads, ER feet", "ER up, down, across")]
+NEXT = [("free-floating", "ASCII connectors"), ("ASCII UML heads", "and dashed lines"), ("bigger repairs", "(3+ cells off)"),
         ("ASCII rounded", "corners  .-'"), ("JS / npm port", ""), ("Firefox, Safari", "and cairo checks")]
 
 

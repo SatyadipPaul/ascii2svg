@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.8.0"
+__version__ = "1.9.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -308,11 +308,55 @@ def interpret(cells, nrows, ncols):
                 struct.update({(rr, c), (rr, c2)})
             break
 
+    def edge_at(r, c):
+        """A box's top or bottom edge at (r, c): a line with arms both ways, or ASCII '-'/'+' in a run
+        of at least two edge characters on one side (so a '-+-' tick is not mistaken for one)."""
+        t = ch(r, c)
+        if t in ARMS:
+            return {"L", "R"} <= ARMS[t]
+        run = lambda d: ch(r, c + d) in "-+" and ch(r, c + 2 * d) in "-+"
+        return t in "-+" and (run(-1) or run(1))
+
+    def er_col(r0, c):
+        """ER connector running down from the edge at (r0, c) to the next box edge:
+        '|' line, '-' or '-+-' tick, 'o' ring, '/|\\' foot opening down (just above the lower box)
+        and '\\|/' foot opening up (just below the upper box). Returns {cell: drawn} or None."""
+        out, rows, r = {}, [], r0 + 1
+        while not edge_at(r, c):
+            t, left, right = ch(r, c), ch(r, c - 1), ch(r, c + 1)
+            if t == "|":
+                foot = "down" if (left, right) == ("/", "\\") else "up" if (left, right) == ("\\", "/") else None
+                out[(r, c)] = "│"
+                if foot:
+                    out[(r, c - 1)], out[(r, c + 1)] = DIAG_OF[left], DIAG_OF[right]
+                rows.append(("line", foot))
+            elif t == "o":
+                out[(r, c)] = "○"
+                rows.append(("mark", None))
+            elif t == "-" and left not in "-+" and right not in "-+":
+                out[(r, c)] = "┼"
+                rows.append(("mark", None))
+            elif t == "+" and left == right == "-" and ch(r, c - 2) not in "-+" and ch(r, c + 2) not in "-+":
+                out[(r, c)], out[(r, c - 1)], out[(r, c + 1)] = "┼", "─", "─"
+                rows.append(("mark", None))
+            else:
+                return None
+            r += 1
+        feet = [(i, f) for i, (_, f) in enumerate(rows) if f]
+        lines = sum(k == "line" for k, _ in rows)
+        placed = all((f == "up" and i == 0) or (f == "down" and i == len(rows) - 1) for i, f in feet)
+        marked = feet or any(k == "mark" for k, _ in rows)
+        return out if rows and lines >= 2 and marked and placed else None
+
     # 1b) ER connectors between walls that are drawn (or already Unicode lines)
     er = {}
     for (r, c) in sorted(cells):
         if ((r, c) in struct or ch(r, c) in ARMS) and wall_at(r, c):
             found = er_run(r, c, 1)
+            if found:
+                er.update(found)
+        if ((r, c) in struct or ch(r, c) in ARMS) and edge_at(r, c):
+            found = er_col(r, c)
             if found:
                 er.update(found)
     struct.update(er)
@@ -446,7 +490,7 @@ def interpret(cells, nrows, ncols):
         n = (r + DIRS[d][0], c + DIRS[d][1])
         t = ch(*n)
         back = OPP[d]
-        if er.get(n, "─") != "─":
+        if er.get(n, "─") not in ("─", "│"):
             return False                                    # ER marks sit on the line; walls get no arm to them
         perpendicular = (own == "-" and d in "UD") or (own == "|" and d in "LR")
         if n in struct:
@@ -943,12 +987,13 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         for s, e, p, _ in ends:                            # left end of a flat top or bottom
             if (s, e) in (("/", "top"), ("\\", "bot")):
                 q = (p[0] + CW, p[1])
-                if ({"top": "\\", "bot": "/"}[e], e, q) in at_end:
+                between = (round((p[1] - PAD) / CH) - (e == "bot"), round((p[0] - PAD) / CW))
+                if ({"top": "\\", "bot": "/"}[e], e, q) in at_end and get(*between) not in ARMS:
                     o.append(f'<line x1="{p[0]:g}" y1="{p[1]:g}" x2="{q[0]:g}" y2="{q[1]:g}" class="sgl ext"'
                              f'{grow}{timing(p[1])}/>')
                     capped.update({p, q})
         for s, e, p, (br, bc) in ends:
-            if p in capped or get(br, bc) not in ARMS:
+            if p in capped or (get(br, bc) not in ARMS and get(br, bc) != "○"):   # a ring sits on top of the join
                 continue
             q = (PAD + bc * CW + CW / 2, PAD + br * CH + CH / 2)
             o.append(f'<line x1="{p[0]:g}" y1="{p[1]:g}" x2="{q[0]:g}" y2="{q[1]:g}" class="sgl ext"{grow}{timing(p[1])}/>')
@@ -1355,6 +1400,8 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
         if t not in ARMS:
             continue
         joined = lambda s: get(r + DIRS[s][0], c + DIRS[s][1]) in ARMS and OPP[s] in ARMS[get(r + DIRS[s][0], c + DIRS[s][1])]
+        if t == "─" and {get(r, c - 1), get(r, c + 1)} & {"┼"} and not (joined("L") and joined("R")):
+            continue                                      # one side of a '-+-' tick across a line
         for a in sorted(ARMS[t]):
             if t == "┼" and not joined(a) and not joined(OPP[a]):
                 continue                                  # a tick across a line (ER '||'), not two stubs
@@ -1833,7 +1880,8 @@ def straight_links(get, boxes, ids, info, on_border):
                 k += 1
             if not other:
                 continue
-            marks = [get(*x) for x in run]
+            foot = lambda x: a == "D" and {get(x[0], x[1] - 1), get(x[0], x[1] + 1)} == {"╱", "╲"}
+            marks = [FOOT_R if foot(x) else get(*x) for x in run]
             half = len(marks) // 2
             near, far = _cardinality(marks[:half]), _cardinality(marks[len(marks) - half:])
             e = {"from": {"box": ids[b], "name": info[b]["name"]}, "to": {"box": ids[other], "name": info[other]["name"]}}

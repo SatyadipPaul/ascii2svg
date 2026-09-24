@@ -3,10 +3,15 @@
                                             ▲
                                             ╎
                                             ╎
-            vertical ER connectors,         ╎             bigger repairs,
-                ASCII UML heads         ┌╌╌╌┴╌╌╌┐         a JS / npm port
+               ASCII UML heads,             ╎             bigger repairs,
+              ASCII dashed lines        ┌╌╌╌┴╌╌╌┐         a JS / npm port
                        ◇╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
                                         └╌╌╌┬╌╌╌┘
+                                            ▲
+                  ER crow's feet            │
+                running up and down     ┌───┴───┐
+                         ◆┈┈┈┈┈┈┈┈┈┈┈┈┈┈┤  1.9  │
+                                        └───┬───┘
                                             ▲
                                             │                       UML heads,
                                         ┌───┴───┐                 ER crow's feet

@@ -742,6 +742,28 @@ def test_er_crows_foot_notation():
     assert [e.get("kind") for e in r["diagram"]["edges"]] == ["link"]
 
 
+def test_er_crows_foot_runs_vertically_too():
+    text = fx("er_vertical.txt")
+    cells, draw, svg, stats, _ = pipeline(text, color=True)
+    assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 3
+    assert svg.count('class="ring"') == 2 and not re.findall(r"<text[^>]*>[|o/\\-]</text>", svg)
+    feet = [ln for ln in re.findall(r'<line [^>]*class="sgl"[^>]*/>', svg) if 'x1="' in ln
+            and re.search(r'x1="([\d.]+)"', ln).group(1) != re.search(r'x2="([\d.]+)"', ln).group(1)
+            and re.search(r'y1="([\d.]+)"', ln).group(1) != re.search(r'y2="([\d.]+)"', ln).group(1)]
+    assert len(feet) == 4                                               # two prongs per foot, drawn as diagonals
+    _, r = a2s.render(text, describe=True)
+    assert r["status"] == "ok" and not r["warnings"], r["warnings"]
+    rel = [(e["from"]["name"], e["to"]["name"], e["cardinality"]) for e in r["diagram"]["edges"]]
+    assert rel == [("CUSTOMER", "ORDER", ["one", "zero or many"]), ("ORDER", "SHIPMENT", ["zero or many", "one"])], rel
+    uni = "┌──────┐\n│  A   │\n└──┬───┘\n   │\n   ┼\n   │\n   ○\n  ╱│╲\n┌──┴───┐\n│  B   │\n└──────┘\n"
+    _, r = a2s.render(uni, describe=True)
+    assert r["status"] == "ok" and r["diagram"]["edges"][0]["cardinality"] == ["one", "zero or many"], r["diagram"]
+    for plain in ("+---+\n| a |\n+-+-+\n  |\n  v\n+-+-+\n| b |\n+---+\n",       # an arrow down stays an arrow
+                  "x\n-+-\ny\n"):                                          # a '-+-' among words stays text
+        cells, draw, svg, _, _ = pipeline(plain)
+        assert 'class="ring"' not in svg and a2s.self_check(svg, draw, cells) == [], plain
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0
