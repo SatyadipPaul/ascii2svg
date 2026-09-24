@@ -55,9 +55,9 @@ def glow_hits(svg):
     hit = lambda a, b: a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
     inside = lambda a, b: b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
     n = 0
-    for x, y, t in re.findall(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
-        w = a2s.width_of(html.unescape(t))               # '&gt;' is one character wide
-        cell = (float(x) - w * cw / 2, float(y) - 5 - ch / 2, float(x) + w * cw / 2, float(y) - 5 + ch / 2)
+    for x, y, t in text_cells(svg):
+        w = a2s.width_of(t)                              # '&gt;' is one character wide
+        cell = (x - w * cw / 2, y - 5 - ch / 2, x + w * cw / 2, y - 5 + ch / 2)
         for b in boxes:
             if inside(cell, b["fill"]) or any(inside(cell, p) for p in b["plates"]):
                 continue
@@ -86,10 +86,43 @@ def test_every_look_roundtrips_exactly():
                 assert a2s.self_check(svg, draw, cells) == [], (name, look, style)
 
 
+_LINE_CLS = r'(sgl|dbl|dbl-gap|sgl dash n[234])'
+
+
+def _segments(body):
+    """Every connector piece, however it is written: one <line> each (animated) or subpaths of one
+    <path> per style (a still drawing). -> sorted [(class, piece)]"""
+    out = []
+    for x1, y1, x2, y2, cls in re.findall(r'<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)" class="%s"'
+                                          % _LINE_CLS, body):
+        if x1 != x2 and y1 != y2:
+            out.append((cls, f"M{x1} {y1}L{x2} {y2}"))
+        else:
+            out.append((cls, f"M{x1} {y1}H{x2}" if y1 == y2 else f"M{x1} {y1}V{y2}"))
+    for d, cls in re.findall(r'<path d="(M[^"]*)" class="%s"' % _LINE_CLS, body):
+        out += [(cls, "M" + sub) for sub in d.split("M")[1:]]
+    return sorted(out)
+
+
 def _strip_motion(svg):
     body = svg[svg.index("</style>"):]
     body = re.sub(r' pathLength="1"| style="[^"]*"| class="r\d+"', "", body)
-    return re.sub(r'<g class="pulse".*?</g>', "", body)
+    body = re.sub(r'<g class="pulse".*?</g>', "", body)
+    segs = _segments(body)
+    body = re.sub(r'<(line|path) [^>]*class="%s"[^>]*/>' % _LINE_CLS, "", body)
+    return body, segs
+
+
+def text_cells(svg):
+    """(x, y, character) for every drawn character, whether it has its own <text> or sits in a run."""
+    for xs, y, t in re.findall(r'<text x="([\d. ]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
+        t, xs = html.unescape(t), xs.split()
+        pairs = [(xs[0], t)] if len(xs) == 1 else [(x, c) for x, c in zip(xs, t) if c != " "]
+        yield from ((float(x), float(y), c) for x, c in pairs)
+
+
+def chars(svg):
+    return [c for *_, c in text_cells(svg)]
 
 
 def test_animation_ends_on_the_static_drawing():
@@ -141,12 +174,15 @@ def test_scroll_reveal_is_driven_by_the_page():
 
 def test_self_check_catches_planted_faults():
     cells, draw, svg, _, _ = pipeline(fx("complex_unicode.txt"))
-    letter = svg.replace(">y</text>", ">Y</text>", 1)
-    m = re.search(r'<path d="M([\d.]+) ([\d.]+)Q([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)"', svg)
+    letter = svg.replace(">API Gateway</text>", ">API GateWay</text>", 1)
+    m = re.search(r'M([\d.]+) ([\d.]+)Q([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)', svg)
     hx, cy, qx, qy, vx, vy = map(float, m.groups())
-    corner = svg.replace(m.group(0), f'<path d="M{2 * qx - hx:g} {cy:g}Q{qx:g} {qy:g} {vx:g} {vy:g}"', 1)
-    line = re.sub(r'<line x1="[\d.]+" y1="[\d.]+" x2="[\d.]+" y2="[\d.]+" class="sgl"/>', "", svg, count=1)
-    for bad in (letter, corner, line):
+    corner = svg.replace(m.group(0), f'M{2 * qx - hx:g} {cy:g}Q{qx:g} {qy:g} {vx:g} {vy:g}', 1)
+    line = re.sub(r'(<path d="[^"]*?)M[\d.]+ [\d.]+V[\d.]+', r"\1", svg, count=1)      # one piece of line gone
+    run = re.search(r'<text x="([\d. ]+)"', svg).group(1)
+    shifted = svg.replace(f'<text x="{run}"', '<text x="%s"' % " ".join(f"{float(v) + 9:g}" for v in run.split()), 1)
+    short = svg.replace(f'<text x="{run}"', '<text x="%s"' % " ".join(run.split()[:-1]), 1)   # a run missing an x
+    for bad in (letter, corner, line, shifted, short):
         assert bad != svg
         assert a2s.self_check(bad, draw, cells), "planted fault was not caught"
 
@@ -409,7 +445,7 @@ def test_no_false_alarms_on_well_formed_diagrams():
 def test_touching_lines_are_drawn_touching():
     svg = a2s.render(fx("sequence.txt"))[0]
     life = 12 + 4 * 9 + 4.5                                                      # the Client lifeline's x
-    assert re.search(r'<line x1="%g" y1="[\d.]+" x2="[\d.]+"' % (life + 0.7), svg), "message should start at the lifeline"
+    assert re.search(r'M%g [\d.]+H' % (life + 0.7), svg), "message should start at the lifeline"
     cells, draw, svg, _, _ = pipeline(fx("sequence.txt"))
     assert a2s.self_check(svg, draw, cells) == []                               # the lifeline still reads back as │
 
@@ -672,7 +708,7 @@ def test_repair_result_is_exact_and_positions_point_into_the_input():
 def test_block_elements_are_exact_rectangles():
     cells, draw, svg, stats, _ = pipeline("A ████░░ ▏▎▍▌▋▊▉ ▁▂▃▄▅▆▇ ▀▐▔▕ ▘▝▖▗▚▞▙▛▜▟\nB ▓▓▒▒", color=True, animate="draw")
     assert a2s.self_check(svg, draw, cells) == []
-    texts = re.findall(r"<text[^>]*>(.*?)</text>", svg)
+    texts = chars(svg)
     assert not any(t in a2s.BLOCKS for t in texts), texts           # no glyphs: rectangles only
     runs = re.findall(r'<rect x="[\d.]+" y="[\d.]+" width="([\d.]+)" height="[\d.]+" class="blk (k\d)"', svg)
     assert ("36", "k4") in runs and ("18", "k1") in runs, runs       # ████ is one rect, ░░ another
@@ -685,7 +721,7 @@ def test_diagonals_draw_only_as_runs():
     cells, draw, svg, stats, _ = pipeline(text)
     assert a2s.self_check(svg, draw, cells) == []
     assert "╱" in {t for t, _ in draw.values()} and "╲" in {t for t, _ in draw.values()}
-    assert not re.search(r"<text[^>]*>[/\\]</text>", svg)            # every slash in the fixture is a line
+    assert not set(chars(svg)) & set("/\\")                           # every slash in the fixture is a line
     assert svg.count('class="sgl ext"') >= 4                          # diamond caps + run-ons to the firewall
     for words in ("yes/no", "TCP/IP", r"C:\Users", r"\_/", "a/b/c", "/\n/"):
         cells, draw, svg, _, _ = pipeline(words)
@@ -714,7 +750,7 @@ def test_uml_heads_are_drawn_and_described():
         cells, draw, svg, stats, _ = pipeline(fx(name), color=True, animate="draw")
         assert a2s.self_check(svg, draw, cells) == [], name
         assert len(re.findall(r'<polygon[^>]*class="uml', svg)) == shapes, name
-        assert not re.search(r"<text[^>]*>[△▽◁▷◇◆]</text>", svg), name
+        assert not set(chars(svg)) & set("△▽◁▷◇◆"), name
     assert 'class="uml solid"' in pipeline(fx("uml.txt"))[2]                   # ◆ composition is filled
     d = a2s.describe(*a2s.build_grid(fx("uml.txt").split("\n")))
     kinds = {(e["from"]["name"], e["to"]["name"]): e.get("kind") for e in d["edges"]}
@@ -730,7 +766,7 @@ def test_er_crows_foot_notation():
     cells, draw, svg, stats, _ = pipeline(text, color=True)
     assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 3
     assert svg.count('class="ring"') == 2 and svg.count('class="foot"') == 2   # o and < > in the walls
-    assert not re.findall(r"<text[^>]*>(\||&lt;|&gt;)</text>", svg)             # every mark is drawn
+    assert not set(chars(svg)) & set("|<>")                                       # every mark is drawn
     _, report = a2s.render(text, describe=True)
     assert report["status"] == "ok" and not report["warnings"], report["warnings"]
     rel = [(e["from"]["name"], e["to"]["name"], e["cardinality"]) for e in report["diagram"]["edges"]]
@@ -747,7 +783,7 @@ def test_er_crows_foot_runs_vertically_too():
     text = fx("er_vertical.txt")
     cells, draw, svg, stats, _ = pipeline(text, color=True)
     assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 3
-    assert svg.count('class="ring"') == 2 and not re.findall(r"<text[^>]*>[|o/\\-]</text>", svg)
+    assert svg.count('class="ring"') == 2 and not set(chars(svg)) & set("|o/\\-")
     feet = [ln for ln in re.findall(r'<line [^>]*class="sgl"[^>]*/>', svg) if 'x1="' in ln
             and re.search(r'x1="([\d.]+)"', ln).group(1) != re.search(r'x2="([\d.]+)"', ln).group(1)
             and re.search(r'y1="([\d.]+)"', ln).group(1) != re.search(r'y2="([\d.]+)"', ln).group(1)]
@@ -769,7 +805,7 @@ def test_ascii_uml_heads():
     cells, draw, svg, stats, _ = pipeline(fx("uml_ascii.txt"), color=True)
     assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 8
     assert svg.count('class="uml wide"') == 3 and svg.count('class="uml solid"') == 1   # <| <> |> span two cells
-    assert not re.findall(r"<text[^>]*>(&lt;|&gt;|\||\*)</text>", svg)
+    assert not set(chars(svg)) & set("<>|*")
     kinds = [(e["from"]["name"], e["to"]["name"], e.get("kind"))
              for e in a2s.render(fx("uml_ascii.txt"), describe=True)[1]["diagram"]["edges"]]
     assert kinds == [("Dog", "Animal", "inheritance"), ("Wheel", "Car", "aggregation"),

@@ -804,7 +804,7 @@ def interpret(cells, nrows, ncols):
 
 # ─── rendering ───────────────────────────────────────────────────────────────
 CW, CH, PAD, FS = 9, 18, 12, 14
-GLOW_R, GLOW_N, GLOW_DY = 7.0, 14, 1.5
+GLOW_R, GLOW_N, GLOW_DY = 7.0, 7, 1.5          # 7 stacked layers: as smooth as 14 at half the bytes
 SHADOW = ((1.5, 0.18), (3.0, 0.13), (4.2, 0.09))
 RADIUS = 4.0
 TL, TR, BL, BR = set("┌╭╔"), set("┐╮╗"), set("└╰╚"), set("┘╯╝")
@@ -812,11 +812,11 @@ BOTTOM_OK = set("─┬┴┼═╪╌┄┈")
 
 # hues: (tint for a box that contains boxes, tint for a leaf box)
 THEMES = {
-    "light": {"ink": "#1f2328", "bg": "#ffffff", "accent": "#0969da", "glow": "#000000", "glow_a": 0.02,
+    "light": {"ink": "#1f2328", "bg": "#ffffff", "accent": "#0969da", "glow": "#000000", "glow_a": 0.0396,
               "neutral": "#f6f8fa", "hover": "#e2edfc",
               "hues": [("#f1f8ff", "#dbeeff"), ("#f0fbf3", "#d4f5de"), ("#f8f4ff", "#ebdfff"),
                        ("#fff7f0", "#ffe6d1"), ("#fff4f9", "#ffdcec"), ("#effbfa", "#cef3ef")]},
-    "dark": {"ink": "#e6edf3", "bg": "#0d1117", "accent": "#58a6ff", "glow": "#ffffff", "glow_a": 0.012,
+    "dark": {"ink": "#e6edf3", "bg": "#0d1117", "accent": "#58a6ff", "glow": "#ffffff", "glow_a": 0.0239,
              "neutral": "#151b23", "hover": "#1c2d45",
              "hues": [("#0f1a2b", "#15325a"), ("#0e1f16", "#16402a"), ("#1b1530", "#34245a"),
                       ("#23180e", "#4a2e14"), ("#241421", "#4a1f3a"), ("#0c2023", "#124042")]},
@@ -966,6 +966,31 @@ def flow_paths(get, heads, boxes, line_like, limit=200):
     return routes
 
 
+def tree_model(cells, nrows, ncols):
+    return {"nodes": [], "gate": {}}
+
+
+def text_runs(texts, gate_of=lambda r, c: None):
+    """Text cells -> [(row, [(col, width, char), ...])]: neighbouring characters on a row, with at most
+    one space between them, become one run, drawn as one <text> with an x for every character. Each
+    x starts its own text chunk, so every character is still centred in its own cell (1:1), and the
+    file is about a third the size of one element per character. Wide characters, emoji and
+    combining clusters stay on their own (an x per code point would split them)."""
+    out, last = [], None
+    for r, c, w, t in texts:
+        solo = not (w == 1 and len(t) == 1 and ord(t) < 0x10000 and t != " ")
+        g = gate_of(r, c)
+        if last and not solo and last[0] == r and last[2] == g and c - last[1] in (1, 2):
+            run = out[-1][1]
+            if c - last[1] == 2:
+                run.append((c - 1, 1, " "))
+            run.append((c, w, t))
+        else:
+            out.append((r, [(c, w, t)]))
+        last = None if solo else (r, c, g)
+    return out
+
+
 def _layout_css(mode, font=None):
     """mode: none | timed (plays on load) | scroll (a host page adds .a2s-on as things scroll into view)."""
     css = (".sgl{stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;fill:none}"
@@ -1046,7 +1071,8 @@ def _colour_css(t, color, anim):
 
 
 def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII diagram",
-               theme="light", color=False, animate="none", accent=None, font=None, width=None):
+               theme="light", color=False, animate="none", accent=None, font=None, width=None,
+               interactive=False, fold=None):
     """cells: {(r, c): (text, width)} where line cells already hold Unicode line characters.
 
     Animation only ever starts from an earlier state and ends on the static drawing, so a
@@ -1054,6 +1080,12 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
     segs = {st: {"h": {}, "v": {}} for st in ("s", "d", "2", "3", "4")}      # single, double, dashed x2/x3/x4
     curves, heads, texts, blocks, marks = [], [], [], [], []
+    forest = tree_model(cells, nrows, ncols) if (interactive or color) else None
+    folding = bool(interactive and forest and forest["nodes"])
+    gates = forest["gate"] if folding else {}
+    gate_of = lambda r, c: gates.get((r, c))
+    gate_attr = lambda c, r: (f' data-g="{gates[(r, c)]}"' if (r, c) in gates else "")
+    here = [None]                                   # the gate of the cell being drawn
 
     def back(r, c, a):
         """The neighbour on side a has a line arm reaching back to (r, c)."""
@@ -1124,12 +1156,13 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     grow = ' pathLength="1"' if anim else ""
 
     def add(st, d, key, a, b):
-        segs[st][d].setdefault(key, []).append((a, b))
+        segs[st][d].setdefault((here[0] if here[0] is not None else -1, key), []).append((a, b))
 
     for (r, c) in sorted(cells):
         t, w = cells[(r, c)]
         if w == 0 or t == " ":
             continue
+        here[0] = gate_of(r, c)
         x0, y0 = PAD + c * CW, PAD + r * CH
         cx, cy = x0 + CW / 2, y0 + CH / 2
         if t in ARMS:
@@ -1142,7 +1175,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                 vy = cy + (RADIUS if "D" in arms else -RADIUS)
                 add(st_h, "h", cy, *((hx, x0 + CW) if "R" in arms else (x0, hx)))
                 add(st_v, "v", cx, *((vy, y0 + CH) if "D" in arms else (y0, vy)))
-                curves.append((st_h, f"M{hx:g} {cy:g}Q{cx:g} {cy:g} {cx:g} {vy:g}", y0))
+                curves.append((st_h, f"M{hx:g} {cy:g}Q{cx:g} {cy:g} {cx:g} {vy:g}", y0, here[0]))
                 continue
             tick = ""
             if t == "┼":                                    # a mark across a line (ER '||'), not a crossing
@@ -1185,27 +1218,41 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
             texts.append((r, c, w, t))
 
     def merged(d):
+        """{(gate, k): [(a, b)]} -> [(gate, k, a, b)]: overlapping pieces on one line become one."""
         out = []
-        for k in sorted(d):
-            iv = sorted(d[k])
+        for g, k in sorted(d):
+            iv = sorted(d[(g, k)])
             cur = list(iv[0])
             for a, b in iv[1:]:
                 if a <= cur[1] + 0.01:
                     cur[1] = max(cur[1], b)
                 else:
-                    out.append((k, *cur))
+                    out.append((g, k, *cur))
                     cur = [a, b]
-            out.append((k, *cur))
+            out.append((g, k, *cur))
         return out
 
+    ga = lambda g: f' data-g="{g}"' if g is not None and g != -1 else ""
+
     def lines(st, cls):
-        g = "" if "dash" in cls else grow                  # pathLength would stretch the dashes too
-        o = [f'<path d="{d}" class="{cls}"{g}{timing(y, 0.25)}/>' for s, d, y in curves if s == st]
-        o += [f'<line x1="{a:g}" y1="{k:g}" x2="{b:g}" y2="{k:g}" class="{cls}"{g}'
+        h, v = merged(segs[st]["h"]), merged(segs[st]["v"])
+        if not anim:                                        # a still drawing: one path per line style (and fold group)
+            by = {}
+            for s, d, y, g in curves:
+                if s == st:
+                    by.setdefault(-1 if g is None else g, []).append(d)
+            for g, k, a, b in h:
+                by.setdefault(g, []).append(f"M{a:g} {k:g}H{b:g}")
+            for g, k, a, b in v:
+                by.setdefault(g, []).append(f"M{k:g} {a:g}V{b:g}")
+            return [f'<path d="{"".join(ds)}" class="{cls}"{ga(g)}/>' for g, ds in sorted(by.items())]
+        g0 = "" if "dash" in cls else grow                 # pathLength would stretch the dashes too
+        o = [f'<path d="{d}" class="{cls}"{g0}{ga(g)}{timing(y, 0.25)}/>' for s, d, y, g in curves if s == st]
+        o += [f'<line x1="{a:g}" y1="{k:g}" x2="{b:g}" y2="{k:g}" class="{cls}"{g0}{ga(g)}'
               f'{timing(k - CH / 2, min(max((b - a) / (1.5 * speed), 0.25), 0.8))}/>'
-              for k, a, b in merged(segs[st]["h"])]
-        o += [f'<line x1="{k:g}" y1="{a:g}" x2="{k:g}" y2="{b:g}" class="{cls}"{g}'
-              f'{timing(a, max((b - a) / speed, 0.25))}/>' for k, a, b in merged(segs[st]["v"])]
+              for g, k, a, b in h]
+        o += [f'<line x1="{k:g}" y1="{a:g}" x2="{k:g}" y2="{b:g}" class="{cls}"{g0}{ga(g)}'
+              f'{timing(a, max((b - a) / speed, 0.25))}/>' for g, k, a, b in v]
         return o
 
     # boxes: glow / shadow, then fill, then plates behind titles on the top edge
@@ -1430,10 +1477,11 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         tm = timing(PAD + r * CH + 0.15 * speed)
         body.append('<line x1="%g" y1="%g" x2="%g" y2="%g" class="sgl shaft"%s/>' % (*sh, tm))
         body.append('<polygon points="%s" class="head"%s/>' % (" ".join(f"{x:g},{y:g}" for x, y in pts), tm))
-    for r, c, w, t in texts:                         # one delay per row (a class), not per character
+    for r, run in text_runs(texts, gate_of):          # one delay per row (a class), not per character
         row_cls = f' class="r{r}"' if timed else ""
-        body.append(f'<text x="{PAD + c * CW + w * CW / 2:g}" y="{PAD + r * CH + CH / 2 + 5:g}"'
-                    f'{row_cls}>{html.escape(t, quote=False)}</text>')
+        xs = " ".join(f"{PAD + c * CW + w * CW / 2:g}" for c, w, _ in run)
+        body.append(f'<text x="{xs}" y="{PAD + r * CH + CH / 2 + 5:g}"'
+                    f'{row_cls}{gate_attr(run[0][0], r)}>{html.escape("".join(t for *_, t in run), quote=False)}</text>')
     rows_css = "".join(f".r{r}{{animation-delay:{at(PAD + r * CH + 0.08 * speed):.2f}s}}"
                        for r in sorted({r for r, *_ in texts})) if timed else ""
 
@@ -1563,14 +1611,51 @@ def read_back(svg: str) -> dict:
     def arm(r, c, st, a):
         arms.setdefault((r, c), {}).setdefault(st, set()).add(a)
 
-    for hx, cy, qx, qy, vx, vy, cls in re.findall(
-            r'<path d="M([\d.]+) ([\d.]+)Q([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)" class="([^"]+)"[^>]*/>', svg):
-        if cls == "dbl-gap":
-            continue
-        hx, qx, qy, vy = map(float, (hx, qx, qy, vy))
-        r, c, st = int((qy - pad) // chh), int((qx - pad) // cw), "d" if cls == "dbl" else "s"
+    def curve(hx, qx, qy, vy, st):                         # a rounded corner: M h Q corner v
+        r, c = int((qy - pad) // chh), int((qx - pad) // cw)
         arm(r, c, st, "R" if hx > qx else "L")
         arm(r, c, st, "D" if vy > qy else "U")
+
+    def hseg(y, x1, x2, st):
+        r = int((y - pad) // chh)
+        for c in range(int((x1 - pad) // cw) - 1, int((x2 - pad) // cw) + 2):
+            ccx = pad + c * cw + cw / 2
+            if x1 - 0.01 <= ccx <= x2 + 0.01:
+                if x1 < ccx - 0.01:
+                    arm(r, c, st, "L")
+                if x2 > ccx + 0.01:
+                    arm(r, c, st, "R")
+
+    def vseg(x, y1, y2, st):
+        c = int((x - pad) // cw)
+        for r in range(int((y1 - pad) // chh) - 1, int((y2 - pad) // chh) + 2):
+            ccy = pad + r * chh + chh / 2
+            if y1 - 0.01 <= ccy <= y2 + 0.01:
+                if y1 < ccy - 0.01:
+                    arm(r, c, st, "U")
+                if y2 > ccy + 0.01:
+                    arm(r, c, st, "D")
+
+    line_style = lambda cls: "d" if cls == "dbl" else cls[-1] if cls.startswith("sgl dash n") else "s"
+    for d, cls in re.findall(r'<path d="(M[^"]*)" class="(sgl|dbl|dbl-gap|sgl dash n[234])"[^>]*/>', svg):
+        if cls == "dbl-gap":
+            continue
+        st, x, y = line_style(cls), None, None
+        for op, nums in re.findall(r"([MHVQ])([^MHVQ]*)", d):   # a still drawing: every line of a style in one path
+            v = [float(n) for n in nums.split()]
+            if op == "M" and len(v) == 2:
+                x, y = v
+            elif op == "H" and len(v) == 1 and x is not None:
+                hseg(y, min(x, v[0]), max(x, v[0]), st)
+                x = v[0]
+            elif op == "V" and len(v) == 1 and x is not None:
+                vseg(x, min(y, v[0]), max(y, v[0]), st)
+                y = v[0]
+            elif op == "Q" and len(v) == 4 and x is not None:
+                curve(x, v[0], v[1], v[3], st)
+                x, y = v[2], v[3]
+            else:
+                out[(-1, -1)] = "?"                          # nothing else is ever written: fail loudly
     for x1, y1, x2, y2, cls in re.findall(
             r'<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)" class="([^"]+)"[^>]*/>', svg):
         x1, y1, x2, y2 = map(float, (x1, y1, x2, y2))
@@ -1592,25 +1677,11 @@ def read_back(svg: str) -> dict:
                 cell = (r0 + k, c0 + n - 1 - k) if s == "/" else (r0 + k, c0 + k)
                 slopes[cell] = slopes.get(cell, "") + s
             continue
-        st = "d" if cls == "dbl" else cls[-1] if cls.startswith("sgl dash n") else "s"
+        st = line_style(cls)
         if y1 == y2:
-            r = int((y1 - pad) // chh)
-            for c in range(int((x1 - pad) // cw) - 1, int((x2 - pad) // cw) + 2):
-                ccx = pad + c * cw + cw / 2
-                if x1 - 0.01 <= ccx <= x2 + 0.01:
-                    if x1 < ccx - 0.01:
-                        arm(r, c, st, "L")
-                    if x2 > ccx + 0.01:
-                        arm(r, c, st, "R")
+            hseg(y1, x1, x2, st)
         else:
-            c = int((x1 - pad) // cw)
-            for r in range(int((y1 - pad) // chh) - 1, int((y2 - pad) // chh) + 2):
-                ccy = pad + r * chh + chh / 2
-                if y1 - 0.01 <= ccy <= y2 + 0.01:
-                    if y1 < ccy - 0.01:
-                        arm(r, c, st, "U")
-                    if y2 > ccy + 0.01:
-                        arm(r, c, st, "D")
+            vseg(x1, y1, y2, st)
     for k, v in arms.items():
         s, d = frozenset(v.get("s", ())), frozenset(v.get("d", ()))
         dashed = [n for n in "234" if v.get(n)]
@@ -1673,10 +1744,19 @@ def read_back(svg: str) -> dict:
         ax, ay, ex = float(ax), float(ay), float(ex)
         at = ex if "V" in rest else ax + (0.01 if ex > ax else -0.01)   # set in a wall: the prongs meet the wall
         out[cell(at, ay)] = FOOT_R if ex > ax else FOOT_L
-    for x, y, t in re.findall(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
-        t = html.unescape(t)
-        w = width_of(t)
-        out[(round((float(y) - 5 - pad - chh / 2) / chh), round((float(x) - pad - w * cw / 2) / cw))] = t
+    for xs, y, t in re.findall(r'<text x="([\d. ]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
+        t, xs = html.unescape(t), xs.split()
+        r = round((float(y) - 5 - pad - chh / 2) / chh)
+        if len(xs) == 1:
+            w = width_of(t)
+            out[(r, round((float(xs[0]) - pad - w * cw / 2) / cw))] = t
+            continue
+        if len(xs) != len(t):
+            out[(r, -1)] = "?"                             # a run must place every character itself
+            continue
+        for x, ch1 in zip(xs, t):                          # a run: one x per character, each centred in its cell
+            if ch1 != " ":
+                out[(r, round((float(x) - pad - cw / 2) / cw))] = ch1
     return out
 
 
