@@ -59,6 +59,22 @@ layout as regions before drawing details:
 └──────────────────────────────────────┘  ┆ 1 in 5 requests miss    ┆
                                           ╰┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╯
 ```
+### 3b. Map the columns before you draw
+
+Most redrawing comes from columns that don't line up. Before drawing, write down where every
+vertical thing goes: each lifeline, each box's left edge and width, each branch. Size a box to its
+longest label plus two spaces. For example:
+
+| Part | Column | Width |
+|---|---|---|
+| User lifeline | 4 | |
+| Auth service box / lifeline | 28 / 35 | 16 |
+| Mail service box / lifeline | 60 / 67 | 16 |
+
+Then draw the vertical lines first, run `--check`, and only then add the labels and messages
+between them. A generated diagram (a script that prints the text) is fine for anything regular:
+many boxes in a row, a timeline, bars.
+
 ## 4. Say the plan
 
 In two to four lines, tell the user what the picture will contain and how it is arranged, e.g.
@@ -68,10 +84,38 @@ per step on the right; a note on the miss rate."* This is the moment to catch a 
 ## 5. Draw region by region, checking as you go
 
 Draw one region, run `--check`, fix what the hints say, then add the next. Keep a connector's
-column (or row) identical from start to arrowhead. Finish with `--repair --check --describe` and
-confirm that `diagram.edges` (and `diagram.tree` for hierarchies) say what you meant.
+column (or row) identical from start to arrowhead. When branches join again, the join is **one
+row**: the arrowhead, then `┴` where each branch lands, `┘` at the far end (see 3 and recipe B).
+Finish with `--repair --check --describe`.
+
+**`status: ok` means the drawing is exact, not that it is right.** Read `diagram.edges`: each end
+should name the box you meant (`{"box": ..., "name": "Orders"}`). In a sequence, messages between
+lifelines are reported by position (`{"cell": [row, col]}`) for now; check those rows against your
+plan instead. Read `diagram.tree` for a hierarchy. Then go through the list below.
 
 ## 6. Review, then render
+
+### Mistakes the checker can't see
+
+The check proves every character is where you put it. It can't tell whether the picture is true.
+Look for these yourself:
+
+- **Numbers not to scale.** A bar's length is its value divided by the largest value, times the
+  bar width, rounded. `░` is only ever the rest of a target, never a value; a value under one cell
+  gets `▏` or `▌`, not an empty bar. (310 of 12,400 on a 20-cell bar is `▌`, not `░░░░░…`.)
+- **A note pointing at the wrong thing.** The leader ends on what the note is about: that box's
+  edge, or a `◀┄┄` pointing at the label. A note about a step never points at a number.
+- **A cut-down question.** `has ?` means nothing. Write the question beside the diamond (4), or
+  use a box that ends in `?`.
+- **A label that cuts a line.** Text written across a lifeline or connector breaks it into two
+  pieces, silently. Keep every label between the lines it sits between; shorten it or add a row.
+- **A lifeline that stops early.** Every lifeline runs from its box to the bottom of the sequence.
+  Show a choice as a guard on the message, `[email known] send link`, not a diamond that swallows
+  the lifeline (recipe G).
+- **A sequence inside a container.** The container becomes every message's end in `--describe`.
+  Put the title as plain text above a sequence instead of framing it.
+
+### Checklist
 
 - [ ] Every item from the inventory is in the picture, or left out on purpose.
 - [ ] Every line says what it carries (a label, or a legend entry).
@@ -79,7 +123,8 @@ confirm that `diagram.edges` (and `diagram.tree` for hierarchies) say what you m
 - [ ] At least two spaces (or one empty row) between regions; nothing touches by accident.
 - [ ] More than two kinds of line or box? Add a legend (16).
 - [ ] At most about 100 columns wide, so it reads on a laptop and scales down on a phone.
-- [ ] `status` is `ok`. Then render with the preset for where it's going
+- [ ] Numbers are to scale; every note points at its subject; every label reads on its own.
+- [ ] `status` is `ok`, and `diagram.edges` / `diagram.tree` say what you meant. Then render with the preset for where it's going
   (a tree or mind map on its own: `--preset explore`, so its branches fold).
 
 ## When to split instead
@@ -122,6 +167,8 @@ Browser --HTTPS--> Gateway --gRPC--> Orders
 
 **Use it for** one thing feeding several (or several feeding one).  
 **Watch out:** Split at a `┴` or `┬` on one row; every branch keeps its column down to its arrowhead.
+Joining is the same in reverse, and also **one row**: each branch ends in `└` or `┘` on the join
+row, with a `┬` where the joined line leaves (below). Don't add a separate bridge row.
 
 ```text
         ┌──────────┐
@@ -134,10 +181,23 @@ Browser --HTTPS--> Gateway --gRPC--> Orders
 └──────────┘  └──────────┘
 ```
 
+```text
+┌────────┐   ┌────────┐
+│ Card   │   │ Wallet │
+└───┬────┘   └───┬────┘
+    └─────┬──────┘
+          ▼
+    ┌──────────┐
+    │ Receipt  │
+    └──────────┘
+```
+
 ### 4. Decision
 
 **Use it for** a question whose answer changes the path. Label every way out (`yes` / `no`).  
-**Watch out:** The diamond's rows must mirror each other; keep the question to one or two short words (`hit ?`, `>70 ?`).
+**Watch out:** The diamond's rows must mirror each other, and its middle rows hold about three
+characters (`hit`, `>70`, `?`). Never cut the question down to fit: put a `?` inside and write the
+question beside it (below), or use a box whose text ends in `?`.
 
 ```text
     ┌───────────────┐
@@ -159,10 +219,32 @@ Browser --HTTPS--> Gateway --gRPC--> Orders
 └────────┘     └─────────┘
 ```
 
+```text
+        ┌──────────────┐
+        │ Reset asked  │
+        └──────┬───────┘
+               ▼
+              / \
+             /   \      does the email
+            /  ?  \     belong to an account?
+            \     /
+             \   /
+              \ /
+      yes      │      no
+       ┌───────┴───────┐
+       ▼               ▼
+┌────────────┐  ┌────────────┐
+│ Send link  │  │ Do nothing │
+└────────────┘  └────────────┘
+```
+
 ### 5. Sequence
 
 **Use it for** who talks to whom, in what order: requests, handshakes, protocols.  
-**Watch out:** A message runs lifeline to lifeline (`│───▶│`) with its label on the row above.
+**Watch out:** A message runs lifeline to lifeline (`│───▶│`) with its label on the row above,
+fitting *between* the two lifelines. Every lifeline runs to the bottom; a message that passes a
+lifeline crosses it with `┼`. Show a choice as a guard, `[email known] send link`. Don't wrap a
+sequence in a container (see recipe G for all of this at once).
 
 ```text
 ┌────────┐          ┌─────────┐          ┌────────┐
@@ -219,7 +301,9 @@ Service goals ──┼── Uptime ──── 99.95 %
 ### 9. Bar chart
 
 **Use it for** quantities side by side. Put the number at the end of each bar.  
-**Watch out:** Scale the longest bar to about 20 cells; `█` for the value, `░` for what's left of a target.
+**Watch out:** Scale the longest bar to about 20 cells and every other bar in proportion
+(value ÷ largest × 20, rounded). `█` is the value; `░` only for what's left of a target (progress);
+a value under one cell is `▏` or `▌`, never an empty bar.
 
 ```text
 Build time by stage (s)
@@ -297,7 +381,9 @@ Launch                     ████
 ### 15. Callout
 
 **Use it for** the one thing the reader must notice: an anomaly, a risk, a decision. A dotted box, and a dotted leader to what it's about.  
-**Watch out:** The leader starts on a wall or a line (`┴`), never in open space.
+**Watch out:** The leader starts on a wall or a line (`┴`), never in open space, and ends on the
+thing the note is about. To point at a label (a tree branch, a table cell), end the leader in an
+arrowhead one space from it, on the same row (below).
 
 ```text
 ┌──────────────┐      ┌──────────────┐
@@ -310,10 +396,19 @@ Launch                     ████
                   ╰┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╯
 ```
 
+```text
+Payments revamp (Nov)
+├── Apple Pay
+├── Google Pay     ◀┄┄ blocked: backend API not ready
+└── receipts
+```
+
 ### 16. Legend
 
 **Use it for** whenever you use more than two kinds of line or box. Show each one between words, as it appears.  
 **Watch out:** Sample lines need a word at both ends (`A ───▶ B`), or they read as broken lines.
+Only use samples like these (no `├──` or corners), and keep the legend one empty row and two
+columns away from everything else, so its samples can't line up with real lines.
 
 ```text
 ╭─ Legend ─────────────────────────────╮
@@ -488,6 +583,48 @@ exactly, with no warnings.
 │ │ cancelled │     │ refunded │                                      │
 │ └───────────┘     └──────────┘                                      │
 └─────────────────────────────────────────────────────────────────────┘
+```
+
+### G. A flow with rules, numbers and a warning (password reset)
+
+**Inventory:** actors, messages in order, two conditions, a security rule, last month's numbers.  
+**Notations:** sequence (5) with guards for the conditions, a crossing message (`┼`), a callout (15)
+hanging from the lifeline it is about, scaled bars (9) including a sub-cell value.
+
+A first attempt at this one put each condition in a diamond: the Auth lifeline stopped at the
+first one, the questions were cut to `has ?`, 310 expired links drew as a full empty bar, and the
+note pointed at the numbers. Guards keep the sequence whole:
+
+```text
+┌────────┐                  ┌──────────────┐                ┌──────────────┐
+│ User   │                  │ Auth service │                │ Mail service │
+└───┬────┘                  └──────┬───────┘                └──────┬───────┘
+    │  reset(email)                │                               │
+    │─────────────────────────────▶│                               │
+    │                              │  [email known] token, 30 min  │
+    │                              │──────────────────────────────▶│
+    │  "check your inbox"          │                               │
+    │◀─────────────────────────────│                               │
+    │  (same reply if unknown)     │                               │
+    │                              │                               │
+    │  link with token             │                               │
+    │◀─────────────────────────────┼───────────────────────────────│
+    │  open link                   │                               │
+    │─────────────────────────────▶│                               │
+    │  [fresh, unused] form        │                               │
+    │◀─────────────────────────────│                               │
+    │  new password                │                               │
+    │─────────────────────────────▶│  sign out other sessions      │
+    │  done                        │                               │
+    │◀─────────────────────────────│                               │
+                                   ┆
+     ╭┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┴┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╮
+     ┆ tokens are single-use and expire after 30 minutes ┆
+     ╰┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╯
+
+ Last month   requested  ████████████████████  12,400
+              completed  ███████████████        9,100
+              expired    ▌                        310
 ```
 
 ### More combinations to consider

@@ -19,11 +19,13 @@ its six steps.** Don't reach for a single flowchart. That guide makes you:
 2. match each kind to a notation from its catalog of 16 (boxes, containers, labelled lines,
    fan-out, decisions, sequences, trees, mind maps, tables, bars, Gantt, timelines, swimlanes,
    state machines, ER, callouts, legends);
-3. choose a spine and place the rest around it, like its six worked recipes (system at a glance,
-   the story of one request, a plan, a numbers report, an incident, a data model);
+3. choose a spine, map the columns, and place the rest around it, like its seven worked recipes
+   (system at a glance, the story of one request, a plan, a numbers report, an incident, a data
+   model, a flow with rules and numbers);
 4. tell the user the plan in a few lines;
 5. draw region by region, running `--check` as you go;
-6. review against its checklist, then render.
+6. review for the mistakes the checker can't see (numbers not to scale, notes pointing at the
+   wrong thing, cut-down questions, labels cutting a line, lifelines stopping early), then render.
 
 Nothing here is tied to one diagram type or platform: any notation can sit next to, inside or
 across any other, and all of it renders 1:1. Use that freedom to show the complete picture.
@@ -65,7 +67,7 @@ put it back in the user's file, so their source matches the picture.
 
 | `status` | What to do |
 |---|---|
-| `ok` | Done. Share the file |
+| `ok` | The drawing is exact. For a diagram you composed, also do the review in `references/composing.md` (step 6), then share it |
 | `warnings` | Rendered, but likely misaligned: apply the hints (you can still share it if the user is happy) |
 | `self_check_failed` | **Do not share the output.** Tell the user; it is a bug in the tool |
 | `bad_input` / `usage_error` | Nothing rendered: read `error` and `hint`, fix the call |

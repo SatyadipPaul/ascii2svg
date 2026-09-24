@@ -10,3 +10,5 @@ How to look next time. Each lesson is about where to look, not whom to trust.
 | 4 | Product / dev tools | Before styling or changing behaviour on a new detector, run it over every existing fixture and example and list what it catches. Here the tree detector matched the README's flagship architecture diagram and two timelines. |
 | 5 | Testing | Test with realistic data, not clean samples: real call trees carry notes (`× 3`, `312 ms`) after labels, and those kept folded rows open. |
 | 6 | Testing | After adding tests, check the pass count went up. Tests appended after the file's `__main__` runner never ran, and the suite still printed "all passed". |
+| 7 | Prompting / skills | Test guidance on a fresh model before calling it done. Examples it copies verbatim work; the gaps show where it has to improvise (merges, lifelines, sizing), and where it takes shortcuts to silence a warning (dropping a leader, cutting a question to "has ?"). |
+| 8 | Diagrams | "The check passes" proves the drawing is exact, not that it is true. Review for meaning too: numbers to scale, notes on their subject, labels that don't cut lines, full-height lifelines. |
