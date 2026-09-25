@@ -1,0 +1,14 @@
+myapp v0.1.0 (/home/me/myapp)
+├── clap v4.5.4
+│   ├── clap_builder v4.5.2
+│   │   ├── anstream v0.6.13
+│   │   └── strsim v0.11.1
+│   └── clap_derive v4.5.4 (proc-macro)
+├── serde v1.0.197
+│   └── serde_derive v1.0.197 (proc-macro)
+│       ├── proc-macro2 v1.0.79
+│       └── syn v2.0.55
+└── tokio v1.37.0
+    ├── bytes v1.6.0
+    ├── mio v0.8.11
+    └── pin-project-lite v0.2.14

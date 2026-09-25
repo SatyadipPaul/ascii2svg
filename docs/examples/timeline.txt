@@ -8,6 +8,11 @@
                                         ╎ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
                                         └╌╌╌┬╌╌╌┘
                                             ▲
+               paste any text tree:         │
+                npm, Maven, pstree…     ┌───┴───┐
+                         ◆┈┈┈┈┈┈┈┈┈┈┈┈┈┈┤ 1.17  │
+                                        └───┬───┘
+                                            ▲
                                             │      trees and mind maps fold,
                                         ┌───┴───┐     SVGs half the size
                                         │ 1.16  ├┈┈┈┈┈┈┈┈┈┈┈┈┈┈◆

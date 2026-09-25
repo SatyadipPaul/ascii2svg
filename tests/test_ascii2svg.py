@@ -250,7 +250,9 @@ def test_markdown_table_stays_text_and_ascii_trees_are_drawn():
         cells, draw, svg, _, _ = pipeline(fx(name))
         assert a2s.self_check(svg, draw, cells) == [] and not set(chars(svg)) & set("|`"), name
     for text in ("see |-- here", "a\n|-- b", "a\n|-- b\n|-- c", "ls\n`--x", "x |-- y\n  `-- z",
-                 "| a | b |\n|---|---|\n| 1 | 2 |", "a\n|--b\n`--c"):       # no closing '`--', no name, not under a label
+                 "| a | b |\n|---|---|\n| 1 | 2 |", "a\n|--b\n`--c",
+                 "a +- b\n5 \\- 3", "total\n+- added\n+- more", "x\n+-y\n\\-z", "x\n|- a\n\\- b"):  # Maven's one dash: only '+-' / '\\-'
+
         cells, draw, *_ = pipeline(text)
         assert draw == cells, text
 
@@ -966,6 +968,41 @@ def test_trees_are_read_from_every_common_shape():
                                                          "Evaluate Trade-offs", "Make the Decision", "Review & Defend"]
     count = lambda ns: sum(1 + count(n.get("children", [])) for n in ns)
     assert count(mind) == 45
+
+
+def test_tool_output_trees_fold_as_printed():
+    """What tree, npm ls, cargo tree, pipdeptree, Maven, Gradle, pstree and Windows tree print, pasted as it is."""
+    count = lambda ns: sum(1 + count(n.get("children", [])) for n in ns)
+    expected = {"tree_unix.txt": 17, "tree_npm_ls.txt": 16, "tree_cargo.txt": 14, "tree_cargo_ascii.txt": 11,
+                "tree_pipdeptree.txt": 13, "tree_maven.txt": 10, "tree_gradle.txt": 10, "tree_pstree.txt": 14,
+                "tree_windows.txt": 10}
+    for name, nodes in expected.items():
+        _, r = a2s.render(fx(name), describe=True, interactive=True, color=True)
+        tree, edges = r["diagram"]["tree"], r["diagram"]["edges"]
+        assert r["status"] == "ok" and r["roundtrip"] == "exact" and r["folds"] > 0, (name, r["warnings"])
+        assert count(tree) == nodes and {e.get("kind") for e in edges} == {"branch"}, (name, names(tree))
+    assert [n["name"] for n in tree_of(fx("tree_pipdeptree.txt"))] == ["fastapi==0.110.0", "requests==2.31.0"]
+    maven = names(tree_of(fx("tree_maven.txt")))                               # '+- ' and '\- ' with one dash
+    assert [c if isinstance(c, str) else c[0] for c in maven[0][1]] == [
+        "org.springframework.boot:spring-boot-starter-web:jar:3.2.4:compile",
+        "org.postgresql:postgresql:jar:42.7.3:runtime", "junit:junit:jar:4.13.2:test"], maven
+    pstree = names(tree_of(fx("tree_pstree.txt")))                             # branches run to the right
+    assert pstree[0][1][-1] == ["sshd", [["sshd", [["bash", ["pstree"]]]]]], pstree
+    gradle = names(tree_of(fx("tree_gradle.txt")))
+    assert gradle[0][1][0][1][0] == ["org.springframework.boot:spring-boot-starter:3.2.4",
+                                     ["org.springframework.boot:spring-boot:3.2.4", "org.yaml:snakeyaml:2.2"]], gradle
+
+
+def test_a_folded_npm_branch_leaves_no_stub():
+    """'├─┬ express': the ┬ stays on express's row, but its stroke down to express's children folds with them."""
+    cells, draw, *_ = pipeline(fx("tree_npm_ls.txt"))
+    forest = a2s.tree_model(draw, *a2s.build_grid(a2s.prepare(fx("tree_npm_ls.txt"))[0])[1:])
+    ids = {n["name"]: n["id"] for n in forest["nodes"]}
+    downs = {k: v for (k, a), v in forest["arm_gate"].items() if a == "D"}
+    assert downs == {(1, 2): ids["express@4.19.2"], (2, 4): ids["body-parser@1.20.2"], (6, 4): ids["send@0.18.0"],
+                     (9, 2): ids["jest@29.7.0"], (13, 2): ids["pg@8.11.5"]}, downs
+    svg = a2s.render(fx("tree_npm_ls.txt"), interactive=True)[0]
+    assert re.search(rf'<path [^>]*data-g="{ids["express@4.19.2"]}"', svg)        # the stub is drawn in express's group
 
 
 def test_describe_lists_every_branch():

@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.16.1"
+__version__ = "1.17.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -799,16 +799,19 @@ def interpret(cells, nrows, ncols):
             dc = -1 if t == "/" else 1                      # where the line goes one row down
             if any(ch(r + k, c + k * dc) == t and slash(r + k, c + k * dc) for k in (-1, 1)):
                 drawn[(r, c)] = DIAG_OF[t]
-    # 5) ASCII trees, as `tree`, `cargo tree` and `npm ls --unicode=false` print them: under a label
-    #    that starts in this column, a column of '|' with branches '|-- name' or '+-- name', ending in
-    #    '`-- name' (or '\-- name'). Anything less clear-cut (markdown tables, '|--flag') stays text.
+    # 5) ASCII trees, as `tree`, `cargo tree`, `npm ls --unicode=false`, Gradle and Maven print them:
+    #    under a label that starts in this column, a column of '|' with branches '|-- name' or
+    #    '+-- name', ending in '`-- name' (or '\-- name'); Maven's '+- name' / '\- name' use one dash.
+    #    Anything less clear-cut (markdown tables, '|--flag', '|- x') stays text.
     def branch(r, c):
-        """'|-- name' at (r, c): the number of dashes (two or more, then one space, then a name), else 0."""
+        """'|-- name' at (r, c): the number of dashes (two or more, or Maven's one after '+' or '\\'),
+        then one space, then a name; else 0."""
         k = 1
         while ch(r, c + k) == "-":
             k += 1
         name = ch(r, c + k + 1)
-        return k - 1 if k >= 3 and ch(r, c + k) == " " and name not in (" ", "") and name not in "|+`\\-" else 0
+        enough = k >= 3 or (k == 2 and ch(r, c) in "+\\")
+        return k - 1 if enough and ch(r, c + k) == " " and name not in (" ", "") and name not in "|+`\\-" else 0
 
     for (r0, c) in sorted(cells):
         above, left = ch(r0 - 1, c), ch(r0 - 1, c - 1)
@@ -1024,12 +1027,13 @@ def tree_model(cells, nrows, ncols):
     A '┬' right before a label ('├─┬ express') hands the trunk below it to that label.
 
     Returns {"nodes": [{id, name, kind, parent, depth, children, cells, hit, toggle}], "gate": {cell: id},
-    "rows": [...]}; "gate" says which node, when folded, hides a cell (its parent's id). Empty
+    "arm_gate": {(cell, side): id}, "rows": [...]}; "gate" says which node, when folded, hides a cell (its
+    parent's id), "arm_gate" hides one arm of a cell (the ┬ in '├─┬ label' keeps its row). Empty
     when nothing tree-like is drawn (fewer than two branches, or no node with two children)."""
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
     is_text = lambda t: (t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG
                          and t not in BLOCKS and t not in MARKS)
-    empty = {"nodes": [], "gate": {}, "rows": [], "hue": {}, "arm_hue": {}, "pure": False}
+    empty = {"nodes": [], "gate": {}, "arm_gate": {}, "rows": [], "hue": {}, "arm_hue": {}, "pure": False}
     boxes = find_boxes(get, nrows, ncols)
     area = lambda b: (b[2] - b[0]) * (b[3] - b[1])
     border = {}
@@ -1244,6 +1248,11 @@ def tree_model(cells, nrows, ncols):
                     arm_hue[(k, a)] = branch[nid[hit[1]]]
     for n in out:
         n["branch"] = branch.get(n["id"])
+    arm_gate = {}                                       # '├─┬ label': the ┬'s stub down folds with the label's branch
+    for k in cut:
+        hit = reach(k, "R")
+        if hit and hit[1] in nid and kids.get(hit[1]):
+            arm_gate[(k, "D")] = nid[hit[1]]
     rows = []
     for r in range(nrows):
         hard = set()
@@ -1253,7 +1262,8 @@ def tree_model(cells, nrows, ncols):
                 continue
             hard.add(gate.get((r, c), -1))
         rows.append(sorted(hard))
-    return {"nodes": out, "gate": gate, "rows": rows, "hue": hue, "arm_hue": arm_hue, "pure": pure}
+    return {"nodes": out, "gate": gate, "arm_gate": arm_gate, "rows": rows, "hue": hue, "arm_hue": arm_hue,
+            "pure": pure}
 
 
 def text_runs(texts, gate_of=lambda r, c: None):
@@ -1393,6 +1403,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     forest = tree_model(cells, nrows, ncols) if (interactive or color) else None
     folding = bool(interactive and forest and forest["nodes"])
     gates = forest["gate"] if folding else {}
+    arm_gates = forest["arm_gate"] if folding else {}
     gate_of = lambda r, c: gates.get((r, c))
     gate_attr = lambda c, r: (f' data-g="{gates[(r, c)]}"' if (r, c) in gates else "")
     tree_nodes = forest["nodes"] if (color and forest and forest["pure"]) else []
@@ -1511,6 +1522,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                     here[0] = (own[0], hues[nb])
                 else:
                     here[0] = own
+                if ((r, c), a) in arm_gates:
+                    here[0] = (arm_gates[((r, c), a)], here[0][1])
                 if a in tick:
                     if a == "D":
                         add(st, "v", cx, cy - 5, cy + 5)
@@ -3193,7 +3206,7 @@ what gets drawn:
   Between plain words, a line is drawn when it ends in an arrowhead pointing at a word
   and each loose end rests on a word: A --> B, A --HTTP--> B, or | and v under a label.
   UML heads in ASCII: <|-- --|> <>-- *-- across, and /_\\ <> * on a line up or down.
-  ASCII trees as `tree` and `cargo tree` print them (|-- and `--) are drawn too.
+  ASCII trees as `tree`, `cargo tree`, Gradle and Maven print them (|--, `--, +-, \\-) are drawn too.
   Everything else (hyphens in words, a->b, user_id, markdown tables) stays text,
   in exactly the same cell. When unsure, it stays text.
 

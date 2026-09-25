@@ -1,0 +1,19 @@
+shop-api
+├── README.md
+├── package.json
+├── src
+│   ├── index.ts
+│   ├── routes
+│   │   ├── orders.ts
+│   │   ├── payments.ts
+│   │   └── users.ts
+│   ├── services
+│   │   ├── billing.ts
+│   │   └── inventory.ts
+│   └── utils
+│       └── format.ts
+└── tests
+    ├── orders.test.ts
+    └── users.test.ts
+
+6 directories, 12 files

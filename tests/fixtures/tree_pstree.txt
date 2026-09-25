@@ -1,0 +1,7 @@
+systemd─┬─containerd───12*[{containerd}]
+        ├─cron
+        ├─nginx───4*[nginx]
+        ├─postgres─┬─postgres
+        │          ├─postgres
+        │          └─postgres
+        └─sshd───sshd───bash───pstree

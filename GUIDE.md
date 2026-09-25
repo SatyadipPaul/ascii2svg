@@ -188,7 +188,11 @@ main()
 - **The parent goes above or to the left** of its children, joined by plain lines (no arrowheads).
   A mind map can grow to the right: `Root ───┤` with `╭── child`, `├── child` and `╰── child` on the
   line where it splits. Boxes work too: a box whose bottom edge `┬` fans out to other boxes.
-- **ASCII is fine:** `|--` for a branch and `` `-- `` for the last one, as `tree` prints them.
+- **ASCII is fine:** `|--` for a branch and `` `-- `` for the last one, as `tree` prints them;
+  Gradle's `+---` / `\---` and Maven's `+-` / `\-` work too.
+- **Paste tool output as it is:** `tree`, `npm ls`, `cargo tree`, `pipdeptree`, `mvn dependency:tree`,
+  `gradle dependencies`, `pstree` and Windows `tree`. In the playground a pasted tree turns on Fold
+  and Colour by itself.
 - **Notes after a label stay with it:** `Sku.lookup(sku)    × 3` folds away together.
 - Check it with `--describe`: the report's `diagram.tree` lists every node under its parent.
 
