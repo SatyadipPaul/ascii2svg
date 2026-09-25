@@ -130,8 +130,11 @@ In the playground, a diagram with warnings shows a **Fix alignment** button.
 ## Trees and mind maps that fold
 
 Call trees, dependency trees, file trees and mind maps are usually drawn with a JavaScript library
-fed a hand-written JSON tree. Here the tree *is* the text: what `tree`, `npm ls` or `cargo tree`
-print, a call tree from a profiler or an LLM, or a mind map you sketch with `├──` and `╰──`.
+fed a hand-written JSON tree. Here the tree *is* the text: what `tree`, `npm ls`, `cargo tree`,
+`pipdeptree`, `mvn dependency:tree`, `gradle dependencies` or `pstree` print, a call tree from a
+profiler or an LLM, or a mind map you sketch with `├──` and `╰──`. In the
+[playground](https://satyadippaul.github.io/ascii2svg/playground.html), paste any of them and the
+branches fold by themselves.
 
 <p align="center"><a href="https://satyadippaul.github.io/ascii2svg/mindmap.svg"><img src="https://satyadippaul.github.io/ascii2svg/mindmap.svg" width="820" alt="A decision-making mind map drawn by ascii2svg: the root on a dark pill, five main branches each in its own colour, rounded branches fanning out to the right"></a>
 <br><sub>Plain text (<a href="https://github.com/SatyadipPaul/ascii2svg/blob/main/docs/examples/mindmap.txt">source</a>).
@@ -145,7 +148,8 @@ ascii2svg calls.txt --check --describe                        # the hierarchy as
 
 - **What counts as a tree:** plain connectors between words or boxes, with the parent above or to
   the left of its children: `├──` `└──` `│` in Unicode, `|--` and `` `-- `` in ASCII, `├─┬` as `npm ls`
-  draws it, a box whose `┬` fans out to other boxes, or branches going right as in a mind map.
+  draws it, `+---` / `\---` (Gradle) and `+-` / `\-` (Maven), `─┬─` as `pstree` draws it, a box whose
+  `┬` fans out to other boxes, or branches going right as in a mind map.
   A diagram with arrowheads stays a flowchart.
 - **Folding** (`--interactive`, or `--preset explore`): click a node or its ⊖ button, or Tab to it and
   press Enter. Shift folds or unfolds the whole branch. `--fold N` starts with depth N folded.
@@ -265,7 +269,7 @@ The animation is careful about where it runs:
 | Proof it's faithful | reads its own SVG back, cell by cell | – | – |
 | Misaligned LLM output | `--repair` fixes it and says what moved | – | shows the mistakes |
 | Collapsible trees and mind maps | click to fold, from plain text (`--interactive`) | fixed layout, nothing folds | – |
-| Output of `tree`, `npm ls`, `cargo tree` | pipe it in as it is | needs converting | works, as pixels |
+| Output of `tree`, `npm ls`, `cargo tree`, `pipdeptree`, Maven, Gradle, `pstree` | pipe it in as it is | needs converting | works, as pixels |
 | Where the picture goes | exactly where you drew it | the layout engine decides | where you drew it |
 
 Choose a DSL when you want the layout done for you. Choose ascii2svg when the text diagram
@@ -284,7 +288,7 @@ ascii2svg focuses on box diagrams, a verified 1:1 result, and agent workflows.
 | ASCII rounded corners `.` above, `'` or `` ` `` below | they close a box (`.--.` over `'--'`), or bend a connector that is drawn (`---.` over `\|`) | stay text (`It's`, `a.b`, `tree` output) |
 | ASCII lines between plain words: `A --> B`, `A --HTTP--> B`, `\|` and `v` under a label | an arrowhead points at a word and every loose end rests on one (with a space between on a row); a label set into the line is carried over and reported | stay text (`a-->b`, `x -> y`, `p->next`, `--dry-run`) |
 | ASCII `v ^ < >` | they end a line that is drawn, or point at a box (touching, or one space away) | stay text |
-| ASCII trees `\|--` `` `-- `` `+--` | a column of `\|` under the start of a label, branches `\|-- name`, ending in `` `-- name `` (as `tree` and `cargo tree` print them) | stay text (markdown tables, `\|--flag`) |
+| ASCII trees `\|--` `` `-- `` `+--` `+-` `\-` | a column of `\|` under the start of a label, branches `\|-- name`, ending in `` `-- name `` or `\-- name` (as `tree`, `cargo tree` and Gradle print them; Maven's `+- name` / `\- name` use one dash) | stay text (markdown tables, `\|--flag`, `\|- x`) |
 | ╱ ╲ ╳, and ASCII `/` `\` | Unicode always; ASCII when two or more run along their own slope, with no letter or digit beside them | stay text |
 | ASCII UML heads `<\|` `\|>` `<>` `*`, and `/_\` `<>` `*` on a vertical line | on a line that touches a box (across, or one space short), or right against a box's top or bottom edge with `\|` or `:` on the other side: inheritance, aggregation, composition | stay text |
 | ASCII dashed `- - ->` and dotted `....>` `-.-.->`, `:` down a column | they join a box or end in an arrowhead that points into one; flow pulses hop the gaps | stay text (`Loading...`, dot leaders, `- - -`) |
@@ -561,7 +565,8 @@ must round-trip exactly in every style and look. That's the one rule: never a wr
 - dashed lines keep their dash count, form boxes and carry arrows; ASCII `- - ->`, `....>` and `:` too,
   while `Loading...`, dot leaders and `- - -` stay text; ASCII UML heads `<|` `<>` `*` are drawn and described
 - UML triangles and diamonds, ER ticks, rings and crow's feet across and up and down; `--describe` names each relationship and its cardinality
-- trees: call trees, `npm ls`, `cargo tree` and `tree` output, left-to-right mind maps and box fan-outs read into
+- trees: call trees, `npm ls`, `cargo tree`, `tree`, `pipdeptree`, Maven, Gradle, `pstree` and Windows `tree` output,
+  left-to-right mind maps and box fan-outs read into
   the right hierarchy; flowcharts and timelines are not trees; an interactive SVG is the static drawing plus
   a script; fold data is escaped; branch colours only on pure trees; PNG frames place every character alone
 - ASCII UML heads up and down (`/_\` `<>` `*`), drawn and described; rounded ASCII boxes and bends; arrows between plain words and labels set into lines, while `a-->b`,

@@ -86,8 +86,9 @@ put it back in the user's file, so their source matches the picture.
 - ASCII `+ - |` and arrowheads `v ^ < >`: only when they form a closed box or attach to
   one (directly, or through `+` junctions). Otherwise they stay text — so `a->b`,
   `--dry-run`, `user_id` and markdown tables are left exactly as written.
-- ASCII trees as `tree` and `cargo tree` print them: a column of `|` under the start of a label,
-  branches `|-- name`, the last one `` `-- name ``. A stray `|--` stays text.
+- ASCII trees as `tree`, `cargo tree`, Gradle and Maven print them: a column of `|` under the start
+  of a label, branches `|-- name` (or `+-- name`, Maven's `+- name`), the last one `` `-- name `` (or
+  `\-- name`, `\- name`). A stray `|--` stays text.
 - ASCII rounded corners, `.` on top and `'` (or a backtick) below: they close a box
   (`.---.` over `'---'`) or bend a connector that is drawn (`---.` over `|`), drawn as `╭ ╮ ╰ ╯`.
 - ASCII UML heads: `<|--` `--|>` `<>--` `*--` across; up and down, `/_\` hanging under the parent

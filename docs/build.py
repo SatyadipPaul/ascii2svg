@@ -48,9 +48,8 @@ EXAMPLES = [
     ("Pivot table with a callout", "docs/examples/pivot-table.txt"),
     ("Incident swimlanes", "docs/examples/swimlanes.txt"),
     ("Sequence into a decision, back to a reply", "docs/examples/cache-sequence.txt"),
-    ("Mind map: tick Fold, click a branch", "docs/examples/mindmap.txt"),
-    ("Call tree: tick Fold, click a call", "docs/examples/call-tree.txt"),
-    ("cargo tree / tree output in plain ASCII", "tests/fixtures/tree_cargo_ascii.txt"),
+    ("Mind map: click a branch to fold it", "docs/examples/mindmap.txt"),
+    ("Call tree: click a call to fold it", "docs/examples/call-tree.txt"),
     ("Roadmap: timeline into mind maps", "docs/examples/roadmap-tree.txt"),
     ("Mermaid-style: flowchart with a decision", "docs/examples/mermaid/flowchart-decision.txt"),
     ("Mermaid-style: sequence", "docs/examples/mermaid/sequence.txt"),
@@ -79,6 +78,16 @@ EXAMPLES = [
     ("How ascii2svg works", "docs/examples/how-it-works.txt"),
     ("Fan-out (plain ASCII)", "tests/fixtures/ascii_fanout.txt"),
     ("Architecture (72 rows)", "tests/fixtures/complex_unicode.txt"),
+    # the picker groups names that start with "Tree output: " as "Paste any text tree"
+    ("Tree output: tree", "tests/fixtures/tree_unix.txt"),
+    ("Tree output: npm ls", "tests/fixtures/tree_npm_ls.txt"),
+    ("Tree output: cargo tree", "tests/fixtures/tree_cargo.txt"),
+    ("Tree output: cargo tree --charset ascii", "tests/fixtures/tree_cargo_ascii.txt"),
+    ("Tree output: pipdeptree", "tests/fixtures/tree_pipdeptree.txt"),
+    ("Tree output: mvn dependency:tree", "tests/fixtures/tree_maven.txt"),
+    ("Tree output: gradle dependencies", "tests/fixtures/tree_gradle.txt"),
+    ("Tree output: pstree", "tests/fixtures/tree_pstree.txt"),
+    ("Tree output: tree on Windows", "tests/fixtures/tree_windows.txt"),
     ("Misaligned: see a hint", "+---------+     +---------+\n|  web    |---->|  api    |\n+----+----+     +---------+\n"
                                "     |\n      v\n+---------+\n|   db    |\n+---------+\n"),
 ]

@@ -1,0 +1,11 @@
+Folder PATH listing
+C:.
+├───docs
+│   └───images
+├───src
+│   ├───api
+│   │   └───routes
+│   └───web
+│       ├───components
+│       └───pages
+└───tests

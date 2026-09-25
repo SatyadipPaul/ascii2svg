@@ -112,6 +112,8 @@
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 14px; background: var(--card);
              border: 1px solid var(--line); border-radius: 14px; margin-bottom: 14px; font-size: 13.5px; box-shadow: var(--shadow); }
   .toolbar label { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; color: var(--muted); }
+  .toolbar label { max-width: 100%; min-width: 0; }
+  .toolbar select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }   /* long example names never widen a phone */
   select, input[type=color] { font: 500 13px var(--sans); color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 8px;
                               padding: 5px 8px; transition: border-color .2s, box-shadow .2s; }
   select:hover, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); outline: none; }
@@ -268,7 +270,7 @@
   <div class="grid">
     <section class="panel" aria-labelledby="in-h">
       <h3 id="in-h"><span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>Your diagram</span><span class="tools"><span class="muted" id="pos"></span><button id="clear" class="mini" title="Clear the editor (Ctrl+Z brings it back)" aria-label="Clear the diagram text">✕ Clear</button></span></h3>
-      <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Diagram text" placeholder="Paste or type a diagram here, or pick an example above"></textarea>
+      <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Diagram text" placeholder="Paste or type a diagram here, or pick an example above. Output of tree, npm ls, cargo tree and the like folds by itself."></textarea>
     </section>
     <section class="panel" aria-labelledby="out-h">
       <h3 id="out-h"><span>Result</span><span class="muted" id="timing"></span></h3>
@@ -326,7 +328,7 @@ column right; move one of them
     <article class="spot"><div class="ico">1:1</div><h4>Faithful, provably</h4><p>Every character lands in its exact cell, verified by reading the SVG back.</p></article>
     <article class="spot"><div class="ico">⇥</div><h4>Fixes LLM diagrams</h4><p>Walls, connectors and arrowheads one column off move into line. Your words never change.</p></article>
     <article class="spot"><div class="ico">◐</div><h4>Alive, light and dark</h4><p>Lines draw themselves, pulses follow the arrows, and the theme follows your reader.</p></article>
-    <article class="spot"><div class="ico">△</div><h4>More than boxes</h4><p>Flowcharts, sequence and state diagrams, C4, UML, ER crow's feet, Gantt and bar charts.</p></article>
+    <article class="spot"><div class="ico">△</div><h4>More than boxes</h4><p>Flowcharts, sequence and state diagrams, C4, UML, ER, Gantt, and trees that fold: paste <code>tree</code> or <code>npm ls</code> output as it is.</p></article>
     <article class="spot"><div class="ico">{ }</div><h4>Built for agents</h4><p>One JSON report for every outcome, an MCP server, and a Claude skill.</p></article>
     <article class="spot"><div class="ico">py</div><h4>Zero dependencies</h4><p>One Python file. The same file runs this page through WebAssembly.</p></article>
   </div>
@@ -359,6 +361,8 @@ column right; move one of them
   const controls = ["theme", "animate", "style", "color", "square", "interactive", "accent"];
   const src = $("src"), preview = $("preview");
   let examples = {}, current = null, url = null, seq = 0, busy = false, queued = false, timer = null;
+  let arrived = false;                                   // new text in one go (a paste, an example): a tree turns on Fold
+  const TREE = "Tree output: ";
   const pending = new Map();
 
   const worker = new Worker("playground/worker.js", { type: "module" });
@@ -402,14 +406,15 @@ column right; move one of them
   }
 
   function blank() {                                     // nothing to render: an invitation, not an error
-    current = null;
+    current = null; arrived = false;
     $("overlay").style.display = "none";
     $("timing").textContent = "";
     $("report").innerHTML = "";
     preview.querySelectorAll("img,iframe,.empty").forEach((n) => n.remove());
     const hint = document.createElement("div");
     hint.className = "empty";
-    hint.textContent = "Paste or type a diagram, or pick an example.";
+    hint.textContent = "Paste or type a diagram, or pick an example. Paste what tree, npm ls, cargo tree, pipdeptree, " +
+      "Maven, Gradle or pstree print, and its branches fold.";
     preview.appendChild(hint);
   }
 
@@ -434,11 +439,21 @@ column right; move one of them
     $("timing").textContent = res.ms != null ? `rendered in ${res.ms} ms` : "";
     const r = res.report;
     if (res.error || !r) {
-      current = null;
+      current = null; arrived = false;
       $("report").innerHTML = `<span class="pill bad">error</span>${esc(res.error || "no result")}`;
       preview.querySelectorAll("img,iframe,.empty").forEach((n) => n.remove());
       emit("rendered", { ms: res.ms, status: "error" });
       return;
+    }
+    if (arrived) {                                       // a pasted tree folds without hunting for the switch
+      arrived = false;
+      const d = r.diagram || {}, pure = d.tree && (d.edges || []).every((e) => e.kind === "branch");
+      if (pure && !$("interactive").checked) {
+        $("interactive").checked = $("color").checked = true; $("preset").value = "";
+        toast("A tree: Fold and Colour are on. Click a node to fold it.");
+        schedule(0);
+        return;
+      }
     }
     current = res;
     if (url) URL.revokeObjectURL(url);
@@ -589,6 +604,7 @@ column right; move one of them
     toast("Share link copied");
   };
 
+  src.addEventListener("paste", () => { arrived = true; });
   src.addEventListener("input", () => { $("example").value = ""; schedule(); });   // it is your diagram now
   $("clear").onclick = () => {
     src.focus();
@@ -611,12 +627,15 @@ column right; move one of them
   ["keyup", "click", "select"].forEach((ev) => src.addEventListener(ev, where));
   $("preset").onchange = () => { applyPreset($("preset").value); schedule(0); };
   controls.forEach((id) => $(id).addEventListener("change", () => { $("preset").value = ""; schedule(0); }));
-  $("example").onchange = () => { if ($("example").value) { src.value = examples[$("example").value]; schedule(0); } };
+  $("example").onchange = () => { if ($("example").value) { src.value = examples[$("example").value]; arrived = true; schedule(0); } };
 
   (async () => {
     examples = await (await fetch("playground/examples.json")).json();
-    $("example").innerHTML = `<option value="">(your diagram)</option>` +
-      Object.keys(examples).map((k) => `<option>${esc(k)}</option>`).join("");
+    const keys = Object.keys(examples), opt = (k) => `<option value="${esc(k)}">${esc(k.replace(TREE, ""))}</option>`;
+    $("example").innerHTML = `<option value="">(your diagram)</option><optgroup label="Diagrams">` +
+      keys.filter((k) => !k.startsWith(TREE)).map(opt).join("") +
+      `</optgroup><optgroup label="Paste any text tree: it folds by itself">` +
+      keys.filter((k) => k.startsWith(TREE)).map(opt).join("") + `</optgroup>`;
     const q = new URLSearchParams(location.hash.slice(1));
     if (q.get("d")) {
       try { src.value = await unpack(q.get("d")); } catch { src.value = examples[Object.keys(examples)[0]]; }

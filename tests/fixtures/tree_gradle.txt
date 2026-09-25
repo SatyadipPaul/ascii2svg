@@ -1,0 +1,10 @@
+compileClasspath - Compile classpath for source set 'main'.
++--- org.springframework.boot:spring-boot-starter-web -> 3.2.4
+|    +--- org.springframework.boot:spring-boot-starter:3.2.4
+|    |    +--- org.springframework.boot:spring-boot:3.2.4
+|    |    \--- org.yaml:snakeyaml:2.2
+|    \--- org.springframework:spring-webmvc:6.1.5
++--- com.google.guava:guava:33.1.0-jre
+|    +--- com.google.guava:failureaccess:1.0.2
+|    \--- com.google.code.findbugs:jsr305:3.0.2
+\--- org.postgresql:postgresql:42.7.3
