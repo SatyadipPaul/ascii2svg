@@ -2,7 +2,9 @@
 ascii2svg/scripts/ascii2svg.py and ascii2svg/references/composing.md). Only what Claude needs at
 run time goes in; tests, docs and demo images stay in the repo.
 
-    python3 tools/package_skill.py
+    python3 tools/package_skill.py              # -> dist/ascii2svg.skill
+    python3 tools/package_skill.py OUT.skill    # somewhere else (the tests do this, so dist/ keeps
+                                                # only what the release uploads to PyPI)
 """
 import os
 import re
@@ -20,7 +22,7 @@ def main():
     if not front or not re.search(r"^name: ascii2svg$", front.group(1), re.M) \
             or not re.search(r"^description: .{50,}", front.group(1), re.M):
         sys.exit("SKILL.md needs frontmatter with name: ascii2svg and a description")
-    out = os.path.join(ROOT, "dist", "ascii2svg.skill")
+    out = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(ROOT, "dist", "ascii2svg.skill")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for rel in FILES:
