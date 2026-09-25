@@ -4,13 +4,49 @@ name: publish
 # Trusted Publishing (no tokens stored anywhere) and attaches ascii2svg.skill to the release.
 # The npm package (@satyadip28/asciitosvg) goes out the same way, once the repository variable
 # NPM_PUBLISH is "true" (after the first publish by hand and linking this workflow on npmjs.com).
+#
+# Or run it by hand on main (Actions > publish > Run workflow): it first creates the tag
+# v<package version> and the release, with .github/release-notes.md as the notes, then publishes
+# the same way. It stops if that tag already exists.
 
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag to publish
+        id: tag
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v$(python3 scripts/ascii2svg.py --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create the tag and the release (manual runs, from main only)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "main" ]; then echo "run this from main, not $GITHUB_REF_NAME"; exit 1; fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists; bump the version first"; exit 1
+          fi
+          title="$(head -n 1 .github/release-notes.md | sed 's/^# *//')"
+          tail -n +3 .github/release-notes.md > notes.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$title" --notes-file notes.md --latest
+
   build:
+    needs: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,9 +54,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Release tag matches the package version
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
         run: |
           v="v$(python scripts/ascii2svg.py --version | cut -d' ' -f2)"
-          if [ "$v" != "$GITHUB_REF_NAME" ]; then echo "tag $GITHUB_REF_NAME != package $v"; exit 1; fi
+          if [ "$v" != "$TAG" ]; then echo "tag $TAG != package $v"; exit 1; fi
       - run: python tests/test_ascii2svg.py
       - name: Build sdist and wheel
         run: |
@@ -48,7 +86,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   skill:
-    needs: build
+    needs: [release, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -58,10 +96,11 @@ jobs:
       - name: Attach the Claude skill to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/ascii2svg.skill --clobber
+          TAG: ${{ needs.release.outputs.tag }}
+        run: gh release upload "$TAG" dist/ascii2svg.skill --clobber
 
   npm:
-    needs: build
+    needs: [release, build]
     if: vars.NPM_PUBLISH == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -81,9 +120,11 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - run: npm install -g npm@latest                  # trusted publishing needs npm 11.5.1 or later
       - name: Release tag matches the npm package version
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
         run: |
           v="v$(node -p 'require("./package.json").version')"
-          if [ "$v" != "$GITHUB_REF_NAME" ]; then echo "tag $GITHUB_REF_NAME != npm package $v"; exit 1; fi
+          if [ "$v" != "$TAG" ]; then echo "tag $TAG != npm package $v"; exit 1; fi
       - run: npm ci
       - run: npm test
       - run: npm publish

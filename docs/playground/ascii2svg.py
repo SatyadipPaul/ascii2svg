@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.16.0"
+__version__ = "1.16.1"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
