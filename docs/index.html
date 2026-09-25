@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ascii2svg</title>
-<meta name="description" content="Render ASCII and Unicode box diagrams as SVG, 1:1. Colour, dark mode, and animation that draws the diagram as you scroll.">
+<meta name="description" content="Render ASCII and Unicode box diagrams as SVG, 1:1. Colour, dark mode, animation that draws the diagram as you scroll, and trees and mind maps that fold when clicked.">
 <style>
   :root { --ink: #1f2328; --muted: #59636e; --bg: #ffffff; --card: #f6f8fa; --line: #d1d9e0; --accent: #0969da; }
   @media (prefers-color-scheme: dark) {
@@ -17,6 +17,9 @@
   h1 { font: 700 34px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0 0 8px; }
   .lede { font-size: 19px; color: var(--muted); margin: 0 0 28px; }
   .hero { display: block; width: 100%; height: auto; margin: 8px 0 32px; }
+  .wide { overflow-x: auto; margin: 8px 0 12px; }
+  .wide object { display: block; width: 100%; min-width: 760px; height: auto; aspect-ratio: 1104 / 546; }  /* its script runs here, so the branches fold; on a phone it scrolls sideways, still readable */
+  .note { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 0 0 36px; }
   .card { display: block; padding: 16px 18px; background: var(--card); border: 1px solid var(--line);
           border-radius: 8px; color: inherit; text-decoration: none; }
@@ -40,7 +43,7 @@
        alt="ascii2svg pipeline: your diagram, find boxes and arrows, draw, read the SVG back, compare cell by cell, ready to share">
 
   <div class="cards">
-    <a class="card" href="playground.html"><b>Try it in your browser →</b><span>Paste a diagram, pick a look, download SVG, PNG or a page. Nothing is uploaded.</span></a>
+    <a class="card" href="playground.html"><b>Try it in your browser →</b><span>Paste a diagram, pick a look, fold a tree, download SVG, PNG or a page. Nothing is uploaded.</span></a>
     <a class="card" href="https://github.com/SatyadipPaul/ascii2svg/blob/main/GUIDE.md"><b>Read the guide →</b><span>How to draw diagrams that render well, pick a look, and fix what's off, in plain language.</span></a>
     <a class="card" href="architecture.html"><b>Scroll demo →</b><span>A 72-row architecture diagram that draws itself as you scroll.</span></a>
     <a class="card" href="https://github.com/SatyadipPaul/ascii2svg/releases/latest/download/ascii2svg.skill"><b>Get the Claude skill ↓</b><span>Upload to Claude, then just ask it to render your diagram.</span></a>
@@ -53,6 +56,21 @@
   <a href="playground.html"><img class="hero" src="demo.gif" width="1100" height="718" loading="lazy"
        style="border:1px solid var(--line);border-radius:8px"
        alt="Screen recording of the ascii2svg playground: warnings on a misaligned diagram, Fix alignment, a diagram typed and rendered live, then combination and Mermaid-style examples"></a>
+
+  <h2>Trees and mind maps that fold</h2>
+  <p>Call trees, file trees, <code>npm ls</code> / <code>cargo tree</code> output and mind maps drawn with
+     <code>├──</code> and <code>╰──</code> become an SVG whose branches fold. No JSON, no special syntax: the text
+     you already have. <b>Click a node below</b> to fold its branch; Shift+click folds everything under it.</p>
+  <div class="wide"><object data="mindmap.svg" type="image/svg+xml" width="1104" height="546"
+          aria-label="A decision-making mind map: the root on a dark pill, five main branches each in its own colour. Click a node to fold its branch.">
+    <img src="mindmap.svg" width="1104" height="546" style="width:100%;height:auto"
+         alt="A decision-making mind map: the root on a dark pill, five main branches each in its own colour">
+  </object></div>
+  <p class="note">Drawn from <a href="https://github.com/SatyadipPaul/ascii2svg/blob/main/docs/examples/mindmap.txt">29 lines of plain text</a>.
+     Also try a <a href="call-tree.svg">call tree that opens folded</a>, or tick <b>Fold</b> in the
+     <a href="playground.html">playground</a> with your own tree.</p>
+<pre>tree src | ascii2svg - -o src.svg --preset explore             # a colour per branch, branches fold
+cargo tree | ascii2svg - -o deps.svg --preset explore --fold 1  # open with only the top level showing</pre>
 
   <h2>Type this…</h2>
 <pre>+------------+     +------------+     +------------+     +-------------+
