@@ -8,6 +8,11 @@
                                         ╎ next  ├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌◇
                                         └╌╌╌┬╌╌╌┘
                                             ▲
+                                            │      trees and mind maps fold,
+                                        ┌───┴───┐     SVGs half the size
+                                        │ 1.16  ├┈┈┈┈┈┈┈┈┈┈┈┈┈┈◆
+                                        └───┬───┘
+                                            ▲
               on npm: the same module       │
                   in WebAssembly        ┌───┴───┐
                          ◆┈┈┈┈┈┈┈┈┈┈┈┈┈┈┤ 1.15  │

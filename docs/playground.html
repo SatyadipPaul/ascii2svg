@@ -125,6 +125,10 @@
   .panel h3 { margin: 0; font: 600 12.5px var(--sans); letter-spacing: .02em; color: var(--muted); padding: 10px 14px;
               border-bottom: 1px solid var(--line); background: var(--card2); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .panel h3 .dots { display: inline-flex; gap: 6px; margin-right: 10px; }
+  .panel h3 .tools { display: inline-flex; align-items: center; gap: 10px; }
+  .panel h3 button.mini { font-size: 12px; padding: 2px 9px; border-radius: 6px; }
+  .panel h3 button.mini:disabled { opacity: .45; cursor: default; }
+  .preview .empty { color: var(--muted); font: 14px var(--sans); text-align: center; padding: 48px 16px; }
   .panel h3 .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
   .panel h3 .dots i:nth-child(1) { background: #ff5f57; } .panel h3 .dots i:nth-child(2) { background: #febc2e; } .panel h3 .dots i:nth-child(3) { background: #28c840; }
   .panel h3 span:first-child { display: inline-flex; align-items: center; }
@@ -251,19 +255,20 @@
     <label>For <select id="preset">
       <option value="">custom</option><option value="readme">README / docs</option><option value="slides">slides</option>
       <option value="chat">chat / email</option><option value="print">print</option><option value="dark">dark page</option>
-      <option value="page">scroll page</option></select></label>
+      <option value="page">scroll page</option><option value="explore">explore (fold trees)</option></select></label>
     <label>Theme <select id="theme"><option>light</option><option>dark</option><option>auto</option></select></label>
     <label>Animate <select id="animate"><option>none</option><option>draw</option><option>flow</option><option>scroll</option></select></label>
     <label>Depth <select id="style"><option>glow</option><option>shadow</option><option>flat</option></select></label>
     <label><input type="checkbox" id="color"> Colour</label>
     <label><input type="checkbox" id="square"> Square corners</label>
+    <label title="Trees and mind maps: click a node to fold its branch"><input type="checkbox" id="interactive"> Fold</label>
     <label>Accent <input type="color" id="accent" value="#0969da"></label>
   </div>
 
   <div class="grid">
     <section class="panel" aria-labelledby="in-h">
-      <h3 id="in-h"><span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>Your diagram</span><span class="muted" id="pos"></span></h3>
-      <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Diagram text"></textarea>
+      <h3 id="in-h"><span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>Your diagram</span><span class="tools"><span class="muted" id="pos"></span><button id="clear" class="mini" title="Clear the editor (Ctrl+Z brings it back)" aria-label="Clear the diagram text">✕ Clear</button></span></h3>
+      <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Diagram text" placeholder="Paste or type a diagram here, or pick an example above"></textarea>
     </section>
     <section class="panel" aria-labelledby="out-h">
       <h3 id="out-h"><span>Result</span><span class="muted" id="timing"></span></h3>
@@ -348,10 +353,10 @@ column right; move one of them
   const PRESETS = {
     readme: { theme: "auto", color: true, animate: "flow" }, slides: { color: true, animate: "draw" },
     chat: { color: true }, print: { style: "flat", square: true }, dark: { theme: "dark", color: true },
-    page: { theme: "auto", color: true, animate: "scroll" },
+    page: { theme: "auto", color: true, animate: "scroll" }, explore: { theme: "auto", color: true, interactive: true },
   };
-  const DEFAULTS = { theme: "light", animate: "none", style: "glow", color: false, square: false };
-  const controls = ["theme", "animate", "style", "color", "square", "accent"];
+  const DEFAULTS = { theme: "light", animate: "none", style: "glow", color: false, square: false, interactive: false };
+  const controls = ["theme", "animate", "style", "color", "square", "interactive", "accent"];
   const src = $("src"), preview = $("preview");
   let examples = {}, current = null, url = null, seq = 0, busy = false, queued = false, timer = null;
   const pending = new Map();
@@ -382,7 +387,8 @@ column right; move one of them
 
   function options() {
     const o = { theme: $("theme").value, animate: $("animate").value, style: $("style").value,
-                color: $("color").checked, square: $("square").checked, describe: true, title: "Diagram" };
+                color: $("color").checked, square: $("square").checked, interactive: $("interactive").checked,
+                describe: true, title: "Diagram" };
     const acc = $("accent").value.toLowerCase();
     if (acc !== "#0969da") o.accent = acc;
     o.html = o.animate === "scroll";
@@ -392,11 +398,25 @@ column right; move one of them
   function applyPreset(name) {
     const p = { ...DEFAULTS, ...(PRESETS[name] || {}) };
     $("theme").value = p.theme; $("animate").value = p.animate; $("style").value = p.style;
-    $("color").checked = p.color; $("square").checked = p.square;
+    $("color").checked = p.color; $("square").checked = p.square; $("interactive").checked = p.interactive;
+  }
+
+  function blank() {                                     // nothing to render: an invitation, not an error
+    current = null;
+    $("overlay").style.display = "none";
+    $("timing").textContent = "";
+    $("report").innerHTML = "";
+    preview.querySelectorAll("img,iframe,.empty").forEach((n) => n.remove());
+    const hint = document.createElement("div");
+    hint.className = "empty";
+    hint.textContent = "Paste or type a diagram, or pick an example.";
+    preview.appendChild(hint);
   }
 
   function schedule(delay = 350) {
     clearTimeout(timer);
+    $("clear").disabled = !src.value;
+    if (!src.value.trim()) { blank(); return; }
     timer = setTimeout(async () => {
       if (busy) { queued = true; return; }
       busy = true;
@@ -416,18 +436,19 @@ column right; move one of them
     if (res.error || !r) {
       current = null;
       $("report").innerHTML = `<span class="pill bad">error</span>${esc(res.error || "no result")}`;
-      preview.querySelectorAll("img,iframe").forEach((n) => n.remove());
+      preview.querySelectorAll("img,iframe,.empty").forEach((n) => n.remove());
       emit("rendered", { ms: res.ms, status: "error" });
       return;
     }
     current = res;
     if (url) URL.revokeObjectURL(url);
-    preview.querySelectorAll("img,iframe").forEach((n) => n.remove());
-    if (r.html) {
+    preview.querySelectorAll("img,iframe,.empty").forEach((n) => n.remove());
+    if (r.html || (r.interactive && r.folds)) {           // a script runs: a sandboxed frame, never the page itself
       const f = document.createElement("iframe");
       f.setAttribute("sandbox", "allow-scripts");
-      f.setAttribute("title", "Scroll-reveal page preview");
-      f.srcdoc = res.markup;
+      f.setAttribute("title", r.html ? "Scroll-reveal page preview" : "Foldable diagram: click a node");
+      f.srcdoc = r.html ? res.markup : `<!doctype html><meta charset="utf-8"><body style="margin:0;display:flex;` +
+        `justify-content:center;background:transparent">${res.markup.replace(/(<svg[^>]*?) width="[\d.]+" height="[\d.]+"/, "$1 style=\"max-width:100%;height:auto\"")}`;
       preview.appendChild(f);
     } else {
       url = URL.createObjectURL(new Blob([res.markup], { type: "image/svg+xml" }));
@@ -559,7 +580,7 @@ column right; move one of them
     q.set("d", await pack(src.value));
     if ($("preset").value) q.set("p", $("preset").value);
     for (const k of ["theme", "animate", "style"]) q.set(k, o[k]);
-    q.set("color", o.color ? 1 : 0); q.set("square", o.square ? 1 : 0);
+    q.set("color", o.color ? 1 : 0); q.set("square", o.square ? 1 : 0); q.set("fold", o.interactive ? 1 : 0);
     if (o.accent) q.set("accent", o.accent.slice(1));
     const link = location.href.split("#")[0] + "#" + q.toString();
     history.replaceState(null, "", link);
@@ -569,6 +590,14 @@ column right; move one of them
   };
 
   src.addEventListener("input", () => { $("example").value = ""; schedule(); });   // it is your diagram now
+  $("clear").onclick = () => {
+    src.focus();
+    src.select();
+    if (!document.execCommand("delete")) src.value = "";  // execCommand keeps Ctrl+Z working
+    $("example").value = "";
+    where();
+    schedule(0);
+  };
   src.addEventListener("keydown", (e) => {                 // Tab inserts spaces instead of leaving the editor
     if (e.key !== "Tab" || e.shiftKey) return;
     e.preventDefault();
@@ -594,6 +623,7 @@ column right; move one of them
       $("preset").value = q.get("p") || "";
       for (const k of ["theme", "animate", "style"]) if (q.get(k)) $(k).value = q.get(k);
       $("color").checked = q.get("color") === "1"; $("square").checked = q.get("square") === "1";
+      $("interactive").checked = q.get("fold") === "1";
       if (q.get("accent")) $("accent").value = "#" + q.get("accent");
       addEventListener("load", () => $("tool").scrollIntoView({ behavior: "instant" }));   // a shared diagram skips the intro
     } else {

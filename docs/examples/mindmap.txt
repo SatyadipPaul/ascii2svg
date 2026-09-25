@@ -1,0 +1,29 @@
+                                                        ╭── Define Problem/Goal ── Stakeholders
+                           ╭── Identify the Decision ───┤
+                           │                            ╰── Gather Information ── Data Sources
+                           │                                                                         ╭── Benefit 1
+                           │                                                             ╭── Pros ───┼── Feasibility
+                           │                                                             │           ╰── Impact
+                           │                                                             │           ╭── Drawback 1
+                           │                         ╭── Option A: Explore Solution 1 ───┼── Cons ───┼── Cost
+                           │                         │                                   │           ╰── Time
+                           │                         │                                   ╰── Likely Outcomes ── Result 1
+                           ├── Weigh Your Options ───┤
+                           │                         │                                               ╭── Benefit 2
+                           │                         │                                   ╭── Pros ───┼── Feasibility
+                           │                         │                                   │           ╰── Impact
+                           │                         │                                   │           ╭── Drawback 2
+                           │                         ╰── Option B: Explore Solution 2 ───┼── Cons ───┼── Cost
+                           │                                                             │           ╰── Time
+                           │                                                             ╰── Likely Outcomes ── Result 2
+                           │                          ╭── Compare Options ── Decision Matrix
+Decision-Making Process ───┼── Evaluate Trade-offs ───┤
+                           │                          ╰── Assess Risks ── Mitigation Strategies
+                           │                        ╭── Commit to Choice ── Build Consensus
+                           ├── Make the Decision ───┤
+                           │                        │                          ╭── Timeline
+                           │                        ╰── Develop Action Plan ───┤
+                           │                                                   ╰── Resources
+                           │                      ╭── Monitor Results ── KPIs
+                           ╰── Review & Defend ───┤
+                                                  ╰── Justify Decision ── Communication Plan

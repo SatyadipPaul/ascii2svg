@@ -1,6 +1,6 @@
-"""Build dist/ascii2svg.skill: the installable Claude skill (a zip holding ascii2svg/SKILL.md
-and ascii2svg/scripts/ascii2svg.py). Only what Claude needs at run time goes in; tests, docs
-and demo images stay in the repo.
+"""Build dist/ascii2svg.skill: the installable Claude skill (a zip holding ascii2svg/SKILL.md,
+ascii2svg/scripts/ascii2svg.py and ascii2svg/references/composing.md). Only what Claude needs at
+run time goes in; tests, docs and demo images stay in the repo.
 
     python3 tools/package_skill.py
 """
@@ -10,7 +10,7 @@ import sys
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FILES = ["SKILL.md", "scripts/ascii2svg.py"]
+FILES = ["SKILL.md", "scripts/ascii2svg.py", "references/composing.md"]
 STAMP = (2026, 1, 1, 0, 0, 0)                  # fixed timestamps: the same sources give the same bytes
 
 

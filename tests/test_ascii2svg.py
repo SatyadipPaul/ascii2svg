@@ -55,9 +55,9 @@ def glow_hits(svg):
     hit = lambda a, b: a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
     inside = lambda a, b: b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
     n = 0
-    for x, y, t in re.findall(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
-        w = a2s.width_of(html.unescape(t))               # '&gt;' is one character wide
-        cell = (float(x) - w * cw / 2, float(y) - 5 - ch / 2, float(x) + w * cw / 2, float(y) - 5 + ch / 2)
+    for x, y, t in text_cells(svg):
+        w = a2s.width_of(t)                              # '&gt;' is one character wide
+        cell = (x - w * cw / 2, y - 5 - ch / 2, x + w * cw / 2, y - 5 + ch / 2)
         for b in boxes:
             if inside(cell, b["fill"]) or any(inside(cell, p) for p in b["plates"]):
                 continue
@@ -86,10 +86,63 @@ def test_every_look_roundtrips_exactly():
                 assert a2s.self_check(svg, draw, cells) == [], (name, look, style)
 
 
+_LINE_CLS = r'(sgl|dbl|dbl-gap|sgl dash n[234])'
+
+
+def _segments(body):
+    """Every connector piece, however it is written: one <line> each (animated) or subpaths of one
+    <path> per style (a still drawing). -> sorted [(class, piece)]"""
+    out = []
+    hue = lambda rest: re.search(r'data-h="(\d+)"', rest).group(1) if "data-h" in rest else ""
+    for x1, y1, x2, y2, cls, rest in re.findall(r'<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)" '
+                                                r'class="%s"([^>]*)/>' % _LINE_CLS, body):
+        if x1 != x2 and y1 != y2:
+            out.append((cls, hue(rest), f"M{x1} {y1}L{x2} {y2}"))
+        else:
+            out.append((cls, hue(rest), f"M{x1} {y1}H{x2}" if y1 == y2 else f"M{x1} {y1}V{y2}"))
+    for d, cls, rest in re.findall(r'<path d="(M[^"]*)" class="%s"([^>]*)/>' % _LINE_CLS, body):
+        out += [(cls, hue(rest), "M" + sub) for sub in d.split("M")[1:]]
+    runs, rest = {}, []                                   # pieces that touch on one line are one line
+    for cls, h, piece in out:
+        m = re.fullmatch(r"M([\d.]+) ([\d.]+)([HV])([\d.]+)", piece)
+        if not m:
+            rest.append((cls, h, piece))
+            continue
+        x, y, op, e = m.group(1), m.group(2), m.group(3), float(m.group(4))
+        key, a = (cls, h, op, y if op == "H" else x), float(x if op == "H" else y)
+        runs.setdefault(key, []).append((min(a, e), max(a, e)))
+    for key, iv in runs.items():
+        iv.sort()
+        cur = list(iv[0])
+        for a, b in iv[1:] + [(float("inf"), 0)]:
+            if a <= cur[1] + 0.01:
+                cur[1] = max(cur[1], b)
+                continue
+            rest.append((key[0], key[1], f"{key[2]}{key[3]}:{cur[0]:g}-{cur[1]:g}"))
+            cur = [a, b]
+    return sorted(rest)
+
+
 def _strip_motion(svg):
     body = svg[svg.index("</style>"):]
-    body = re.sub(r' pathLength="1"| style="[^"]*"| class="r\d+"', "", body)
-    return re.sub(r'<g class="pulse".*?</g>', "", body)
+    body = re.sub(r' pathLength="1"| style="[^"]*"| class="r\d+"', "", body).replace(' class="r0 ', ' class="')
+    body = re.sub(r' class="r\d+ ', ' class="', body)
+    body = re.sub(r'<g class="pulse".*?</g>', "", body)
+    segs = _segments(body)
+    body = re.sub(r'<(line|path) [^>]*class="%s"[^>]*/>' % _LINE_CLS, "", body)
+    return body, segs
+
+
+def text_cells(svg):
+    """(x, y, character) for every drawn character, whether it has its own <text> or sits in a run."""
+    for xs, y, t in re.findall(r'<text x="([\d. ]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
+        t, xs = html.unescape(t), xs.split()
+        pairs = [(xs[0], t)] if len(xs) == 1 else [(x, c) for x, c in zip(xs, t) if c != " "]
+        yield from ((float(x), float(y), c) for x, c in pairs)
+
+
+def chars(svg):
+    return [c for *_, c in text_cells(svg)]
 
 
 def test_animation_ends_on_the_static_drawing():
@@ -141,12 +194,15 @@ def test_scroll_reveal_is_driven_by_the_page():
 
 def test_self_check_catches_planted_faults():
     cells, draw, svg, _, _ = pipeline(fx("complex_unicode.txt"))
-    letter = svg.replace(">y</text>", ">Y</text>", 1)
-    m = re.search(r'<path d="M([\d.]+) ([\d.]+)Q([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)"', svg)
+    letter = svg.replace(">API Gateway</text>", ">API GateWay</text>", 1)
+    m = re.search(r'M([\d.]+) ([\d.]+)Q([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)', svg)
     hx, cy, qx, qy, vx, vy = map(float, m.groups())
-    corner = svg.replace(m.group(0), f'<path d="M{2 * qx - hx:g} {cy:g}Q{qx:g} {qy:g} {vx:g} {vy:g}"', 1)
-    line = re.sub(r'<line x1="[\d.]+" y1="[\d.]+" x2="[\d.]+" y2="[\d.]+" class="sgl"/>', "", svg, count=1)
-    for bad in (letter, corner, line):
+    corner = svg.replace(m.group(0), f'M{2 * qx - hx:g} {cy:g}Q{qx:g} {qy:g} {vx:g} {vy:g}', 1)
+    line = re.sub(r'(<path d="[^"]*?)M[\d.]+ [\d.]+V[\d.]+', r"\1", svg, count=1)      # one piece of line gone
+    run = re.search(r'<text x="([\d. ]+)"', svg).group(1)
+    shifted = svg.replace(f'<text x="{run}"', '<text x="%s"' % " ".join(f"{float(v) + 9:g}" for v in run.split()), 1)
+    short = svg.replace(f'<text x="{run}"', '<text x="%s"' % " ".join(run.split()[:-1]), 1)   # a run missing an x
+    for bad in (letter, corner, line, shifted, short):
         assert bad != svg
         assert a2s.self_check(bad, draw, cells), "planted fault was not caught"
 
@@ -187,10 +243,16 @@ def test_titled_ascii_box_keeps_title_text():
     assert title == "order-svc (v2)" and stats["boxes"] == 3
 
 
-def test_markdown_table_and_tree_stay_text():
-    for name in ("markdown_table.txt", "ascii_tree.txt"):
-        cells, draw, *_ = pipeline(fx(name))
-        assert draw == cells, name
+def test_markdown_table_stays_text_and_ascii_trees_are_drawn():
+    cells, draw, *_ = pipeline(fx("markdown_table.txt"))
+    assert draw == cells
+    for name in ("ascii_tree.txt", "tree_cargo_ascii.txt"):                  # `tree`, `cargo tree` in ASCII
+        cells, draw, svg, _, _ = pipeline(fx(name))
+        assert a2s.self_check(svg, draw, cells) == [] and not set(chars(svg)) & set("|`"), name
+    for text in ("see |-- here", "a\n|-- b", "a\n|-- b\n|-- c", "ls\n`--x", "x |-- y\n  `-- z",
+                 "| a | b |\n|---|---|\n| 1 | 2 |", "a\n|--b\n`--c"):       # no closing '`--', no name, not under a label
+        cells, draw, *_ = pipeline(text)
+        assert draw == cells, text
 
 
 def test_arrow_text_without_structure_stays_text():
@@ -409,7 +471,7 @@ def test_no_false_alarms_on_well_formed_diagrams():
 def test_touching_lines_are_drawn_touching():
     svg = a2s.render(fx("sequence.txt"))[0]
     life = 12 + 4 * 9 + 4.5                                                      # the Client lifeline's x
-    assert re.search(r'<line x1="%g" y1="[\d.]+" x2="[\d.]+"' % (life + 0.7), svg), "message should start at the lifeline"
+    assert re.search(r'M%g [\d.]+H' % (life + 0.7), svg), "message should start at the lifeline"
     cells, draw, svg, _, _ = pipeline(fx("sequence.txt"))
     assert a2s.self_check(svg, draw, cells) == []                               # the lifeline still reads back as │
 
@@ -672,7 +734,7 @@ def test_repair_result_is_exact_and_positions_point_into_the_input():
 def test_block_elements_are_exact_rectangles():
     cells, draw, svg, stats, _ = pipeline("A ████░░ ▏▎▍▌▋▊▉ ▁▂▃▄▅▆▇ ▀▐▔▕ ▘▝▖▗▚▞▙▛▜▟\nB ▓▓▒▒", color=True, animate="draw")
     assert a2s.self_check(svg, draw, cells) == []
-    texts = re.findall(r"<text[^>]*>(.*?)</text>", svg)
+    texts = chars(svg)
     assert not any(t in a2s.BLOCKS for t in texts), texts           # no glyphs: rectangles only
     runs = re.findall(r'<rect x="[\d.]+" y="[\d.]+" width="([\d.]+)" height="[\d.]+" class="blk (k\d)"', svg)
     assert ("36", "k4") in runs and ("18", "k1") in runs, runs       # ████ is one rect, ░░ another
@@ -685,7 +747,7 @@ def test_diagonals_draw_only_as_runs():
     cells, draw, svg, stats, _ = pipeline(text)
     assert a2s.self_check(svg, draw, cells) == []
     assert "╱" in {t for t, _ in draw.values()} and "╲" in {t for t, _ in draw.values()}
-    assert not re.search(r"<text[^>]*>[/\\]</text>", svg)            # every slash in the fixture is a line
+    assert not set(chars(svg)) & set("/\\")                           # every slash in the fixture is a line
     assert svg.count('class="sgl ext"') >= 4                          # diamond caps + run-ons to the firewall
     for words in ("yes/no", "TCP/IP", r"C:\Users", r"\_/", "a/b/c", "/\n/"):
         cells, draw, svg, _, _ = pipeline(words)
@@ -714,7 +776,7 @@ def test_uml_heads_are_drawn_and_described():
         cells, draw, svg, stats, _ = pipeline(fx(name), color=True, animate="draw")
         assert a2s.self_check(svg, draw, cells) == [], name
         assert len(re.findall(r'<polygon[^>]*class="uml', svg)) == shapes, name
-        assert not re.search(r"<text[^>]*>[△▽◁▷◇◆]</text>", svg), name
+        assert not set(chars(svg)) & set("△▽◁▷◇◆"), name
     assert 'class="uml solid"' in pipeline(fx("uml.txt"))[2]                   # ◆ composition is filled
     d = a2s.describe(*a2s.build_grid(fx("uml.txt").split("\n")))
     kinds = {(e["from"]["name"], e["to"]["name"]): e.get("kind") for e in d["edges"]}
@@ -730,7 +792,7 @@ def test_er_crows_foot_notation():
     cells, draw, svg, stats, _ = pipeline(text, color=True)
     assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 3
     assert svg.count('class="ring"') == 2 and svg.count('class="foot"') == 2   # o and < > in the walls
-    assert not re.findall(r"<text[^>]*>(\||&lt;|&gt;)</text>", svg)             # every mark is drawn
+    assert not set(chars(svg)) & set("|<>")                                       # every mark is drawn
     _, report = a2s.render(text, describe=True)
     assert report["status"] == "ok" and not report["warnings"], report["warnings"]
     rel = [(e["from"]["name"], e["to"]["name"], e["cardinality"]) for e in report["diagram"]["edges"]]
@@ -747,7 +809,7 @@ def test_er_crows_foot_runs_vertically_too():
     text = fx("er_vertical.txt")
     cells, draw, svg, stats, _ = pipeline(text, color=True)
     assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 3
-    assert svg.count('class="ring"') == 2 and not re.findall(r"<text[^>]*>[|o/\\-]</text>", svg)
+    assert svg.count('class="ring"') == 2 and not set(chars(svg)) & set("|o/\\-")
     feet = [ln for ln in re.findall(r'<line [^>]*class="sgl"[^>]*/>', svg) if 'x1="' in ln
             and re.search(r'x1="([\d.]+)"', ln).group(1) != re.search(r'x2="([\d.]+)"', ln).group(1)
             and re.search(r'y1="([\d.]+)"', ln).group(1) != re.search(r'y2="([\d.]+)"', ln).group(1)]
@@ -769,7 +831,7 @@ def test_ascii_uml_heads():
     cells, draw, svg, stats, _ = pipeline(fx("uml_ascii.txt"), color=True)
     assert a2s.self_check(svg, draw, cells) == [] and stats["boxes"] == 8
     assert svg.count('class="uml wide"') == 3 and svg.count('class="uml solid"') == 1   # <| <> |> span two cells
-    assert not re.findall(r"<text[^>]*>(&lt;|&gt;|\||\*)</text>", svg)
+    assert not set(chars(svg)) & set("<>|*")
     kinds = [(e["from"]["name"], e["to"]["name"], e.get("kind"))
              for e in a2s.render(fx("uml_ascii.txt"), describe=True)[1]["diagram"]["edges"]]
     assert kinds == [("Dog", "Animal", "inheritance"), ("Wheel", "Car", "aggregation"),
@@ -878,6 +940,158 @@ def test_repair_reaches_bigger_offsets():
     assert r["status"] == "ok" and r["repair"]["text"].split("\n")[3:7] == ["     |"] * 3 + ["     v"]
 
 
+# ── trees: call trees, file trees, dependency trees, mind maps ───────────────
+def tree_of(text):
+    return a2s.render(text, describe=True)[1]["diagram"].get("tree")
+
+
+def names(tree):
+    return [[n["name"], names(n.get("children", []))] if n.get("children") else n["name"] for n in tree]
+
+
+def test_trees_are_read_from_every_common_shape():
+    assert names(tree_of(fx("tree_calls.txt"))) == [["main()", [["load_config()", ["read_file()", "parse_yaml()"]],
+                                                                 ["run_server()", ["bind_port()", ["serve_forever()",
+                                                                                                   ["handle_request()"]]]]]]]
+    npm = names(tree_of(fx("tree_npm.txt")))                                   # '├─┬ express': the ┬ hands its trunk on
+    assert npm == [["app@1.0.0", [["express@4.19.2", ["body-parser@1.20.2", ["send@0.18.0", ["mime@1.6.0"]]]],
+                                  "lodash@4.17.21"]]], npm
+    cargo = names(tree_of(fx("tree_cargo_ascii.txt")))
+    assert cargo[0][0] == "myapp v0.1.0 (/home/me/myapp)" and [c if isinstance(c, str) else c[0] for c in cargo[0][1]] \
+        == ["clap v4.5.4", "serde v1.0.197", "tokio v1.37.0"], cargo
+    assert names(tree_of(fx("ascii_tree.txt"))) == [["order-service/", [["api/", ["OrderController.java", "dto/"]],
+                                                                        "README.md"]]]
+    mind = tree_of(fx("mindmap.txt"))                                          # left to right, rounded branches
+    assert [n["name"] for n in mind[0]["children"]] == ["Identify the Decision", "Weigh Your Options",
+                                                         "Evaluate Trade-offs", "Make the Decision", "Review & Defend"]
+    count = lambda ns: sum(1 + count(n.get("children", [])) for n in ns)
+    assert count(mind) == 45
+
+
+def test_describe_lists_every_branch():
+    _, r = a2s.render(open(os.path.join(os.path.dirname(HERE), "docs", "examples", "mermaid", "mindmap-tree.txt"),
+                           encoding="utf-8").read(), describe=True)
+    d = r["diagram"]
+    branches = {(e["from"].get("name") or e["from"].get("text"), e["to"].get("name") or e["to"].get("text"))
+                for e in d["edges"] if e.get("kind") == "branch"}
+    assert {("Product plan", "Growth"), ("Product plan", "Quality"), ("Product plan", "Platform"),
+            ("Growth", "SEO"), ("Platform", "Webhooks")} <= branches and len(branches) == 12, branches
+    assert d["tree"][0]["box"] == "b1" and [n["name"] for n in d["tree"][0]["children"]] == ["Growth", "Quality", "Platform"]
+
+
+def test_flowcharts_and_timelines_are_not_trees():
+    for name in ("ascii_fanout.txt", "timeline.txt", "sequence.txt", "swimlanes.txt" if os.path.exists(os.path.join(FX, "swimlanes.txt")) else "uml.txt"):
+        assert tree_of(fx(name)) is None, name
+    _, r = a2s.render(fx("complex_unicode.txt"), describe=True)              # only its call tree is a tree
+    assert [n["name"] for n in r["diagram"]["tree"]] == ["POST /api/v1/orders"]
+
+
+def _static(svg):
+    """An interactive SVG without its script and fold groups: what an <img> shows (lines as pieces)."""
+    svg = re.sub(r"<script>.*?</script>", "", svg, flags=re.S)
+    return _strip_motion(_unfold(svg))
+
+
+def _unfold(svg):
+    svg = re.sub(r' data-g="\d+"', "", svg)
+    return re.sub(r"\[data-g\]\{transition.*?(?=@media \(prefers-color-scheme|</style>)", "",
+                  svg.replace(a2s._fold_colour_css(a2s.THEMES["light"]), "").replace(a2s._fold_colour_css(a2s.THEMES["dark"]), ""),
+                  count=1, flags=re.S)
+
+
+def test_interactive_svg_is_the_static_drawing_plus_a_script():
+    for name in ("mindmap.txt", "tree_calls.txt", "tree_npm.txt", "ascii_tree.txt", "complex_unicode.txt"):
+        for look in (dict(color=True, theme="auto"), dict(style="flat")):
+            cells, draw, svg, stats, _ = pipeline(fx(name), interactive=True, **look)
+            assert a2s.self_check(svg, draw, cells) == [], name
+            assert svg.count("<script>") == 1 and stats["folds"] > 0 and "data-g=" in svg, name
+            still = pipeline(fx(name), **look)[2]
+            assert "<script" not in still and "data-g=" not in still
+            assert _static(svg) == _strip_motion(still), name
+    cells, draw, svg, stats, _ = pipeline(fx("ascii_fanout.txt"), interactive=True)   # nothing to fold: no script
+    assert "<script" not in svg and stats["folds"] == 0
+
+
+def test_fold_data_is_safe_and_complete():
+    text = "root ]]> </script> <b>\n├── a & b\n│   └── x\n└── c\n"
+    cells, draw, svg, _, _ = pipeline(text, interactive=True, fold=1)
+    assert a2s.self_check(svg, draw, cells) == []
+    assert svg.count("]]>") == 1 and svg.count("</script>") == 1                 # only the script's own end
+    data = json.loads(re.search(r"\}\)\((\{.*\})\);\]\]>", svg, re.S).group(1))
+    assert data["n"] == ["root ]]> </script> <b>", "a & b", "x", "c"] and data["p"] == [-1, 0, 1, 0] and data["f"] == 1
+    assert len(data["r"]) == 4 and data["r"][2] == [1]                             # row 3 holds only what 'a' hides
+    code, out, _ = cli("-", "--fold", "1", "--json", "--brief", stdin=text.encode())
+    r = json.loads(out)
+    assert code == 0 and r["interactive"] is True and r["folds"] == 2
+    code, out, _ = cli(os.path.join(FX, "ascii_fanout.txt"), "--interactive", "--json", "--brief")
+    r = json.loads(out)
+    assert r["folds"] == 0 and any("--interactive" in t for t in r["tips"])
+    _, r = a2s.render(fx("tree_calls.txt"), preset="explore")
+    assert r["interactive"] and r["color"] and r["theme"] == "auto" and r["folds"] == 4
+
+
+def test_branch_colours_only_for_pure_trees():
+    svg = pipeline(fx("mindmap.txt"), color=True)[2]
+    assert len(set(re.findall(r'class="sgl" data-h="(\d)"', svg))) == 5              # five main branches, five colours
+    assert svg.count('class="pill root"') == 1 and svg.count('class="pill" data-h=') == 5
+    assert 'class="a2s-root"' in svg
+    for name in ("complex_unicode.txt", "ascii_fanout.txt"):                    # arrows: the usual colours
+        svg = pipeline(fx(name), color=True)[2]
+        assert "data-h=" not in svg and "pill" not in svg, name
+    assert "data-h=" not in pipeline(fx("mindmap.txt"))[2]                       # no --color, no colours
+
+
+def test_portable_and_png_frames_place_every_character_alone():
+    cells, draw, svg, stats, _ = pipeline(fx("complex_unicode.txt"), color=True, runs=False)
+    assert a2s.self_check(svg, draw, cells) == [] and svg.count("<text") == stats["text_cells"]
+    assert not re.search(r'<text x="[\d.]+ ', svg)                             # cairosvg anchors whole runs
+    code, out, _ = cli(os.path.join(FX, "tree_calls.txt"), "--portable", "--json")
+    r = json.loads(out)
+    assert code == 0 and r["svg"].count("<text") == r["text_cells"]
+    assert a2s.render(fx("tree_calls.txt"), portable=True)[0].count("<text") == r["text_cells"]
+
+
+def test_svg_is_compact():
+    cells, draw, svg, stats, _ = pipeline(fx("complex_unicode.txt"))
+    assert svg.count("<text") < stats["text_cells"] / 4                        # words, not letters
+    assert svg.count('class="glow"') == 7 * stats["boxes"]
+    assert len(re.findall(r'<path d="M[^"]*" class="sgl"', svg)) == 1                 # every plain line: one path
+    assert not re.search(r'<line [^>]*class="sgl"/>', svg)                           # (arrow shafts stay lines)
+    assert len(svg.encode()) < 50_000, len(svg.encode())                        # 87 KB before 1.16
+
+
+# ── the skill's composing guide ──────────────────────────────────────────────
+ROOT = os.path.dirname(HERE)
+
+
+def test_composing_guide_examples_render_cleanly():
+    guide = open(os.path.join(ROOT, "references", "composing.md"), encoding="utf-8").read()
+    blocks = re.findall(r"```text\n(.*?)```", guide, re.S)
+    assert len(blocks) >= 20, len(blocks)                                       # catalog + recipes
+    for text in blocks:
+        _, r = a2s.render(text, describe=True)
+        assert r["status"] == "ok" and not r["warnings"], (text[:80], r["warnings"][:2])
+        assert r["cols"] <= 100, (text[:80], r["cols"])                         # reads on a laptop
+    for heading in ("## 1. Take inventory", "## 2. Match each kind to a notation", "## Catalog",
+                    "## Recipes", "## When to split instead"):
+        assert heading in guide, heading
+    helper = re.search(r"```python\n(.*?)```", guide, re.S).group(1)       # the grid helper runs as printed
+    out = subprocess.run([sys.executable, "-c", helper], capture_output=True, check=True,     # UTF-8 on any console
+                         env={**os.environ, "PYTHONIOENCODING": "utf-8"}).stdout.decode("utf-8")
+    _, r = a2s.render(out, describe=True)
+    assert r["status"] == "ok" and [(e["from"]["name"], e["to"]["name"]) for e in r["diagram"]["edges"]] == \
+        [("Checkout", "Payment provider")], (out, r["diagram"]["edges"])
+
+
+def test_skill_points_to_the_guide_and_ships_it():
+    import zipfile
+    skill = open(os.path.join(ROOT, "SKILL.md"), encoding="utf-8").read()
+    assert "references/composing.md" in skill and "|--` file trees are left exactly" not in skill
+    subprocess.run([sys.executable, os.path.join(ROOT, "tools", "package_skill.py")], check=True, capture_output=True)
+    names = zipfile.ZipFile(os.path.join(ROOT, "dist", "ascii2svg.skill")).namelist()
+    assert names == ["ascii2svg/SKILL.md", "ascii2svg/scripts/ascii2svg.py", "ascii2svg/references/composing.md"], names
+
+
 
 def test_repair_moves_a_line_with_its_corner_instead_of_oscillating():
     # the '│' and '┘' agree on a column one right of the box's '┬': moving the '│' alone opened
@@ -918,6 +1132,7 @@ def test_repair_stops_when_a_fix_would_undo_an_earlier_one():
     finally:
         a2s._repair_connector_once = saved
     assert flip["n"] == 2 and edits == [] and cells[(0, 0)] == ("x", 1), (flip, edits)
+
 
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]

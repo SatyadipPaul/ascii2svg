@@ -18,7 +18,7 @@ import re
 import sys
 import unicodedata
 
-__version__ = "1.15.0"
+__version__ = "1.16.0"
 
 # ─── character width ─────────────────────────────────────────────────────────
 try:
@@ -207,6 +207,8 @@ CORR["_"] = {"△"}                                        # '/_\' under a box: 
 CORR["."] |= {"╭", "╮", "┬"}                             # ASCII rounded corners: .--.  '--'  `--'
 CORR["'"] = {"╰", "╯", "┴"}
 CORR["`"] = {"╰", "┴"}
+CORR["`"] |= {"└"}                                         # the last branch of an ASCII tree: '`--' or '\--'
+CORR["\\"] |= {"└"}
 ROUND_TOP, ROUND_BOTTOM = {"."}, {"'", "`"}
 ROUNDC = ROUND_TOP | ROUND_BOTTOM
 ROUND_OF = {"┌": "╭", "┐": "╮", "└": "╰", "┘": "╯"}
@@ -797,6 +799,41 @@ def interpret(cells, nrows, ncols):
             dc = -1 if t == "/" else 1                      # where the line goes one row down
             if any(ch(r + k, c + k * dc) == t and slash(r + k, c + k * dc) for k in (-1, 1)):
                 drawn[(r, c)] = DIAG_OF[t]
+    # 5) ASCII trees, as `tree`, `cargo tree` and `npm ls --unicode=false` print them: under a label
+    #    that starts in this column, a column of '|' with branches '|-- name' or '+-- name', ending in
+    #    '`-- name' (or '\-- name'). Anything less clear-cut (markdown tables, '|--flag') stays text.
+    def branch(r, c):
+        """'|-- name' at (r, c): the number of dashes (two or more, then one space, then a name), else 0."""
+        k = 1
+        while ch(r, c + k) == "-":
+            k += 1
+        name = ch(r, c + k + 1)
+        return k - 1 if k >= 3 and ch(r, c + k) == " " and name not in (" ", "") and name not in "|+`\\-" else 0
+
+    for (r0, c) in sorted(cells):
+        above, left = ch(r0 - 1, c), ch(r0 - 1, c - 1)
+        if ((r0, c) in drawn or ch(r0, c) not in "|+`\\" or not branch(r0, c) or above in (" ", "")
+                or above in "|+`\\-" or (c > 0 and left not in (" ", "|", "-"))):
+            continue                                    # the first branch, right under the start of its parent
+        rows, r = [], r0
+        while ch(r, c) in "|+`\\" and (r, c) not in drawn:
+            n = branch(r, c)
+            if n:
+                rows.append((r, n))
+                if ch(r, c) in "`\\":
+                    break
+            elif ch(r, c) == "|" and ch(r, c + 1) == " ":
+                rows.append((r, 0))
+            else:
+                break
+            r += 1
+        if not rows or ch(rows[-1][0], c) not in "`\\" or not rows[-1][1]:
+            continue                                    # a tree's last branch is '`--'
+        for r, n in rows:
+            t = ch(r, c)
+            drawn[(r, c)] = "│" if not n else "└" if t in "`\\" else "├"
+            for x in range(c + 1, c + 1 + n):
+                drawn[(r, x)] = "─"
     kept = sum(1 for k, (t, _) in cells.items() if t in "|+" and k not in drawn)
     kept += sum(b - a + 1 for r, a, b in hruns if b > a and (r, a) not in drawn)
     return drawn, {"ascii_drawn_as_lines": len(drawn), "ascii_line_like_kept_as_text": kept}
@@ -804,7 +841,7 @@ def interpret(cells, nrows, ncols):
 
 # ─── rendering ───────────────────────────────────────────────────────────────
 CW, CH, PAD, FS = 9, 18, 12, 14
-GLOW_R, GLOW_N, GLOW_DY = 7.0, 14, 1.5
+GLOW_R, GLOW_N, GLOW_DY = 7.0, 7, 1.5          # 7 stacked layers: as smooth as 14 at half the bytes
 SHADOW = ((1.5, 0.18), (3.0, 0.13), (4.2, 0.09))
 RADIUS = 4.0
 TL, TR, BL, BR = set("┌╭╔"), set("┐╮╗"), set("└╰╚"), set("┘╯╝")
@@ -812,16 +849,24 @@ BOTTOM_OK = set("─┬┴┼═╪╌┄┈")
 
 # hues: (tint for a box that contains boxes, tint for a leaf box)
 THEMES = {
-    "light": {"ink": "#1f2328", "bg": "#ffffff", "accent": "#0969da", "glow": "#000000", "glow_a": 0.02,
+    "light": {"ink": "#1f2328", "bg": "#ffffff", "accent": "#0969da", "glow": "#000000", "glow_a": 0.0396,
               "neutral": "#f6f8fa", "hover": "#e2edfc",
               "hues": [("#f1f8ff", "#dbeeff"), ("#f0fbf3", "#d4f5de"), ("#f8f4ff", "#ebdfff"),
                        ("#fff7f0", "#ffe6d1"), ("#fff4f9", "#ffdcec"), ("#effbfa", "#cef3ef")]},
-    "dark": {"ink": "#e6edf3", "bg": "#0d1117", "accent": "#58a6ff", "glow": "#ffffff", "glow_a": 0.012,
+    "dark": {"ink": "#e6edf3", "bg": "#0d1117", "accent": "#58a6ff", "glow": "#ffffff", "glow_a": 0.0239,
              "neutral": "#151b23", "hover": "#1c2d45",
              "hues": [("#0f1a2b", "#15325a"), ("#0e1f16", "#16402a"), ("#1b1530", "#34245a"),
                       ("#23180e", "#4a2e14"), ("#241421", "#4a1f3a"), ("#0c2023", "#124042")]},
 }
 ANIMATIONS = ("none", "draw", "flow", "scroll")
+# trees with --color: each of the root's branches gets a line colour and a tint for its label
+BRANCH_HUES = {
+    "light": [("#e03131", "#fff0ee"), ("#e8a200", "#fff7dc"), ("#12b886", "#e6faf3"), ("#4263eb", "#eaeefe"),
+              ("#d63fe8", "#fcecfe"), ("#1098ad", "#e3f7fa")],
+    "dark": [("#ff6b6b", "#3a1a1c"), ("#ffc93c", "#3a3016"), ("#38d9a9", "#113328"), ("#748ffc", "#1c2448"),
+             ("#e599f7", "#35203c"), ("#3bc9db", "#12303a")],
+}
+THEMES["light"]["branch"], THEMES["dark"]["branch"] = BRANCH_HUES["light"], BRANCH_HUES["dark"]
 FLOW_SPEED, FLOW_REST = 150.0, 0.9          # pulse speed along a connector (px/s), pause between pulses (s)
 
 
@@ -966,6 +1011,272 @@ def flow_paths(get, heads, boxes, line_like, limit=200):
     return routes
 
 
+PASS_THROUGH = {ch for ch, a in ARMS.items() if a == frozenset("UD")}      # a row of these alone can close up
+
+
+def tree_model(cells, nrows, ncols):
+    """The hierarchy drawn with plain connectors: call trees, file trees, `npm ls`, mind maps, org charts.
+
+    A node is a box, or a run of words outside boxes. Each group of joined connector cells touches its
+    nodes at ports: a line that leaves a node below or to the right of it marks the parent, one that
+    comes in from above or from the left marks a child. A group with one parent and one or more
+    children is a set of branches; a group with an arrowhead or a UML/ER mark is a flow, not a tree.
+    A '┬' right before a label ('├─┬ express') hands the trunk below it to that label.
+
+    Returns {"nodes": [{id, name, kind, parent, depth, children, cells, hit, toggle}], "gate": {cell: id},
+    "rows": [...]}; "gate" says which node, when folded, hides a cell (its parent's id). Empty
+    when nothing tree-like is drawn (fewer than two branches, or no node with two children)."""
+    get = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    is_text = lambda t: (t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG
+                         and t not in BLOCKS and t not in MARKS)
+    empty = {"nodes": [], "gate": {}, "rows": [], "hue": {}, "arm_hue": {}, "pure": False}
+    boxes = find_boxes(get, nrows, ncols)
+    area = lambda b: (b[2] - b[0]) * (b[3] - b[1])
+    border = {}
+    for b in sorted(boxes, key=area, reverse=True):                 # the smallest box owns a shared edge
+        for k in box_border([b]):
+            border[k] = b
+    nodes, node_of = [], {}
+
+    def box_node(b):
+        if b not in node_of:
+            node_of[b] = len(nodes)
+            nodes.append({"kind": "box", "box": b})
+        return node_of[b]
+
+    def run_node(r, c):
+        """The words around (r, c), single spaces allowed; a wide character's second half is part of it."""
+        if (r, c) in node_of:
+            return node_of[(r, c)]
+        word = lambda x: is_text(get(r, x)) or (get(r, x) == "" and x > 0)
+        a = b = c
+        while word(a - 1) or (get(r, a - 1) == " " and word(a - 2)):
+            a -= 1
+        while word(b + 1) or (get(r, b + 1) == " " and word(b + 2)):
+            b += 1
+        i = len(nodes)
+        nodes.append({"kind": "text", "row": r, "c1": a, "c2": b,
+                      "words": any(_alnum(get(r, x)) or ord(get(r, x)[:1] or " ") > 0x2e7f for x in range(a, b + 1))})
+        for x in range(a, b + 1):
+            node_of[(r, x)] = i
+        return i
+
+    line = lambda k: get(*k) in ARMS and k not in border
+    step = lambda k, a: (k[0] + DIRS[a][0], k[1] + DIRS[a][1])
+
+    def reach(k, a):
+        """What the arm a of connector cell k reaches: ("line", cell) | ("port", node, side, cell) |
+        ("mark",) for an arrowhead or mark | None for open space."""
+        n = step(k, a)
+        t = get(*n)
+        if n in border:
+            if t in ARMS and len(ARMS[t]) == 4:
+                return reach(n, a)                      # a line crossing a box's edge (╪ ┼) runs straight on
+            if t in ARMS and OPP[a] in ARMS[t]:
+                r1, c1, r2, c2 = b = border[n]
+                side = ("out" if (n[0] == r2 and a == "U") or (n[1] == c2 and a == "L") else
+                        "in" if (n[0] == r1 and a == "D") or (n[1] == c1 and a == "R") else None)
+                return ("port", box_node(b), side, n) if side else ("mark",)
+            return None
+        if t in ARMS:
+            return ("line", n) if OPP[a] in ARMS[t] else None
+        if t in HEADS or t in MARKS or t in DIAG or t in HALF_FAMILY:
+            return ("mark",)
+        if t == " " and a in "LR" and is_text(get(*step(n, a))):
+            n = step(n, a)
+        elif not is_text(t):
+            return None
+        i = run_node(*n)
+        if not nodes[i]["words"]:
+            return None                                 # '●' on a timeline, '*' as a bullet: not a node
+        return ("port", i, "in" if a in "RD" else "out", n)
+
+    cut = set()                                       # '├─┬ label': the trunk under the ┬ belongs to the label
+    for k in sorted(cells):
+        t = get(*k)
+        if line(k) and ARMS[t] == frozenset("LRD"):
+            hit = reach(k, "R")
+            if hit and hit[0] == "port" and nodes[hit[1]]["kind"] == "text":
+                cut.add(k)
+    seen, groups = set(), []
+    for k0 in sorted(cells):
+        if k0 in seen or not line(k0):
+            continue
+        todo, group, ports, flow = [k0], [], [], False
+        seen.add(k0)
+        while todo:
+            k = todo.pop()
+            group.append(k)
+            for a in sorted(ARMS[get(*k)]):
+                if k in cut and a == "D":
+                    continue
+                hit = reach(k, a)
+                if hit and hit[0] == "line":
+                    n = hit[1]
+                    if n in cut and a == "U":             # climbing into a label's own ┬: that label is the parent
+                        ports.append((node_of[step(n, "R") if get(*step(n, "R")) != " " else step(step(n, "R"), "R")],
+                                      "out", n))
+                    elif n not in seen:
+                        seen.add(n)
+                        todo.append(n)
+                elif hit and hit[0] == "port":
+                    ports.append(hit[1:])
+                elif hit:
+                    flow = True
+        groups.append((group, ports, flow))
+    pure = not any(flow for *_, flow in groups)         # nothing but plain branches: colour them (with --color)
+    parent, kids, gate_groups = {}, {}, []
+    top = lambda i: parent.get(i)
+    for group, ports, flow in groups:
+        outs = sorted({n for n, side, _ in ports if side == "out"})
+        ins = sorted({n for n, side, _ in ports if side == "in"})
+        if flow or set(outs) & set(ins):
+            continue
+        if len(outs) == 1 and ins:
+            p, children = outs[0], ins
+        elif len(ins) == 1 and len(outs) > 1:
+            p, children = ins[0], outs                  # a branch drawn to the left of its parent
+        else:
+            continue
+        took = False
+        for ch in children:
+            anc, cyc = p, False
+            while anc is not None:
+                cyc |= anc == ch
+                anc = top(anc)
+            if ch in parent or cyc:
+                continue
+            parent[ch] = p
+            kids.setdefault(p, []).append(ch)
+            took = True
+        if took:
+            port = min((c for n, side, c in ports if n == p), default=None)
+            gate_groups.append((p, group, port))
+    if len(parent) < 2 or max((len(v) for v in kids.values()), default=0) < 2:
+        return empty
+    used = sorted(set(parent) | set(kids), key=lambda i: (nodes[i].get("row", nodes[i].get("box", (0,))[0]),
+                                                           nodes[i].get("c1", nodes[i].get("box", (0, 0))[1])))
+    nid = {old: new for new, old in enumerate(used)}
+    squash = lambda s: " ".join(s.split())
+    gate, out = {}, []
+    for old in used:
+        n = nodes[old]
+        if n["kind"] == "box":
+            r1, c1, r2, c2 = n["box"]
+            title = squash("".join(get(r1, c) if is_text(get(r1, c)) else " " for c in range(c1 + 1, c2)))
+            body = [squash("".join(get(r, c) if is_text(get(r, c)) else " " for c in range(c1 + 1, c2)))
+                    for r in range(r1 + 1, r2)]
+            name = title or next((b for b in body if b), "")
+            region = [(r, c) for r in range(r1, r2 + 1) for c in range(c1, c2 + 1)]
+            hit = (PAD + c1 * CW + CW / 2, PAD + r1 * CH + CH / 2, (c2 - c1) * CW, (r2 - r1) * CH)
+        else:
+            r, c1, c2 = n["row"], n["c1"], n["c2"]
+            name = squash("".join(get(r, c) for c in range(c1, c2 + 1)))
+            end, x = c2, c2 + 1                           # a note after the label ('× 3', '312 ms') goes with it
+            while x < ncols and not (get(r, x) in ARMS or get(r, x) in HEADS or node_of.get((r, x), old) != old):
+                end = x if get(r, x) not in (" ", "") else end
+                x += 1
+            region = [(r, c) for c in range(c1, end + 1)]
+            hit = (PAD + c1 * CW, PAD + r * CH, (c2 - c1 + 1) * CW, CH)
+        depth, anc = 0, parent.get(old)
+        while anc is not None:
+            depth, anc = depth + 1, parent.get(anc)
+        out.append({"id": nid[old], "name": name, "kind": n["kind"],
+                    "parent": nid[parent[old]] if old in parent else None, "depth": depth,
+                    "children": sorted(nid[k] for k in kids.get(old, [])), "cells": region, "hit": hit})
+    for n in sorted(out, key=lambda n: -len(n["cells"])):               # big boxes first, what's inside wins
+        if n["parent"] is not None:
+            gate.update(dict.fromkeys(n["cells"], n["parent"]))
+    for p, group, port in gate_groups:
+        gate.update(dict.fromkeys(group, nid[p]))
+        n = out[nid[p]]
+        if n["kind"] == "box" and port:                   # the fold button sits where the branches leave the box
+            n["toggle"] = (PAD + port[1] * CW + CW / 2, PAD + port[0] * CH + CH / 2)
+        elif "toggle" not in n:
+            x, y, w, h = n["hit"]
+            n["toggle"] = (x + w + CW / 2, y + h / 2)
+    branch = {}                                        # each of the root's children starts a colour
+    for n in out:
+        if n["depth"] == 1:
+            branch[n["id"]] = len(set(branch.values())) % len(BRANCH_HUES["light"])
+    for n in out:
+        a = n["id"]
+        while out[a]["depth"] > 1:
+            a = out[a]["parent"]
+        if out[a]["depth"] == 1:
+            branch[n["id"]] = branch[a]
+    hue = {}
+    for p, group, port in gate_groups:
+        if nid[p] in branch:
+            hue.update(dict.fromkeys(group, branch[nid[p]]))
+            continue
+        cells_in = set(group)                           # from the root: a branch's own stretch takes its colour
+        near = lambda k: [step(k, a) for a in sorted(ARMS[get(*k)]) if step(k, a) in cells_in
+                          and OPP[a] in ARMS[get(*step(k, a))] and not (k in cut and a == "D")]
+        start = [k for k in group for a in ARMS[get(*k)]
+                 if (reach(k, a) or ("",))[0] == "port" and reach(k, a)[1] == p]
+        prev = {k: None for k in start}
+        todo = list(start)
+        while todo:                                     # breadth first from the parent's port
+            k = todo.pop(0)
+            for m in near(k):
+                if m not in prev:
+                    prev[m] = k
+                    todo.append(m)
+        use = {}
+        for ch_old in kids.get(p, []):
+            ch = nid[ch_old]
+            ends = [k for k in group for a in ARMS[get(*k)]
+                    if (reach(k, a) or ("",))[0] == "port" and reach(k, a)[1] == ch_old]
+            for k in ends[:1]:
+                while k is not None and k in prev:
+                    use.setdefault(k, set()).add(ch)
+                    k = prev[k]
+        for k, who in use.items():
+            if len(who) == 1 and next(iter(who)) in branch:
+                hue[k] = branch[next(iter(who))]
+    arm_hue = {}                                        # a junction's arm straight into a child: the child's colour
+    for group, ports, flow in groups:
+        for k in group:
+            for a in ARMS[get(*k)]:
+                hit = reach(k, a)
+                if hit and hit[0] == "port" and hit[1] in nid and nid[hit[1]] in branch and hit[1] in parent:
+                    arm_hue[(k, a)] = branch[nid[hit[1]]]
+    for n in out:
+        n["branch"] = branch.get(n["id"])
+    rows = []
+    for r in range(nrows):
+        hard = set()
+        for c in range(ncols):
+            t = get(r, c)
+            if t in (" ", "") or (t in PASS_THROUGH and (r, c) not in border):
+                continue
+            hard.add(gate.get((r, c), -1))
+        rows.append(sorted(hard))
+    return {"nodes": out, "gate": gate, "rows": rows, "hue": hue, "arm_hue": arm_hue, "pure": pure}
+
+
+def text_runs(texts, gate_of=lambda r, c: None):
+    """Text cells -> [(row, [(col, width, char), ...])]: neighbouring characters on a row, with at most
+    one space between them, become one run, drawn as one <text> with an x for every character. Each
+    x starts its own text chunk, so every character is still centred in its own cell (1:1), and the
+    file is about a third the size of one element per character. Wide characters, emoji and
+    combining clusters stay on their own (an x per code point would split them)."""
+    out, last = [], None
+    for r, c, w, t in texts:
+        solo = not (w == 1 and len(t) == 1 and ord(t) < 0x10000 and t != " ")
+        g = gate_of(r, c)
+        if last and not solo and last[0] == r and last[2] == g and c - last[1] in (1, 2):
+            run = out[-1][1]
+            if c - last[1] == 2:
+                run.append((c - 1, 1, " "))
+            run.append((c, w, t))
+        else:
+            out.append((r, [(c, w, t)]))
+        last = None if solo else (r, c, g)
+    return out
+
+
 def _layout_css(mode, font=None):
     """mode: none | timed (plays on load) | scroll (a host page adds .a2s-on as things scroll into view)."""
     css = (".sgl{stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;fill:none}"
@@ -1027,6 +1338,30 @@ def font_stack(font):
     return "".join((n if n[0] in "'\"" or " " not in n else f"'{n}'") + "," for n in names)
 
 
+FOLD_CSS = ("[data-g]{transition:opacity .2s}.a2s-hid{opacity:0;pointer-events:none}"
+            ".a2s-ui .a2s-hit{fill:transparent;pointer-events:all;cursor:pointer}"
+            ".a2s-ui .a2s-tg{cursor:pointer;outline:none;opacity:.35;transition:opacity .15s}"
+            "svg:hover .a2s-tg{opacity:.7}.a2s-ui .a2s-tg:hover,.a2s-ui .a2s-tg:focus-visible,.a2s-ui .a2s-shut{opacity:1}"
+            ".a2s-ui .a2s-tg circle{pointer-events:all;stroke-width:1.2}"
+            ".a2s-ui .a2s-tg path{fill:none;stroke-width:1.5;stroke-linecap:round}"
+            ".a2s-tg:focus-visible circle{stroke-width:2.6}"
+            "@media (prefers-reduced-motion:reduce){[data-g]{transition:none}}")
+
+
+def _fold_colour_css(t):
+    acc = t["accent"]
+    return (f".a2s-tg circle{{fill:{t['bg']};stroke:{acc}}}.a2s-tg path{{stroke:{acc}}}"
+            f".a2s-shut circle{{fill:{acc}}}.a2s-shut path{{stroke:{t['bg']}}}"
+            f".a2s-hot.sgl,.a2s-hot.dbl{{stroke:{acc}}}text.a2s-hot{{fill:{acc}}}")
+
+
+def _branch_css(t):
+    css = "".join(f'.sgl[data-h="{i}"],.dbl[data-h="{i}"]{{stroke:{line}}}.pill[data-h="{i}"],.fill[data-h="{i}"]{{fill:{tint}}}'
+                  for i, (line, tint) in enumerate(t["branch"]))
+    return css + (f".pill.root{{fill:{t['ink']}}}text.a2s-root{{fill:{t['bg']};font-weight:700}}"
+                  f".fill[data-h]:hover{{fill:{t['hover']}}}")
+
+
 def _colour_css(t, color, anim):
     acc = t["accent"]
     css = (f".bg,.fill,.plate{{fill:{t['bg']}}}.sgl,.dbl{{stroke:{t['ink']}}}.dbl-gap{{stroke:{t['bg']}}}"
@@ -1046,7 +1381,8 @@ def _colour_css(t, color, anim):
 
 
 def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII diagram",
-               theme="light", color=False, animate="none", accent=None, font=None, width=None):
+               theme="light", color=False, animate="none", accent=None, font=None, width=None,
+               interactive=False, fold=None, runs=True):
     """cells: {(r, c): (text, width)} where line cells already hold Unicode line characters.
 
     Animation only ever starts from an earlier state and ends on the static drawing, so a
@@ -1054,6 +1390,20 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     get = lambda r, c: cells.get((r, c), (" ", 1))[0]
     segs = {st: {"h": {}, "v": {}} for st in ("s", "d", "2", "3", "4")}      # single, double, dashed x2/x3/x4
     curves, heads, texts, blocks, marks = [], [], [], [], []
+    forest = tree_model(cells, nrows, ncols) if (interactive or color) else None
+    folding = bool(interactive and forest and forest["nodes"])
+    gates = forest["gate"] if folding else {}
+    gate_of = lambda r, c: gates.get((r, c))
+    gate_attr = lambda c, r: (f' data-g="{gates[(r, c)]}"' if (r, c) in gates else "")
+    tree_nodes = forest["nodes"] if (color and forest and forest["pure"]) else []
+    hues = forest["hue"] if tree_nodes else {}
+    arm_hues = forest["arm_hue"] if tree_nodes else {}
+    box_hue = {tuple(n["cells"][0]) + tuple(n["cells"][-1]): n["branch"] for n in tree_nodes
+               if n["kind"] == "box" and n["branch"] is not None}
+    group_of = lambda r, c: (gates.get((r, c), -1), hues.get((r, c), -1))
+    ga = lambda g: (f' data-g="{g[0]}"' if g[0] != -1 else "") + (f' data-h="{g[1]}"' if g[1] != -1 else "")
+    roots = {k for n in tree_nodes if n["depth"] == 0 and n["kind"] == "text" for k in n["cells"]}
+    here = [(-1, -1)]                               # the fold gate and branch colour of the cell being drawn
 
     def back(r, c, a):
         """The neighbour on side a has a line arm reaching back to (r, c)."""
@@ -1124,12 +1474,13 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     grow = ' pathLength="1"' if anim else ""
 
     def add(st, d, key, a, b):
-        segs[st][d].setdefault(key, []).append((a, b))
+        segs[st][d].setdefault((here[0], key), []).append((a, b))
 
     for (r, c) in sorted(cells):
         t, w = cells[(r, c)]
         if w == 0 or t == " ":
             continue
+        here[0] = group_of(r, c)
         x0, y0 = PAD + c * CW, PAD + r * CH
         cx, cy = x0 + CW / 2, y0 + CH / 2
         if t in ARMS:
@@ -1142,7 +1493,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                 vy = cy + (RADIUS if "D" in arms else -RADIUS)
                 add(st_h, "h", cy, *((hx, x0 + CW) if "R" in arms else (x0, hx)))
                 add(st_v, "v", cx, *((vy, y0 + CH) if "D" in arms else (y0, vy)))
-                curves.append((st_h, f"M{hx:g} {cy:g}Q{cx:g} {cy:g} {cx:g} {vy:g}", y0))
+                curves.append((st_h, f"M{hx:g} {cy:g}Q{cx:g} {cy:g} {cx:g} {vy:g}", y0, here[0]))
                 continue
             tick = ""
             if t == "┼":                                    # a mark across a line (ER '||'), not a crossing
@@ -1150,8 +1501,16 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                     tick = "UD"
                 elif not back(r, c, "L") and not back(r, c, "R") and link(r, c, "U") and link(r, c, "D"):
                     tick = "LR"
+            own = here[0]
             for a in sorted(arms):
                 st = st_h if a in "LR" else st_v
+                nb = (r + DIRS[a][0], c + DIRS[a][1])
+                if own[1] == -1 and ((r, c), a) in arm_hues:        # a junction's arm takes the branch it leads to
+                    here[0] = (own[0], arm_hues[((r, c), a)])
+                elif own[1] == -1 and nb in hues and len(arms) > 2:
+                    here[0] = (own[0], hues[nb])
+                else:
+                    here[0] = own
                 if a in tick:
                     if a == "D":
                         add(st, "v", cx, cy - 5, cy + 5)
@@ -1185,27 +1544,39 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
             texts.append((r, c, w, t))
 
     def merged(d):
+        """{(gate, k): [(a, b)]} -> [(gate, k, a, b)]: overlapping pieces on one line become one."""
         out = []
-        for k in sorted(d):
-            iv = sorted(d[k])
+        for g, k in sorted(d):
+            iv = sorted(d[(g, k)])
             cur = list(iv[0])
             for a, b in iv[1:]:
                 if a <= cur[1] + 0.01:
                     cur[1] = max(cur[1], b)
                 else:
-                    out.append((k, *cur))
+                    out.append((g, k, *cur))
                     cur = [a, b]
-            out.append((k, *cur))
+            out.append((g, k, *cur))
         return out
 
     def lines(st, cls):
-        g = "" if "dash" in cls else grow                  # pathLength would stretch the dashes too
-        o = [f'<path d="{d}" class="{cls}"{g}{timing(y, 0.25)}/>' for s, d, y in curves if s == st]
-        o += [f'<line x1="{a:g}" y1="{k:g}" x2="{b:g}" y2="{k:g}" class="{cls}"{g}'
+        h, v = merged(segs[st]["h"]), merged(segs[st]["v"])
+        if not anim:                                        # a still drawing: one path per line style (and fold group)
+            by = {}
+            for s, d, y, g in curves:
+                if s == st:
+                    by.setdefault(g, []).append(d)
+            for g, k, a, b in h:
+                by.setdefault(g, []).append(f"M{a:g} {k:g}H{b:g}")
+            for g, k, a, b in v:
+                by.setdefault(g, []).append(f"M{k:g} {a:g}V{b:g}")
+            return [f'<path d="{"".join(ds)}" class="{cls}"{ga(g)}/>' for g, ds in sorted(by.items())]
+        g0 = "" if "dash" in cls else grow                 # pathLength would stretch the dashes too
+        o = [f'<path d="{d}" class="{cls}"{g0}{ga(g)}{timing(y, 0.25)}/>' for s, d, y, g in curves if s == st]
+        o += [f'<line x1="{a:g}" y1="{k:g}" x2="{b:g}" y2="{k:g}" class="{cls}"{g0}{ga(g)}'
               f'{timing(k - CH / 2, min(max((b - a) / (1.5 * speed), 0.25), 0.8))}/>'
-              for k, a, b in merged(segs[st]["h"])]
-        o += [f'<line x1="{k:g}" y1="{a:g}" x2="{k:g}" y2="{b:g}" class="{cls}"{g}'
-              f'{timing(a, max((b - a) / speed, 0.25))}/>' for k, a, b in merged(segs[st]["v"])]
+              for g, k, a, b in h]
+        o += [f'<line x1="{k:g}" y1="{a:g}" x2="{k:g}" y2="{b:g}" class="{cls}"{g0}{ga(g)}'
+              f'{timing(a, max((b - a) / speed, 0.25))}/>' for g, k, a, b in v]
         return o
 
     # boxes: glow / shadow, then fill, then plates behind titles on the top edge
@@ -1220,7 +1591,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         x2, y2 = PAD + c2 * CW + CW / 2, PAD + r2 * CH + CH / 2
         w, h = x2 - x1, y2 - y1
         rad = RADIUS if (round_ok or get(r1, c1) in ROUNDED) else 0
-        tm = timing(y1 - CH / 2)
+        tm = timing(y1 - CH / 2) + gate_attr(c1, r1)
         if style == "glow":
             reach = GLOW_R                                  # shrink so glow never sits behind a label
             for rr in range(r1 - 1, r2 + 2):
@@ -1245,7 +1616,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                              f'rx="{rad:g}" class="shadow" fill-opacity="{op}"{tm}/>')
         if style != "flat" or color:
             cls = f"fill {tints[b]}" if color else "fill"
-            under.append(f'<rect x="{x1:g}" y="{y1:g}" width="{w:g}" height="{h:g}" rx="{rad:g}" class="{cls}"{tm}/>')
+            bh = f' data-h="{box_hue[b]}"' if b in box_hue else ""      # a box in a tree takes its branch's tint
+            under.append(f'<rect x="{x1:g}" y="{y1:g}" width="{w:g}" height="{h:g}" rx="{rad:g}" class="{cls}"{bh}{tm}/>')
             run = None
             for c in range(c1 + 1, c2 + 1):
                 t = get(r1, c)
@@ -1256,6 +1628,15 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                     under.append(f'<rect x="{PAD + run * CW:g}" y="{PAD + r1 * CH:g}" '
                                  f'width="{(c - run) * CW:g}" height="{CH:g}" class="plate"{tm}/>')
                     run = None
+
+    for n in tree_nodes:                            # a tree's root and main branches sit on a tinted pill
+        if n["kind"] != "text" or n["depth"] > 1 or (n["depth"] == 0 and not n["children"]):
+            continue
+        x, y, w, h = n["hit"]
+        (r0, c0) = n["cells"][0]
+        kind = ' class="pill root"' if n["depth"] == 0 else f' class="pill" data-h="{n["branch"]}"'
+        under.append(f'<rect x="{x - 3:g}" y="{y + 1:g}" width="{w + 6:g}" height="{h - 2:g}" rx="4"{kind}'
+                     f'{timing(y)}{gate_attr(c0, r0)}/>')
 
     def diagonals():
         """One stroke per run of ╱ or ╲, corner to corner. Where a ╱ and a ╲ end one cell apart on
@@ -1277,7 +1658,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                     top, bot = (PAD + c * CW, PAD + r * CH), (PAD + (c + n) * CW, PAD + (r + n) * CH)
                     a, b = top, bot
                 o.append(f'<line x1="{a[0]:g}" y1="{a[1]:g}" x2="{b[0]:g}" y2="{b[1]:g}" class="sgl"{grow}'
-                         f'{timing(top[1], max(n * CH / speed, 0.25))}/>')
+                         f'{timing(top[1], max(n * CH / speed, 0.25))}{gate_attr(c, r)}/>')
                 ends.append((s, "top", top, (r - 1, c - dc)))
                 ends.append((s, "bot", bot, (r + n, c + n * dc)))
         at_end = {(s, e, p) for s, e, p, _ in ends}
@@ -1311,7 +1692,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                 x, y = PAD + c * CW + x0 * CW / 8, PAD + r * CH + y0 * CH / 8
                 wd, ht = (n - 1) * CW + (x1 - x0) * CW / 8, (y1 - y0) * CH / 8
                 o.append(f'<rect x="{x:g}" y="{y:g}" width="{wd:g}" height="{ht:g}" class="blk k{shade}"'
-                         f'{timing(y)}/>')
+                         f'{timing(y)}{gate_attr(c, r)}/>')
             i += n
         return o
 
@@ -1325,7 +1706,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         for r, c, t, kind in marks:
             x0, y0 = PAD + c * CW, PAD + r * CH
             cx, cy = x0 + CW / 2, y0 + CH / 2
-            tm = timing(y0)
+            tm = timing(y0) + gate_attr(c, r)
             if kind == "tri3":                              # '/_\': the tip on the box edge, the base across 3 cells
                 tip = y0 - (CH / 2 if line_like(r - 1, c) else 0)
                 base = y0 + 10
@@ -1427,13 +1808,16 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     line_like = lambda r, c: get(r, c) in ARMS
     for r, c, d in heads:
         sh, pts, _ = head_geometry(r, c, d, line_like)
-        tm = timing(PAD + r * CH + 0.15 * speed)
+        tm = timing(PAD + r * CH + 0.15 * speed) + gate_attr(c, r)
         body.append('<line x1="%g" y1="%g" x2="%g" y2="%g" class="sgl shaft"%s/>' % (*sh, tm))
         body.append('<polygon points="%s" class="head"%s/>' % (" ".join(f"{x:g},{y:g}" for x, y in pts), tm))
-    for r, c, w, t in texts:                         # one delay per row (a class), not per character
-        row_cls = f' class="r{r}"' if timed else ""
-        body.append(f'<text x="{PAD + c * CW + w * CW / 2:g}" y="{PAD + r * CH + CH / 2 + 5:g}"'
-                    f'{row_cls}>{html.escape(t, quote=False)}</text>')
+    key = (lambda r, c: (gate_of(r, c), (r, c) in roots)) if runs else (lambda r, c: (r, c))   # runs=False: one per cell
+    for r, run in text_runs(texts, key):
+        cls = " ".join(([f"r{r}"] if timed else []) + (["a2s-root"] if (r, run[0][0]) in roots else []))
+        row_cls = f' class="{cls}"' if cls else ""        # one delay per row (a class), not per character
+        xs = " ".join(f"{PAD + c * CW + w * CW / 2:g}" for c, w, _ in run)
+        body.append(f'<text x="{xs}" y="{PAD + r * CH + CH / 2 + 5:g}"'
+                    f'{row_cls}{gate_attr(run[0][0], r)}>{html.escape("".join(t for *_, t in run), quote=False)}</text>')
     rows_css = "".join(f".r{r}{{animation-delay:{at(PAD + r * CH + 0.08 * speed):.2f}s}}"
                        for r in sorted({r for r, *_ in texts})) if timed else ""
 
@@ -1455,8 +1839,13 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     tune = lambda t: dict(t, accent=accent) if accent else t
     pal = tune(THEMES["light" if theme == "auto" else theme])
     css = _layout_css("timed" if timed else animate if anim else "none", font) + rows_css + _colour_css(pal, color, anim)
+    css += _branch_css(pal) if tree_nodes else ""
+    if folding:
+        css += FOLD_CSS + _fold_colour_css(pal)
     if theme == "auto":
-        css += "@media (prefers-color-scheme:dark){" + _colour_css(tune(THEMES["dark"]), color, anim) + "}"
+        dark = tune(THEMES["dark"])
+        css += "@media (prefers-color-scheme:dark){" + _colour_css(dark, color, anim)
+        css += (_branch_css(dark) if tree_nodes else "") + (_fold_colour_css(dark) if folding else "") + "}"
     W, H = ncols * CW + 2 * PAD, nrows * CH + 2 * PAD
     ow, oh = (width, round(H * width / W, 2)) if width else (W, H)      # --width scales; the viewBox stays
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W:g} {H:g}" width="{ow:g}" '
@@ -1464,9 +1853,9 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
            + ('data-reveal="scroll" ' if animate == "scroll" else "") +
            f'data-generator="ascii2svg {__version__}"><title>{html.escape(title)}</title>'
            f'<style>{css}</style><rect width="100%" height="100%" fill="{pal["bg"]}" class="bg"/>'
-           + "".join(body) + "</svg>\n")
+           + "".join(body) + (fold_script(forest, fold) if folding else "") + "</svg>\n")
     return svg, {"boxes": len(boxes), "text_cells": len(texts), "arrowheads": len(heads) + sum(k in ("tri", "dia", "tri3", "pair") for *_, k in marks),
-                 "flows": len(routes)}
+                 "flows": len(routes), "folds": sum(1 for n in forest["nodes"] if n["children"]) if forest else 0}
 
 
 # ─── web page (--html) ───────────────────────────────────────────────────────
@@ -1536,6 +1925,153 @@ REVEAL_JS = r"""(() => {
 })();"""
 
 
+# Folding (--interactive), no dependencies. The script sits inside the SVG, so it works when the file
+# is opened in a browser, inlined in a page, or embedded with <object>/<iframe>. As an <img> (GitHub,
+# most docs sites) scripts never run and the reader sees the full, self-checked drawing. Folding only
+# hides and moves what was drawn: every element keeps its shape, rows that hold nothing but folded
+# branches close up (lines passing through them get shorter), and unfolding restores the original.
+FOLD_JS = r"""(T => {
+  const me = document.currentScript, svg = me && me.closest ? me.closest('svg') : document.querySelector('svg');
+  if (!svg || svg.a2sFold) return;
+  svg.a2sFold = 1;
+  const NS = 'http://www.w3.org/2000/svg', [CW, CH, PAD] = T.c, P = T.p, R = T.r, n = P.length;
+  const kids = P.map(() => []);
+  P.forEach((p, i) => p >= 0 && kids[p].push(i));
+  const below = i => kids[i].reduce((s, k) => s + 1 + below(k), 0);
+  const folded = new Set(), calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hid = g => { for (let x = g; x >= 0; x = P[x]) if (folded.has(x)) return true; return false; };
+  const els = [...svg.querySelectorAll('rect:not(.bg),line,path,polygon,circle,text')].map(el => {
+    const o = {el, g: el.hasAttribute('data-g') ? +el.getAttribute('data-g') : -1};
+    for (const a of ['y', 'height', 'y1', 'y2', 'cy', 'd', 'points']) if (el.hasAttribute(a)) o[a] = el.getAttribute(a);
+    return o;
+  });
+  const vb = svg.viewBox.baseVal, H0 = vb.height, h0 = +svg.getAttribute('height'), pulses = svg.querySelectorAll('.pulse');
+  let f = R.map(() => 0), cum = [];
+  const Y = y => {
+    const r = Math.floor((y - PAD) / CH);
+    if (r < 0) return y;
+    if (r >= R.length) return y - cum[R.length];
+    return y - cum[r] - f[r] * (y - PAD - r * CH);
+  };
+  const num = s => s.split(/[\s,]+/).filter(Boolean).map(Number);
+  const pathY = d => d.replace(/([MLHVQ])([^MLHVQ]*)/g, (_, op, a) => {
+    const v = num(a);
+    return op + (op === 'H' ? v : v.map((x, i) => (op === 'V' || i % 2) ? +Y(x).toFixed(2) : x)).join(' ');
+  });
+  const ui = document.createElementNS(NS, 'g');
+  ui.setAttribute('class', 'a2s-ui');
+  svg.appendChild(ui);
+  const hot = new Set();
+  const layout = () => {
+    cum = [0];
+    for (let r = 0; r < R.length; r++) cum.push(cum[r] + f[r] * CH);
+    for (const o of els) {
+      const el = o.el;
+      if ('y' in o) {
+        const y = +o.y, y2 = Y(y);
+        el.setAttribute('y', +y2.toFixed(2));
+        if ('height' in o) el.setAttribute('height', +(Y(y + +o.height) - y2).toFixed(2));
+      }
+      if ('y1' in o) { el.setAttribute('y1', +Y(+o.y1).toFixed(2)); el.setAttribute('y2', +Y(+o.y2).toFixed(2)); }
+      if ('cy' in o) el.setAttribute('cy', +Y(+o.cy).toFixed(2));
+      if ('d' in o) el.setAttribute('d', pathY(o.d));
+      if ('points' in o) el.setAttribute('points', o.points.split(' ').map(q => {
+        const [x, y] = q.split(',').map(Number); return x + ',' + +Y(y).toFixed(2); }).join(' '));
+      el.classList.toggle('a2s-hid', o.g >= 0 && hid(o.g));
+      el.classList.toggle('a2s-hot', o.g >= 0 && hot.has(o.g));
+    }
+    const H = H0 - cum[R.length];
+    svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.width} ${+H.toFixed(2)}`);
+    if (h0) svg.setAttribute('height', +(h0 * H / H0).toFixed(2));
+    pulses.forEach(p => p.style.display = folded.size ? 'none' : '');
+    for (const b of buttons) {
+      const [x, y] = T.t[b.i], [hx, hy, hw, hh] = T.h[b.i], gone = P[b.i] >= 0 && hid(P[b.i]), shut = folded.has(b.i);
+      b.hit.setAttribute('y', +Y(hy).toFixed(2));
+      b.hit.setAttribute('height', +(Y(hy + hh) - Y(hy)).toFixed(2));
+      b.tg.setAttribute('transform', `translate(${x} ${+Y(y).toFixed(2)})`);
+      b.bar.setAttribute('d', shut ? 'M-2.4 0H2.4M0 -2.4V2.4' : 'M-2.4 0H2.4');
+      b.tg.classList.toggle('a2s-shut', shut);
+      for (const el of [b.hit, b.tg]) el.style.display = gone ? 'none' : '';
+      b.tg.setAttribute('aria-expanded', !shut);
+      b.tip.textContent = (shut ? 'Unfold ' : 'Fold ') + T.n[b.i] + (shut ? ` (${below(b.i)} hidden)` : '') +
+                          ' (Shift: the whole branch)';
+    }
+  };
+  const want = () => {
+    const st = R.map(gs => gs.length ? gs.every(g => g >= 0 && hid(g)) : null);
+    return st.map((s, i) => {
+      if (s !== null) return s ? 1 : 0;
+      let a = i - 1, b = i + 1;
+      while (a >= 0 && st[a] === null) a--;
+      while (b < st.length && st[b] === null) b++;
+      return (a >= 0 || b < st.length) && (a < 0 || st[a]) && (b >= st.length || st[b]) ? 1 : 0;
+    });
+  };
+  let anim = 0;
+  const go = instant => {
+    const to = want(), from = f.slice(), t0 = performance.now(), ms = instant || calm ? 0 : 220;
+    cancelAnimationFrame(anim);
+    const frame = now => {
+      const k = ms ? Math.min((now - t0) / ms, 1) : 1, e = 1 - Math.pow(1 - k, 3);
+      f = from.map((a, i) => a + (to[i] - a) * e);
+      layout();
+      if (k < 1) anim = requestAnimationFrame(frame);
+    };
+    frame(t0);
+  };
+  const branch = i => [i, ...kids[i].flatMap(branch)];
+  const toggle = (i, all) => {
+    const shut = !folded.has(i);
+    for (const k of all ? branch(i) : [i]) if (kids[k].length) shut ? folded.add(k) : folded.delete(k);
+    go();
+  };
+  const light = (i, on) => { hot.clear(); if (on) branch(i).forEach(k => hot.add(k)); layout(); };
+  const make = (tag, at, parent) => {
+    const el = document.createElementNS(NS, tag);
+    for (const k in at) el.setAttribute(k, at[k]);
+    parent.appendChild(el);
+    return el;
+  };
+  const buttons = [];
+  for (let i = 0; i < n; i++) {
+    if (!kids[i].length) continue;
+    const [hx, hy, hw, hh] = T.h[i];
+    const hit = make('rect', {x: hx, y: hy, width: hw, height: hh, class: 'a2s-hit'}, ui);
+    const tg = make('g', {class: 'a2s-tg', tabindex: 0, role: 'button'}, ui);
+    const tip = make('title', {}, tg);
+    make('circle', {r: 4.6}, tg);
+    const bar = make('path', {}, tg);
+    const b = {i, hit, tg, bar, tip};
+    buttons.push(b);
+    for (const el of [hit, tg]) {
+      el.addEventListener('click', e => { e.preventDefault(); toggle(i, e.shiftKey || e.altKey); });
+      el.addEventListener('mouseenter', () => light(i, true));
+      el.addEventListener('mouseleave', () => light(i, false));
+    }
+    tg.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(i, e.shiftKey); }
+    });
+    tg.addEventListener('focus', () => light(i, true));
+    tg.addEventListener('blur', () => light(i, false));
+  }
+  if (T.f >= 0) for (let i = 0; i < n; i++) if (kids[i].length && T.d[i] >= T.f) folded.add(i);
+  go(true);
+})"""
+
+
+def fold_script(forest, fold=None):
+    """The folding script with this diagram's tree: parents, names, hit areas, buttons and row contents."""
+    nodes = forest["nodes"]
+    r2 = lambda v: round(v, 2)
+    data = {"c": [CW, CH, PAD], "p": [-1 if n["parent"] is None else n["parent"] for n in nodes],
+            "d": [n["depth"] for n in nodes], "n": [n["name"] for n in nodes],
+            "h": [[r2(v) for v in n["hit"]] for n in nodes],
+            "t": [[r2(v) for v in n.get("toggle", n["hit"][:2])] for n in nodes],
+            "r": forest["rows"], "f": -1 if fold is None else fold}
+    js = json.dumps(data, ensure_ascii=True, separators=(",", ":")).replace("<", "\\u003c").replace("]]>", "]]\\u003e")
+    return f"<script><![CDATA[{FOLD_JS}({js});]]></script>"
+
+
 def to_html(svg, title="ASCII diagram", theme="light"):
     """A standalone page with the SVG inline (and the scroll reveal, when the SVG asks for it)."""
     bg = THEMES["light" if theme == "auto" else theme]["bg"]
@@ -1563,14 +2099,51 @@ def read_back(svg: str) -> dict:
     def arm(r, c, st, a):
         arms.setdefault((r, c), {}).setdefault(st, set()).add(a)
 
-    for hx, cy, qx, qy, vx, vy, cls in re.findall(
-            r'<path d="M([\d.]+) ([\d.]+)Q([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)" class="([^"]+)"[^>]*/>', svg):
-        if cls == "dbl-gap":
-            continue
-        hx, qx, qy, vy = map(float, (hx, qx, qy, vy))
-        r, c, st = int((qy - pad) // chh), int((qx - pad) // cw), "d" if cls == "dbl" else "s"
+    def curve(hx, qx, qy, vy, st):                         # a rounded corner: M h Q corner v
+        r, c = int((qy - pad) // chh), int((qx - pad) // cw)
         arm(r, c, st, "R" if hx > qx else "L")
         arm(r, c, st, "D" if vy > qy else "U")
+
+    def hseg(y, x1, x2, st):
+        r = int((y - pad) // chh)
+        for c in range(int((x1 - pad) // cw) - 1, int((x2 - pad) // cw) + 2):
+            ccx = pad + c * cw + cw / 2
+            if x1 - 0.01 <= ccx <= x2 + 0.01:
+                if x1 < ccx - 0.01:
+                    arm(r, c, st, "L")
+                if x2 > ccx + 0.01:
+                    arm(r, c, st, "R")
+
+    def vseg(x, y1, y2, st):
+        c = int((x - pad) // cw)
+        for r in range(int((y1 - pad) // chh) - 1, int((y2 - pad) // chh) + 2):
+            ccy = pad + r * chh + chh / 2
+            if y1 - 0.01 <= ccy <= y2 + 0.01:
+                if y1 < ccy - 0.01:
+                    arm(r, c, st, "U")
+                if y2 > ccy + 0.01:
+                    arm(r, c, st, "D")
+
+    line_style = lambda cls: "d" if cls == "dbl" else cls[-1] if cls.startswith("sgl dash n") else "s"
+    for d, cls in re.findall(r'<path d="(M[^"]*)" class="(sgl|dbl|dbl-gap|sgl dash n[234])"[^>]*/>', svg):
+        if cls == "dbl-gap":
+            continue
+        st, x, y = line_style(cls), None, None
+        for op, nums in re.findall(r"([MHVQ])([^MHVQ]*)", d):   # a still drawing: every line of a style in one path
+            v = [float(n) for n in nums.split()]
+            if op == "M" and len(v) == 2:
+                x, y = v
+            elif op == "H" and len(v) == 1 and x is not None:
+                hseg(y, min(x, v[0]), max(x, v[0]), st)
+                x = v[0]
+            elif op == "V" and len(v) == 1 and x is not None:
+                vseg(x, min(y, v[0]), max(y, v[0]), st)
+                y = v[0]
+            elif op == "Q" and len(v) == 4 and x is not None:
+                curve(x, v[0], v[1], v[3], st)
+                x, y = v[2], v[3]
+            else:
+                out[(-1, -1)] = "?"                          # nothing else is ever written: fail loudly
     for x1, y1, x2, y2, cls in re.findall(
             r'<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)" class="([^"]+)"[^>]*/>', svg):
         x1, y1, x2, y2 = map(float, (x1, y1, x2, y2))
@@ -1592,25 +2165,11 @@ def read_back(svg: str) -> dict:
                 cell = (r0 + k, c0 + n - 1 - k) if s == "/" else (r0 + k, c0 + k)
                 slopes[cell] = slopes.get(cell, "") + s
             continue
-        st = "d" if cls == "dbl" else cls[-1] if cls.startswith("sgl dash n") else "s"
+        st = line_style(cls)
         if y1 == y2:
-            r = int((y1 - pad) // chh)
-            for c in range(int((x1 - pad) // cw) - 1, int((x2 - pad) // cw) + 2):
-                ccx = pad + c * cw + cw / 2
-                if x1 - 0.01 <= ccx <= x2 + 0.01:
-                    if x1 < ccx - 0.01:
-                        arm(r, c, st, "L")
-                    if x2 > ccx + 0.01:
-                        arm(r, c, st, "R")
+            hseg(y1, x1, x2, st)
         else:
-            c = int((x1 - pad) // cw)
-            for r in range(int((y1 - pad) // chh) - 1, int((y2 - pad) // chh) + 2):
-                ccy = pad + r * chh + chh / 2
-                if y1 - 0.01 <= ccy <= y2 + 0.01:
-                    if y1 < ccy - 0.01:
-                        arm(r, c, st, "U")
-                    if y2 > ccy + 0.01:
-                        arm(r, c, st, "D")
+            vseg(x1, y1, y2, st)
     for k, v in arms.items():
         s, d = frozenset(v.get("s", ())), frozenset(v.get("d", ()))
         dashed = [n for n in "234" if v.get(n)]
@@ -1673,10 +2232,19 @@ def read_back(svg: str) -> dict:
         ax, ay, ex = float(ax), float(ay), float(ex)
         at = ex if "V" in rest else ax + (0.01 if ex > ax else -0.01)   # set in a wall: the prongs meet the wall
         out[cell(at, ay)] = FOOT_R if ex > ax else FOOT_L
-    for x, y, t in re.findall(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
-        t = html.unescape(t)
-        w = width_of(t)
-        out[(round((float(y) - 5 - pad - chh / 2) / chh), round((float(x) - pad - w * cw / 2) / cw))] = t
+    for xs, y, t in re.findall(r'<text x="([\d. ]+)" y="([\d.]+)"[^>]*>(.*?)</text>', svg):
+        t, xs = html.unescape(t), xs.split()
+        r = round((float(y) - 5 - pad - chh / 2) / chh)
+        if len(xs) == 1:
+            w = width_of(t)
+            out[(r, round((float(xs[0]) - pad - w * cw / 2) / cw))] = t
+            continue
+        if len(xs) != len(t):
+            out[(r, -1)] = "?"                             # a run must place every character itself
+            continue
+        for x, ch1 in zip(xs, t):                          # a run: one x per character, each centred in its cell
+            if ch1 != " ":
+                out[(r, round((float(x) - pad - cw / 2) / cw))] = ch1
     return out
 
 
@@ -2461,7 +3029,28 @@ def describe(cells, nrows, ncols):
     pair = lambda e: frozenset((e["from"].get("box"), e["to"].get("box")))
     drawn = {pair(e) for e in edges}
     edges += [e for e in straight_links(get, boxes, ids, info, on_border) if pair(e) not in drawn]  # not an arrow's own line
-    return {"boxes": [info[b] for b in boxes], "edges": edges}
+    out = {"boxes": [info[b] for b in boxes], "edges": edges}
+    forest = tree_model(cells, nrows, ncols)
+    if forest["nodes"]:
+        nodes = forest["nodes"]
+        end = lambda n: ({"box": ids[(n["cells"][0][0], n["cells"][0][1], n["cells"][-1][0], n["cells"][-1][1])],
+                          "name": n["name"]} if n["kind"] == "box" else {"text": n["name"]})
+        named = {frozenset((json.dumps(e["from"], sort_keys=True), json.dumps(e["to"], sort_keys=True))) for e in edges}
+        for n in nodes:                              # every branch is an edge, parent -> child
+            if n["parent"] is not None:
+                e = {"from": end(nodes[n["parent"]]), "to": end(n)}
+                if frozenset((json.dumps(e["from"], sort_keys=True), json.dumps(e["to"], sort_keys=True))) in named:
+                    for old in edges:
+                        if {json.dumps(old["from"], sort_keys=True), json.dumps(old["to"], sort_keys=True)} == \
+                                {json.dumps(e["from"], sort_keys=True), json.dumps(e["to"], sort_keys=True)}:
+                            old.update(e, kind="branch")
+                else:
+                    edges.append(dict(e, kind="branch"))
+        nest = lambda n: {"name": n["name"], **({"box": end(n)["box"]} if n["kind"] == "box" else {}),
+                          "row": min(r for r, _ in n["cells"]) + 1, "col": min(c for _, c in n["cells"]) + 1,
+                          **({"children": [nest(nodes[k]) for k in n["children"]]} if n["children"] else {})}
+        out["tree"] = [nest(n) for n in nodes if n["parent"] is None]
+    return out
 
 
 def _cardinality(marks):
@@ -2521,9 +3110,10 @@ PRESETS = {                                 # destination -> look; explicit flag
     "print": {"style": "flat", "square": True},
     "dark": {"theme": "dark", "color": True},
     "page": {"theme": "auto", "color": True, "animate": "scroll", "html": True},
+    "explore": {"theme": "auto", "color": True, "interactive": True},
 }
 LOOK_DEFAULTS = {"style": "glow", "square": False, "theme": "light", "color": False, "animate": "none",
-                 "html": False}
+                 "html": False, "interactive": False}
 EXIT_CODES = {0: "ok (warnings allowed)", 1: "bad input or usage (see error and hint)",
               2: "self-check failed: the output is not 1:1, do not use it",
               3: "--strict was given and there were warnings"}
@@ -2551,7 +3141,9 @@ REPORT_FIELDS = {
                "edges: [{from, to, kind?, cardinality?, label?}]}; an endpoint is {box, name}, {text} or "
                "{cell}; label is the text set into the line, as in --HTTP--> ; "
                "kind is inheritance, aggregation or composition (UML heads), relationship (ER, with "
-               "cardinality [from end, to end]) or link (a straight line with no arrowhead)",
+               "cardinality [from end, to end]), link (a straight line with no arrowhead) or branch "
+               "(parent -> child in a tree); tree: the hierarchy drawn with plain connectors (call trees, "
+               "file trees, mind maps), as nested {name, box?, row, col, children?}",
     "svg / html, png": "output paths, or the markup itself when there is no -o (unless --brief or --check)",
     "source": "where the diagram came from: {input, block, line, info} (block/line for markdown code blocks)",
     "warnings[].source_line, source_col": "the warning's position in the input file itself (1-based); hints use these",
@@ -2569,6 +3161,7 @@ examples:
   ascii2svg diagram.txt --check --describe  # validate + list boxes and arrows; writes nothing
   ascii2svg notes.md -o out.svg --preset readme   # a ```fenced``` block is unwrapped automatically
   ascii2svg d.txt -o d.html --preset page         # a page that reveals as you scroll
+  tree src | ascii2svg - -o src.svg --preset explore   # a tree whose branches fold when clicked
   ascii2svg README.md --all-blocks -o out/  # every diagram in a markdown file -> out/README-N.svg
   ascii2svg a.txt b.txt -o out/ --check     # several files, one report each
   ascii2svg d.txt -o d.svg --accent '#e8590c' --font 'JetBrains Mono' --width 800
@@ -2579,6 +3172,7 @@ presets (pick the destination; explicit flags still win):
   readme  --theme auto --color --animate flow     slides  --color --animate draw
   chat    --color (add --png for apps without SVG) print   --style flat --square
   dark    --theme dark --color                    page    --html --theme auto --color --animate scroll
+  explore --theme auto --color --interactive      (trees and mind maps fold; branches get colours)
 
 looks (all optional, and all keep the 1:1 guarantee):
   --theme light|dark|auto   auto follows the viewer's light/dark setting
@@ -2587,6 +3181,9 @@ looks (all optional, and all keep the 1:1 guarantee):
   --animate flow            ...then pulses keep travelling along every arrow
   --animate scroll          web page only: parts appear as the reader scrolls to them
   --html / -o NAME.html     write a standalone web page with the diagram inline
+  --interactive             trees and mind maps fold: click a node, or Tab + Enter (in a browser;
+                            as an <img> it is the full drawing). --fold N starts folded at depth N
+  --portable                one <text> per character, for design tools (Inkscape, Figma)
   PNG output is always the finished drawing (auto theme -> light).
 
 what gets drawn:
@@ -2596,6 +3193,7 @@ what gets drawn:
   Between plain words, a line is drawn when it ends in an arrowhead pointing at a word
   and each loose end rests on a word: A --> B, A --HTTP--> B, or | and v under a label.
   UML heads in ASCII: <|-- --|> <>-- *-- across, and /_\\ <> * on a line up or down.
+  ASCII trees as `tree` and `cargo tree` print them (|-- and `--) are drawn too.
   Everything else (hyphens in words, a->b, user_id, markdown tables) stays text,
   in exactly the same cell. When unsure, it stays text.
 
@@ -2639,6 +3237,16 @@ def build_parser():
                         "arrows (bare --animate = flow); scroll: web page that reveals as you scroll")
     p.add_argument("--html", action=argparse.BooleanOptionalAction,
                    help="write a standalone web page (implied by -o NAME.html); needed for --animate scroll")
+    p.add_argument("--interactive", action=argparse.BooleanOptionalAction,
+                   help="trees and mind maps fold: click a node (or Tab + Enter) to hide its branch, Shift for "
+                        "the whole branch; rows close up. Works where scripts run (a browser, a web page); "
+                        "as an <img> it is the full static drawing")
+    p.add_argument("--portable", action="store_true",
+                   help="one <text> per character, as before 1.16: for design tools (Inkscape, Figma) and non-browser "
+                        "renderers; browsers draw the smaller default exactly the same. PNG output always uses it")
+    p.add_argument("--fold", type=int, metavar="DEPTH",
+                   help="with --interactive: start with nodes at this depth folded (1 = show the root's "
+                        "children only); implies --interactive")
     p.add_argument("--png", nargs="?", const="", metavar="PATH",
                    help="also write a PNG (default path: next to -o). Needs cairosvg")
     p.add_argument("--json", action="store_true", help="print a machine-readable report on stdout")
@@ -2673,6 +3281,8 @@ def resolve_look(args):
     preset = PRESETS.get(args.preset or "", {})
     if args.html is None:
         args.html = preset.get("html", False) or bool(args.output and args.output.lower().endswith((".html", ".htm")))
+    if getattr(args, "fold", None) is not None and args.interactive is None:
+        args.interactive = True
     for k, v in LOOK_DEFAULTS.items():
         if getattr(args, k) is None:
             setattr(args, k, preset.get(k, v))
@@ -2834,12 +3444,13 @@ def run_one(args, raw, notes, base=0):
     draw_cells = {k: ((drawn[k], w) if k in drawn else (t, w)) for k, (t, w) in cells.items()}
     style = dict(accent=args.accent, font=args.font, width=args.width)
     svg, stats = render_svg(draw_cells, nrows, ncols, args.style, args.square, args.title,
-                            args.theme, args.color, args.animate, **style)
+                            args.theme, args.color, args.animate, **style,
+                            interactive=args.interactive, fold=args.fold, runs=not args.portable)
     problems = self_check(svg, draw_cells, cells)
     still = svg
-    if args.png is not None and (args.animate != "none" or args.theme == "auto"):
-        still = render_svg(draw_cells, nrows, ncols, args.style, args.square, args.title,
-                           "light" if args.theme == "auto" else args.theme, args.color, **style)[0]
+    if args.png is not None:                                # cairosvg anchors a whole run, not each character:
+        still = render_svg(draw_cells, nrows, ncols, args.style, args.square, args.title,   # one <text> per cell
+                           "light" if args.theme == "auto" else args.theme, args.color, **style, runs=False)[0]
         problems += self_check(still, draw_cells, cells)
     where = (base + origin["line"], origin["col"])
     warnings = input_warnings(raw, cells, info, drawn, where) + connector_warnings(
@@ -2849,14 +3460,18 @@ def run_one(args, raw, notes, base=0):
         w["source_col"] = origin["col"] + w["col"]
     report = {"ok": not problems, "rows": nrows, "cols": ncols, "style": args.style, "theme": args.theme,
               "color": args.color, "animate": args.animate, "html": args.html, "preset": args.preset,
-              "boxes": stats["boxes"], "arrowheads": stats["arrowheads"], "flows": stats["flows"],
-              "text_cells": stats["text_cells"],
+              "interactive": args.interactive, "boxes": stats["boxes"], "arrowheads": stats["arrowheads"],
+              "flows": stats["flows"], "folds": stats["folds"] if args.interactive else 0,
+              "text_cells": stats["text_cells"], "bytes": len(svg.encode("utf-8")),
               **info, "roundtrip": "exact" if not problems else "MISMATCH",
               "normalized": notes, "warnings": warnings, "tips": [], "width_source": WIDTH_SOURCE,
               "version": __version__}
     if nrows > 45 and args.animate in ("draw", "flow") and not args.html:
         report["tips"].append("tall diagram: the lower part finishes drawing before the reader scrolls "
                               "to it; for a web page use --animate scroll -o NAME.html (or --preset page)")
+    if args.interactive and not stats["folds"]:
+        report["tips"].append("--interactive: no tree found, so nothing folds; draw branches with plain lines "
+                              "(├── └── or a box's ┬ fanning out) and no arrowheads")
     if fixes is not None:
         report["repair"] = fixes
     if args.describe:
@@ -2906,7 +3521,8 @@ def render(text: str, *, preset: str | None = None, style: str | None = None, sq
            html: bool | None = None, accent: str | None = None, font: str | None = None,
            width: int | None = None, title: str = "ASCII diagram", tab_size: int = 4,
            describe: bool = False, unescape: bool = False, strict: bool = False,
-           repair: bool = False) -> tuple[str, dict]:
+           repair: bool = False, interactive: bool | None = None, fold: int | None = None,
+           portable: bool = False) -> tuple[str, dict]:
     """Render a diagram. Returns (markup, report): an SVG, or a web page with html=True.
 
     Options match the CLI; unset look options come from `preset`, then the defaults
@@ -2916,7 +3532,10 @@ def render(text: str, *, preset: str | None = None, style: str | None = None, sq
     """
     args = build_parser().parse_args([])
     looks = {"preset": preset, "style": style, "square": square, "theme": theme, "color": color,
-             "animate": animate, "html": html}
+             "animate": animate, "html": html, "interactive": interactive}
+    if fold is not None and (not isinstance(fold, int) or fold < 0):
+        raise ValueError("fold must be a depth, 0 or more")
+    args.fold, args.portable = fold, portable
     allowed = {"preset": tuple(PRESETS), "style": ("glow", "shadow", "flat"), "theme": ("light", "dark", "auto"),
                "animate": ANIMATIONS}
     for name, value in looks.items():
@@ -2968,6 +3587,11 @@ MCP_TOOLS = [
          "describe": {"type": "boolean", "description": "Also return boxes and edges (which box each arrow connects)"},
          "repair": {"type": "boolean", "description": "Fix typical misalignment first (ragged walls, drifting "
                                                       "connectors, short arrows); the fixed text is in report.repair.text"},
+         "interactive": {"type": "boolean", "description": "Trees and mind maps fold when clicked (in a browser; "
+                                                           "as an image it is the full drawing)"},
+         "fold": {"type": "integer", "description": "With interactive: start with nodes at this depth folded"},
+         "portable": {"type": "boolean", "description": "One <text> per character, for design tools such as "
+                                                        "Inkscape or Figma (browsers don't need it)"},
      }}},
     {"name": "check_diagram",
      "description": "Validate an ASCII/Unicode box diagram without writing anything. Returns 'status', "
@@ -2995,7 +3619,8 @@ def _mcp_call(name, a):
             return report
         path = a.get("output_path")
         kw = {k: a[k] for k in ("preset", "style", "square", "theme", "color", "animate", "accent", "font",
-                                "width", "title", "describe", "repair") if a.get(k) is not None}
+                                "width", "title", "describe", "repair", "interactive", "fold", "portable")
+              if a.get(k) is not None}
         html_out = bool(path and path.lower().endswith((".html", ".htm")))
         if html_out or kw.get("preset") == "page" or kw.get("animate") == "scroll":
             kw["html"] = True

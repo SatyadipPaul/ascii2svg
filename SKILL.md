@@ -1,6 +1,6 @@
 ---
 name: ascii2svg
-description: Render ASCII or Unicode box diagrams (architecture diagrams, flowcharts, call trees, box-and-arrow sketches, ┌─┐ or +--+ boxes) as a clean SVG in which every character keeps its exact position, optionally coloured, dark-mode aware, and animated (draws itself, pulses flow along the arrows). Use this whenever a text diagram needs to be shared, exported, embedded in docs, READMEs or slides, or pasted somewhere that breaks monospace alignment (Slack, email, Confluence, Jira) — even if the user only says "render this diagram", "make this look nice", "animate this diagram", "export this as an image", or "turn this into SVG".
+description: Draw and render diagrams as text, then as a clean SVG in which every character keeps its exact position: architecture diagrams, flowcharts, sequences, call trees, mind maps, tables, timelines, charts, or several of these combined into one picture; optionally coloured, dark-mode aware, animated, and with trees that fold when clicked. Use this whenever the user wants something visualized or explained with a diagram ("draw", "diagram", "visualize", "map out", "show how X works"), and whenever a text diagram needs to be shared, exported, embedded in docs, READMEs or slides, or pasted somewhere that breaks monospace alignment (Slack, email, Confluence, Jira) — even if the user only says "render this diagram", "make this look nice", "animate this diagram", "export this as an image", or "turn this into SVG".
 ---
 
 # ascii2svg
@@ -8,6 +8,28 @@ description: Render ASCII or Unicode box diagrams (architecture diagrams, flowch
 Turns a text diagram into an SVG **1:1**: every character stays in its exact grid cell.
 Box and line characters become real drawn lines; everything else stays the same text.
 Each run reads the SVG back and checks it against the input, cell by cell, in every look.
+
+## Drawing a diagram from scratch: compose the whole picture
+
+**Before you draw anything, read [`references/composing.md`](references/composing.md) and follow
+its six steps.** Don't reach for a single flowchart. That guide makes you:
+
+1. take inventory of what the information holds (things, groups, connections, order in time,
+   choices, hierarchy, numbers, comparisons, states, the one thing to notice);
+2. match each kind to a notation from its catalog of 16 (boxes, containers, labelled lines,
+   fan-out, decisions, sequences, trees, mind maps, tables, bars, Gantt, timelines, swimlanes,
+   state machines, ER, callouts, legends);
+3. choose a spine, map the columns, and place the rest around it, like its seven worked recipes
+   (system at a glance, the story of one request, a plan, a numbers report, an incident, a data
+   model, a flow with rules and numbers);
+4. tell the user the plan in a few lines;
+5. draw region by region, running `--check` as you go;
+6. review for the mistakes the checker can't see (numbers not to scale, notes pointing at the
+   wrong thing, cut-down questions, labels cutting a line, lifelines stopping early), then render.
+
+Nothing here is tied to one diagram type or platform: any notation can sit next to, inside or
+across any other, and all of it renders 1:1. Use that freedom to show the complete picture.
+When the user hands you a diagram to render, skip to the next section.
 
 ## Run it
 
@@ -45,7 +67,7 @@ put it back in the user's file, so their source matches the picture.
 
 | `status` | What to do |
 |---|---|
-| `ok` | Done. Share the file |
+| `ok` | The drawing is exact. For a diagram you composed, also do the review in `references/composing.md` (step 6), then share it |
 | `warnings` | Rendered, but likely misaligned: apply the hints (you can still share it if the user is happy) |
 | `self_check_failed` | **Do not share the output.** Tell the user; it is a bug in the tool |
 | `bad_input` / `usage_error` | Nothing rendered: read `error` and `hint`, fix the call |
@@ -63,7 +85,9 @@ put it back in the user's file, so their source matches the picture.
 - Unicode lines `─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ╭ ╮ ╰ ╯ ═ ║ ╔ ╗ ╚ ╝ ╪` and arrows `▼ ▲ ▶ ◀`: always.
 - ASCII `+ - |` and arrowheads `v ^ < >`: only when they form a closed box or attach to
   one (directly, or through `+` junctions). Otherwise they stay text — so `a->b`,
-  `--dry-run`, `user_id`, markdown tables and `|--` file trees are left exactly as written.
+  `--dry-run`, `user_id` and markdown tables are left exactly as written.
+- ASCII trees as `tree` and `cargo tree` print them: a column of `|` under the start of a label,
+  branches `|-- name`, the last one `` `-- name ``. A stray `|--` stays text.
 - ASCII rounded corners, `.` on top and `'` (or a backtick) below: they close a box
   (`.---.` over `'---'`) or bend a connector that is drawn (`---.` over `|`), drawn as `╭ ╮ ╰ ╯`.
 - ASCII UML heads: `<|--` `--|>` `<>--` `*--` across; up and down, `/_\` hanging under the parent
@@ -98,6 +122,7 @@ Most people won't name options. Choose from the destination; if it isn't clear, 
 | Slack, email, Jira, chat apps | `--preset chat --png` | `--color` (+ PNG, needs `pip install cairosvg`) |
 | Print, PDF, formal docs | `--preset print` | `--style flat --square` |
 | Dark-mode page or app | `--preset dark` | `--theme dark --color` |
+| A tree, call tree, file tree or mind map to explore | `--preset explore` (+ `--fold 1` for a big one) | `--theme auto --color --interactive` |
 | The user wants it plain | no preset | |
 
 - Explicit flags override a preset: `--preset readme --no-color`, `--preset slides --theme dark`.
@@ -106,12 +131,17 @@ Most people won't name options. Choose from the destination; if it isn't clear, 
   and offer the `page` version as well. The report's `tips` suggests this; pass it on.
 - Animation never changes the final picture, stops under *reduce motion*, and PNGs are always
   the finished still drawing.
+- Folding (`explore` / `--interactive`) runs a script inside the SVG: it folds when the file is opened
+  in a browser, as a `-o NAME.html` page or in an `<object>`; as an `<img>` it is the full tree. If the
+  report says `folds: 0`, no tree was found: draw branches with `├──` / `└──` (or `|--` / `` `-- ``) and
+  no arrowheads, parent above or left of its children, and check `diagram.tree` with `--describe`.
 - Tell the user what you picked in one line, e.g. "animated, colour, follows dark mode",
   so they can ask for something else.
 
 ## Options
 
-`--preset readme|slides|chat|print|dark|page` · `--check` · `--describe` · `--brief` · `--json` ·
+`--preset readme|slides|chat|print|dark|page|explore` · `--interactive` · `--fold N` · `--portable` ·
+`--check` · `--describe` · `--brief` · `--json` ·
 `--color / --no-color` · `--theme light|dark|auto` · `--animate [draw|flow|scroll]` · `--html` ·
 `--style glow|shadow|flat` · `--square` · `--png [PATH]` · `--strict` · `--unescape` ·
 `--repair` · `--all-blocks` · `--block N` · `--accent #HEX` · `--font NAME` · `--width PX` ·

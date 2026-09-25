@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1104 546" width="1104" height="546" role="img" data-cell="9x18" data-pad="12" data-generator="ascii2svg 1.16.0"><title>Decision-making process</title><style>.sgl{stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;fill:none}.dbl{stroke-width:5;stroke-linecap:round;stroke-linejoin:round;fill:none}.dbl-gap{stroke-width:2;stroke-linecap:round;stroke-linejoin:round;fill:none}.head{stroke-width:1;stroke-linejoin:round}text{font:14px ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono',monospace;text-anchor:middle;white-space:pre}.dash.n2{stroke-dasharray:4.2 4.8}.dash.n3{stroke-dasharray:2.6 3.4}.dash.n4{stroke-dasharray:1.4 3.1}.uml{stroke-width:1.2;stroke-linejoin:round}.ring{stroke-width:1.3}.foot{fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}.blk{shape-rendering:crispEdges}.k3{fill-opacity:.75}.k2{fill-opacity:.5}.k1{fill-opacity:.28}.fill{transition:fill .25s}text,line,path,polygon,circle,.blk{pointer-events:none}.bg,.fill,.plate{fill:#ffffff}.sgl,.dbl{stroke:#1f2328}.dbl-gap{stroke:#ffffff}.head{fill:#1f2328;stroke:#1f2328}text{fill:#1f2328}.glow{fill:#000000;fill-opacity:0.0396}.shadow{fill:#000}.blk{fill:#1f2328}.uml,.ring{fill:#ffffff;stroke:#1f2328}.uml.solid{fill:#1f2328}.foot{stroke:#1f2328}.shaft{stroke:#0969da}.head{fill:#0969da;stroke:#0969da}.blk{fill:#0969da}.uml{stroke:#0969da}.uml.solid{fill:#0969da}.fill.tn{fill:#f6f8fa}.fill.t0c{fill:#f1f8ff}.fill.t0l{fill:#dbeeff}.fill.t1c{fill:#f0fbf3}.fill.t1l{fill:#d4f5de}.fill.t2c{fill:#f8f4ff}.fill.t2l{fill:#ebdfff}.fill.t3c{fill:#fff7f0}.fill.t3l{fill:#ffe6d1}.fill.t4c{fill:#fff4f9}.fill.t4l{fill:#ffdcec}.fill.t5c{fill:#effbfa}.fill.t5l{fill:#cef3ef}.fill:hover{fill:#e2edfc}.sgl[data-h="0"],.dbl[data-h="0"]{stroke:#e03131}.pill[data-h="0"],.fill[data-h="0"]{fill:#fff0ee}.sgl[data-h="1"],.dbl[data-h="1"]{stroke:#e8a200}.pill[data-h="1"],.fill[data-h="1"]{fill:#fff7dc}.sgl[data-h="2"],.dbl[data-h="2"]{stroke:#12b886}.pill[data-h="2"],.fill[data-h="2"]{fill:#e6faf3}.sgl[data-h="3"],.dbl[data-h="3"]{stroke:#4263eb}.pill[data-h="3"],.fill[data-h="3"]{fill:#eaeefe}.sgl[data-h="4"],.dbl[data-h="4"]{stroke:#d63fe8}.pill[data-h="4"],.fill[data-h="4"]{fill:#fcecfe}.sgl[data-h="5"],.dbl[data-h="5"]{stroke:#1098ad}.pill[data-h="5"],.fill[data-h="5"]{fill:#e3f7fa}.pill.root{fill:#1f2328}text.a2s-root{fill:#ffffff;font-weight:700}.fill[data-h]:hover{fill:#e2edfc}[data-g]{transition:opacity .2s}.a2s-hid{opacity:0;pointer-events:none}.a2s-ui .a2s-hit{fill:transparent;pointer-events:all;cursor:pointer}.a2s-ui .a2s-tg{cursor:pointer;outline:none;opacity:.35;transition:opacity .15s}svg:hover .a2s-tg{opacity:.7}.a2s-ui .a2s-tg:hover,.a2s-ui .a2s-tg:focus-visible,.a2s-ui .a2s-shut{opacity:1}.a2s-ui .a2s-tg circle{pointer-events:all;stroke-width:1.2}.a2s-ui .a2s-tg path{fill:none;stroke-width:1.5;stroke-linecap:round}.a2s-tg:focus-visible circle{stroke-width:2.6}@media (prefers-reduced-motion:reduce){[data-g]{transition:none}}.a2s-tg circle{fill:#ffffff;stroke:#0969da}.a2s-tg path{stroke:#0969da}.a2s-shut circle{fill:#0969da}.a2s-shut path{stroke:#ffffff}.a2s-hot.sgl,.a2s-hot.dbl{stroke:#0969da}text.a2s-hot{fill:#0969da}@media (prefers-color-scheme:dark){.bg,.fill,.plate{fill:#0d1117}.sgl,.dbl{stroke:#e6edf3}.dbl-gap{stroke:#0d1117}.head{fill:#e6edf3;stroke:#e6edf3}text{fill:#e6edf3}.glow{fill:#ffffff;fill-opacity:0.0239}.shadow{fill:#000}.blk{fill:#e6edf3}.uml,.ring{fill:#0d1117;stroke:#e6edf3}.uml.solid{fill:#e6edf3}.foot{stroke:#e6edf3}.shaft{stroke:#58a6ff}.head{fill:#58a6ff;stroke:#58a6ff}.blk{fill:#58a6ff}.uml{stroke:#58a6ff}.uml.solid{fill:#58a6ff}.fill.tn{fill:#151b23}.fill.t0c{fill:#0f1a2b}.fill.t0l{fill:#15325a}.fill.t1c{fill:#0e1f16}.fill.t1l{fill:#16402a}.fill.t2c{fill:#1b1530}.fill.t2l{fill:#34245a}.fill.t3c{fill:#23180e}.fill.t3l{fill:#4a2e14}.fill.t4c{fill:#241421}.fill.t4l{fill:#4a1f3a}.fill.t5c{fill:#0c2023}.fill.t5l{fill:#124042}.fill:hover{fill:#1c2d45}.sgl[data-h="0"],.dbl[data-h="0"]{stroke:#ff6b6b}.pill[data-h="0"],.fill[data-h="0"]{fill:#3a1a1c}.sgl[data-h="1"],.dbl[data-h="1"]{stroke:#ffc93c}.pill[data-h="1"],.fill[data-h="1"]{fill:#3a3016}.sgl[data-h="2"],.dbl[data-h="2"]{stroke:#38d9a9}.pill[data-h="2"],.fill[data-h="2"]{fill:#113328}.sgl[data-h="3"],.dbl[data-h="3"]{stroke:#748ffc}.pill[data-h="3"],.fill[data-h="3"]{fill:#1c2448}.sgl[data-h="4"],.dbl[data-h="4"]{stroke:#e599f7}.pill[data-h="4"],.fill[data-h="4"]{fill:#35203c}.sgl[data-h="5"],.dbl[data-h="5"]{stroke:#3bc9db}.pill[data-h="5"],.fill[data-h="5"]{fill:#12303a}.pill.root{fill:#e6edf3}text.a2s-root{fill:#0d1117;font-weight:700}.fill[data-h]:hover{fill:#1c2d45}.a2s-tg circle{fill:#0d1117;stroke:#58a6ff}.a2s-tg path{stroke:#58a6ff}.a2s-shut circle{fill:#58a6ff}.a2s-shut path{stroke:#0d1117}.a2s-hot.sgl,.a2s-hot.dbl{stroke:#58a6ff}text.a2s-hot{fill:#58a6ff}}</style><rect width="100%" height="100%" fill="#ffffff" class="bg"/><rect x="288" y="31" width="195" height="16" rx="4" class="pill" data-h="0" data-g="30"/><rect x="288" y="193" width="168" height="16" rx="4" class="pill" data-h="1" data-g="30"/><rect x="9" y="355" width="213" height="16" rx="4" class="pill root"/><rect x="288" y="355" width="177" height="16" rx="4" class="pill" data-h="2" data-g="30"/><rect x="288" y="409" width="159" height="16" rx="4" class="pill" data-h="3" data-g="30"/><rect x="288" y="499" width="141" height="16" rx="4" class="pill" data-h="4" data-g="30"/><path d="M732 21H750" class="sgl" data-g="0" data-h="0"/><path d="M524.5 21Q520.5 21 520.5 25M524.5 57Q520.5 57 520.5 53M524.5 21H543M489 39H520.5M524.5 57H543M520.5 25V53" class="sgl" data-g="2" data-h="0"/><path d="M723 57H741" class="sgl" data-g="3" data-h="0"/><path d="M929.5 75Q925.5 75 925.5 79M929.5 111Q925.5 111 925.5 107M929.5 75H948M894 93H948M929.5 111H948M925.5 79V107" class="sgl" data-g="6" data-h="1"/><path d="M821.5 93Q817.5 93 817.5 97M821.5 183Q817.5 183 817.5 179M821.5 93H840M786 147H840M821.5 183H840M817.5 97V179" class="sgl" data-g="10" data-h="1"/><path d="M929.5 129Q925.5 129 925.5 133M929.5 165Q925.5 165 925.5 161M929.5 129H948M894 147H948M929.5 165H948M925.5 133V161" class="sgl" data-g="11" data-h="1"/><path d="M993 183H1011" class="sgl" data-g="14" data-h="1"/><path d="M497.5 147Q493.5 147 493.5 151M497.5 291Q493.5 291 493.5 287M497.5 147H516M462 201H493.5M497.5 291H516M493.5 151V287" class="sgl" data-g="16" data-h="1"/><path d="M929.5 219Q925.5 219 925.5 223M929.5 255Q925.5 255 925.5 251M929.5 219H948M894 237H948M929.5 255H948M925.5 223V251" class="sgl" data-g="18" data-h="1"/><path d="M821.5 237Q817.5 237 817.5 241M821.5 327Q817.5 327 817.5 323M821.5 237H840M786 291H840M821.5 327H840M817.5 241V323" class="sgl" data-g="22" data-h="1"/><path d="M929.5 273Q925.5 273 925.5 277M929.5 309Q925.5 309 925.5 305M929.5 273H948M894 291H948M929.5 309H948M925.5 277V305" class="sgl" data-g="23" data-h="1"/><path d="M993 327H1011" class="sgl" data-g="26" data-h="1"/><path d="M678 345H696" class="sgl" data-g="28" data-h="2"/><path d="M228 363H259.5M259.5 201V417" class="sgl" data-g="30"/><path d="M263.5 39Q259.5 39 259.5 43M263.5 39H282M259.5 43V201" class="sgl" data-g="30" data-h="0"/><path d="M259.5 201H282" class="sgl" data-g="30" data-h="1"/><path d="M259.5 363H282" class="sgl" data-g="30" data-h="2"/><path d="M259.5 417H282" class="sgl" data-g="30" data-h="3"/><path d="M263.5 507Q259.5 507 259.5 503M263.5 507H282M259.5 417V503" class="sgl" data-g="30" data-h="4"/><path d="M506.5 345Q502.5 345 502.5 349M506.5 381Q502.5 381 502.5 377M506.5 345H525M471 363H502.5M506.5 381H525M502.5 349V377" class="sgl" data-g="31" data-h="2"/><path d="M651 381H669" class="sgl" data-g="32" data-h="2"/><path d="M669 399H687" class="sgl" data-g="34" data-h="3"/><path d="M488.5 399Q484.5 399 484.5 403M488.5 453Q484.5 453 484.5 449M488.5 399H507M453 417H484.5M488.5 453H507M484.5 403V449" class="sgl" data-g="36" data-h="3"/><path d="M731.5 435Q727.5 435 727.5 439M731.5 471Q727.5 471 727.5 467M731.5 435H750M696 453H727.5M731.5 471H750M727.5 439V467" class="sgl" data-g="38" data-h="3"/><path d="M642 489H660" class="sgl" data-g="40" data-h="4"/><path d="M470.5 489Q466.5 489 466.5 493M470.5 525Q466.5 525 466.5 521M470.5 489H489M435 507H466.5M470.5 525H489M466.5 493V521" class="sgl" data-g="42" data-h="4"/><path d="M651 525H669" class="sgl" data-g="43" data-h="4"/><text x="556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5 637.5 646.5 655.5 664.5 673.5 682.5 691.5 700.5 709.5 718.5" y="26" data-g="2">Define Problem/Goal</text><text x="763.5 772.5 781.5 790.5 799.5 808.5 817.5 826.5 835.5 844.5 853.5 862.5" y="26" data-g="0">Stakeholders</text><text x="295.5 304.5 313.5 322.5 331.5 340.5 349.5 358.5 367.5 376.5 385.5 394.5 403.5 412.5 421.5 430.5 439.5 448.5 457.5 466.5 475.5" y="44" data-g="30">Identify the Decision</text><text x="556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5 637.5 646.5 655.5 664.5 673.5 682.5 691.5 700.5 709.5" y="62" data-g="2">Gather Information</text><text x="754.5 763.5 772.5 781.5 790.5 799.5 808.5 817.5 826.5 835.5 844.5 853.5" y="62" data-g="3">Data Sources</text><text x="961.5 970.5 979.5 988.5 997.5 1006.5 1015.5 1024.5 1033.5" y="80" data-g="6">Benefit 1</text><text x="853.5 862.5 871.5 880.5" y="98" data-g="10">Pros</text><text x="961.5 970.5 979.5 988.5 997.5 1006.5 1015.5 1024.5 1033.5 1042.5 1051.5" y="98" data-g="6">Feasibility</text><text x="961.5 970.5 979.5 988.5 997.5 1006.5" y="116" data-g="6">Impact</text><text x="961.5 970.5 979.5 988.5 997.5 1006.5 1015.5 1024.5 1033.5 1042.5" y="134" data-g="11">Drawback 1</text><text x="529.5 538.5 547.5 556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5 637.5 646.5 655.5 664.5 673.5 682.5 691.5 700.5 709.5 718.5 727.5 736.5 745.5 754.5 763.5 772.5" y="152" data-g="16">Option A: Explore Solution 1</text><text x="853.5 862.5 871.5 880.5" y="152" data-g="10">Cons</text><text x="961.5 970.5 979.5 988.5" y="152" data-g="11">Cost</text><text x="961.5 970.5 979.5 988.5" y="170" data-g="11">Time</text><text x="853.5 862.5 871.5 880.5 889.5 898.5 907.5 916.5 925.5 934.5 943.5 952.5 961.5 970.5 979.5" y="188" data-g="10">Likely Outcomes</text><text x="1024.5 1033.5 1042.5 1051.5 1060.5 1069.5 1078.5 1087.5" y="188" data-g="14">Result 1</text><text x="295.5 304.5 313.5 322.5 331.5 340.5 349.5 358.5 367.5 376.5 385.5 394.5 403.5 412.5 421.5 430.5 439.5 448.5" y="206" data-g="30">Weigh Your Options</text><text x="961.5 970.5 979.5 988.5 997.5 1006.5 1015.5 1024.5 1033.5" y="224" data-g="18">Benefit 2</text><text x="853.5 862.5 871.5 880.5" y="242" data-g="22">Pros</text><text x="961.5 970.5 979.5 988.5 997.5 1006.5 1015.5 1024.5 1033.5 1042.5 1051.5" y="242" data-g="18">Feasibility</text><text x="961.5 970.5 979.5 988.5 997.5 1006.5" y="260" data-g="18">Impact</text><text x="961.5 970.5 979.5 988.5 997.5 1006.5 1015.5 1024.5 1033.5 1042.5" y="278" data-g="23">Drawback 2</text><text x="529.5 538.5 547.5 556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5 637.5 646.5 655.5 664.5 673.5 682.5 691.5 700.5 709.5 718.5 727.5 736.5 745.5 754.5 763.5 772.5" y="296" data-g="16">Option B: Explore Solution 2</text><text x="853.5 862.5 871.5 880.5" y="296" data-g="22">Cons</text><text x="961.5 970.5 979.5 988.5" y="296" data-g="23">Cost</text><text x="961.5 970.5 979.5 988.5" y="314" data-g="23">Time</text><text x="853.5 862.5 871.5 880.5 889.5 898.5 907.5 916.5 925.5 934.5 943.5 952.5 961.5 970.5 979.5" y="332" data-g="22">Likely Outcomes</text><text x="1024.5 1033.5 1042.5 1051.5 1060.5 1069.5 1078.5 1087.5" y="332" data-g="26">Result 2</text><text x="538.5 547.5 556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5 637.5 646.5 655.5 664.5" y="350" data-g="31">Compare Options</text><text x="709.5 718.5 727.5 736.5 745.5 754.5 763.5 772.5 781.5 790.5 799.5 808.5 817.5 826.5 835.5" y="350" data-g="28">Decision Matrix</text><text x="16.5 25.5 34.5 43.5 52.5 61.5 70.5 79.5 88.5 97.5 106.5 115.5 124.5 133.5 142.5 151.5 160.5 169.5 178.5 187.5 196.5 205.5 214.5" y="368" class="a2s-root">Decision-Making Process</text><text x="295.5 304.5 313.5 322.5 331.5 340.5 349.5 358.5 367.5 376.5 385.5 394.5 403.5 412.5 421.5 430.5 439.5 448.5 457.5" y="368" data-g="30">Evaluate Trade-offs</text><text x="538.5 547.5 556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5 637.5" y="386" data-g="31">Assess Risks</text><text x="682.5 691.5 700.5 709.5 718.5 727.5 736.5 745.5 754.5 763.5 772.5 781.5 790.5 799.5 808.5 817.5 826.5 835.5 844.5 853.5 862.5" y="386" data-g="32">Mitigation Strategies</text><text x="520.5 529.5 538.5 547.5 556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5 637.5 646.5 655.5" y="404" data-g="36">Commit to Choice</text><text x="700.5 709.5 718.5 727.5 736.5 745.5 754.5 763.5 772.5 781.5 790.5 799.5 808.5 817.5 826.5" y="404" data-g="34">Build Consensus</text><text x="295.5 304.5 313.5 322.5 331.5 340.5 349.5 358.5 367.5 376.5 385.5 394.5 403.5 412.5 421.5 430.5 439.5" y="422" data-g="30">Make the Decision</text><text x="763.5 772.5 781.5 790.5 799.5 808.5 817.5 826.5" y="440" data-g="38">Timeline</text><text x="520.5 529.5 538.5 547.5 556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5 637.5 646.5 655.5 664.5 673.5 682.5" y="458" data-g="36">Develop Action Plan</text><text x="763.5 772.5 781.5 790.5 799.5 808.5 817.5 826.5 835.5" y="476" data-g="38">Resources</text><text x="502.5 511.5 520.5 529.5 538.5 547.5 556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5" y="494" data-g="42">Monitor Results</text><text x="673.5 682.5 691.5 700.5" y="494" data-g="40">KPIs</text><text x="295.5 304.5 313.5 322.5 331.5 340.5 349.5 358.5 367.5 376.5 385.5 394.5 403.5 412.5 421.5" y="512" data-g="30">Review &amp; Defend</text><text x="502.5 511.5 520.5 529.5 538.5 547.5 556.5 565.5 574.5 583.5 592.5 601.5 610.5 619.5 628.5 637.5" y="530" data-g="42">Justify Decision</text><text x="682.5 691.5 700.5 709.5 718.5 727.5 736.5 745.5 754.5 763.5 772.5 781.5 790.5 799.5 808.5 817.5 826.5 835.5" y="530" data-g="43">Communication Plan</text><script><![CDATA[(T => {
+  const me = document.currentScript, svg = me && me.closest ? me.closest('svg') : document.querySelector('svg');
+  if (!svg || svg.a2sFold) return;
+  svg.a2sFold = 1;
+  const NS = 'http://www.w3.org/2000/svg', [CW, CH, PAD] = T.c, P = T.p, R = T.r, n = P.length;
+  const kids = P.map(() => []);
+  P.forEach((p, i) => p >= 0 && kids[p].push(i));
+  const below = i => kids[i].reduce((s, k) => s + 1 + below(k), 0);
+  const folded = new Set(), calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hid = g => { for (let x = g; x >= 0; x = P[x]) if (folded.has(x)) return true; return false; };
+  const els = [...svg.querySelectorAll('rect:not(.bg),line,path,polygon,circle,text')].map(el => {
+    const o = {el, g: el.hasAttribute('data-g') ? +el.getAttribute('data-g') : -1};
+    for (const a of ['y', 'height', 'y1', 'y2', 'cy', 'd', 'points']) if (el.hasAttribute(a)) o[a] = el.getAttribute(a);
+    return o;
+  });
+  const vb = svg.viewBox.baseVal, H0 = vb.height, h0 = +svg.getAttribute('height'), pulses = svg.querySelectorAll('.pulse');
+  let f = R.map(() => 0), cum = [];
+  const Y = y => {
+    const r = Math.floor((y - PAD) / CH);
+    if (r < 0) return y;
+    if (r >= R.length) return y - cum[R.length];
+    return y - cum[r] - f[r] * (y - PAD - r * CH);
+  };
+  const num = s => s.split(/[\s,]+/).filter(Boolean).map(Number);
+  const pathY = d => d.replace(/([MLHVQ])([^MLHVQ]*)/g, (_, op, a) => {
+    const v = num(a);
+    return op + (op === 'H' ? v : v.map((x, i) => (op === 'V' || i % 2) ? +Y(x).toFixed(2) : x)).join(' ');
+  });
+  const ui = document.createElementNS(NS, 'g');
+  ui.setAttribute('class', 'a2s-ui');
+  svg.appendChild(ui);
+  const hot = new Set();
+  const layout = () => {
+    cum = [0];
+    for (let r = 0; r < R.length; r++) cum.push(cum[r] + f[r] * CH);
+    for (const o of els) {
+      const el = o.el;
+      if ('y' in o) {
+        const y = +o.y, y2 = Y(y);
+        el.setAttribute('y', +y2.toFixed(2));
+        if ('height' in o) el.setAttribute('height', +(Y(y + +o.height) - y2).toFixed(2));
+      }
+      if ('y1' in o) { el.setAttribute('y1', +Y(+o.y1).toFixed(2)); el.setAttribute('y2', +Y(+o.y2).toFixed(2)); }
+      if ('cy' in o) el.setAttribute('cy', +Y(+o.cy).toFixed(2));
+      if ('d' in o) el.setAttribute('d', pathY(o.d));
+      if ('points' in o) el.setAttribute('points', o.points.split(' ').map(q => {
+        const [x, y] = q.split(',').map(Number); return x + ',' + +Y(y).toFixed(2); }).join(' '));
+      el.classList.toggle('a2s-hid', o.g >= 0 && hid(o.g));
+      el.classList.toggle('a2s-hot', o.g >= 0 && hot.has(o.g));
+    }
+    const H = H0 - cum[R.length];
+    svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.width} ${+H.toFixed(2)}`);
+    if (h0) svg.setAttribute('height', +(h0 * H / H0).toFixed(2));
+    pulses.forEach(p => p.style.display = folded.size ? 'none' : '');
+    for (const b of buttons) {
+      const [x, y] = T.t[b.i], [hx, hy, hw, hh] = T.h[b.i], gone = P[b.i] >= 0 && hid(P[b.i]), shut = folded.has(b.i);
+      b.hit.setAttribute('y', +Y(hy).toFixed(2));
+      b.hit.setAttribute('height', +(Y(hy + hh) - Y(hy)).toFixed(2));
+      b.tg.setAttribute('transform', `translate(${x} ${+Y(y).toFixed(2)})`);
+      b.bar.setAttribute('d', shut ? 'M-2.4 0H2.4M0 -2.4V2.4' : 'M-2.4 0H2.4');
+      b.tg.classList.toggle('a2s-shut', shut);
+      for (const el of [b.hit, b.tg]) el.style.display = gone ? 'none' : '';
+      b.tg.setAttribute('aria-expanded', !shut);
+      b.tip.textContent = (shut ? 'Unfold ' : 'Fold ') + T.n[b.i] + (shut ? ` (${below(b.i)} hidden)` : '') +
+                          ' (Shift: the whole branch)';
+    }
+  };
+  const want = () => {
+    const st = R.map(gs => gs.length ? gs.every(g => g >= 0 && hid(g)) : null);
+    return st.map((s, i) => {
+      if (s !== null) return s ? 1 : 0;
+      let a = i - 1, b = i + 1;
+      while (a >= 0 && st[a] === null) a--;
+      while (b < st.length && st[b] === null) b++;
+      return (a >= 0 || b < st.length) && (a < 0 || st[a]) && (b >= st.length || st[b]) ? 1 : 0;
+    });
+  };
+  let anim = 0;
+  const go = instant => {
+    const to = want(), from = f.slice(), t0 = performance.now(), ms = instant || calm ? 0 : 220;
+    cancelAnimationFrame(anim);
+    const frame = now => {
+      const k = ms ? Math.min((now - t0) / ms, 1) : 1, e = 1 - Math.pow(1 - k, 3);
+      f = from.map((a, i) => a + (to[i] - a) * e);
+      layout();
+      if (k < 1) anim = requestAnimationFrame(frame);
+    };
+    frame(t0);
+  };
+  const branch = i => [i, ...kids[i].flatMap(branch)];
+  const toggle = (i, all) => {
+    const shut = !folded.has(i);
+    for (const k of all ? branch(i) : [i]) if (kids[k].length) shut ? folded.add(k) : folded.delete(k);
+    go();
+  };
+  const light = (i, on) => { hot.clear(); if (on) branch(i).forEach(k => hot.add(k)); layout(); };
+  const make = (tag, at, parent) => {
+    const el = document.createElementNS(NS, tag);
+    for (const k in at) el.setAttribute(k, at[k]);
+    parent.appendChild(el);
+    return el;
+  };
+  const buttons = [];
+  for (let i = 0; i < n; i++) {
+    if (!kids[i].length) continue;
+    const [hx, hy, hw, hh] = T.h[i];
+    const hit = make('rect', {x: hx, y: hy, width: hw, height: hh, class: 'a2s-hit'}, ui);
+    const tg = make('g', {class: 'a2s-tg', tabindex: 0, role: 'button'}, ui);
+    const tip = make('title', {}, tg);
+    make('circle', {r: 4.6}, tg);
+    const bar = make('path', {}, tg);
+    const b = {i, hit, tg, bar, tip};
+    buttons.push(b);
+    for (const el of [hit, tg]) {
+      el.addEventListener('click', e => { e.preventDefault(); toggle(i, e.shiftKey || e.altKey); });
+      el.addEventListener('mouseenter', () => light(i, true));
+      el.addEventListener('mouseleave', () => light(i, false));
+    }
+    tg.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(i, e.shiftKey); }
+    });
+    tg.addEventListener('focus', () => light(i, true));
+    tg.addEventListener('blur', () => light(i, false));
+  }
+  if (T.f >= 0) for (let i = 0; i < n; i++) if (kids[i].length && T.d[i] >= T.f) folded.add(i);
+  go(true);
+})({"c":[9,18,12],"p":[2,0,30,2,3,6,10,6,6,11,16,10,11,11,10,14,30,18,22,18,18,23,16,22,23,23,22,26,31,28,-1,30,31,32,36,34,30,38,36,38,42,40,30,42,43],"d":[2,3,1,2,3,4,3,4,4,4,2,3,4,4,3,4,1,4,3,4,4,4,2,3,4,4,3,4,2,3,0,1,2,3,2,3,1,3,2,3,2,3,1,2,3],"n":["Define Problem/Goal","Stakeholders","Identify the Decision","Gather Information","Data Sources","Benefit 1","Pros","Feasibility","Impact","Drawback 1","Option A: Explore Solution 1","Cons","Cost","Time","Likely Outcomes","Result 1","Weigh Your Options","Benefit 2","Pros","Feasibility","Impact","Drawback 2","Option B: Explore Solution 2","Cons","Cost","Time","Likely Outcomes","Result 2","Compare Options","Decision Matrix","Decision-Making Process","Evaluate Trade-offs","Assess Risks","Mitigation Strategies","Commit to Choice","Build Consensus","Make the Decision","Timeline","Develop Action Plan","Resources","Monitor Results","KPIs","Review & Defend","Justify Decision","Communication Plan"],"h":[[552,12,171,18],[759,12,108,18],[291,30,189,18],[552,48,162,18],[750,48,108,18],[957,66,81,18],[849,84,36,18],[957,84,99,18],[957,102,54,18],[957,120,90,18],[525,138,252,18],[849,138,36,18],[957,138,36,18],[957,156,36,18],[849,174,135,18],[1020,174,72,18],[291,192,162,18],[957,210,81,18],[849,228,36,18],[957,228,99,18],[957,246,54,18],[957,264,90,18],[525,282,252,18],[849,282,36,18],[957,282,36,18],[957,300,36,18],[849,318,135,18],[1020,318,72,18],[534,336,135,18],[705,336,135,18],[12,354,207,18],[291,354,171,18],[534,372,108,18],[678,372,189,18],[516,390,144,18],[696,390,135,18],[291,408,153,18],[759,426,72,18],[516,444,171,18],[759,462,81,18],[498,480,135,18],[669,480,36,18],[291,498,135,18],[498,516,144,18],[678,516,162,18]],"t":[[727.5,21.0],[759,12],[484.5,39.0],[718.5,57.0],[750,48],[957,66],[889.5,93.0],[957,84],[957,102],[957,120],[781.5,147.0],[889.5,147.0],[957,138],[957,156],[988.5,183.0],[1020,174],[457.5,201.0],[957,210],[889.5,237.0],[957,228],[957,246],[957,264],[781.5,291.0],[889.5,291.0],[957,282],[957,300],[988.5,327.0],[1020,318],[673.5,345.0],[705,336],[223.5,363.0],[466.5,363.0],[646.5,381.0],[678,372],[664.5,399.0],[696,390],[448.5,417.0],[759,426],[691.5,453.0],[759,462],[637.5,489.0],[669,480],[430.5,507.0],[646.5,525.0],[678,516]],"r":[[0,2],[2,30],[2,3],[6],[6,10],[6],[11],[10,11,16],[11],[10,14],[16,30],[18],[18,22],[18],[23],[16,22,23],[23],[22,26],[28,31],[-1,30,31],[31,32],[34,36],[30,36],[38],[36,38],[38],[40,42],[30,42],[42,43]],"f":-1});]]></script></svg>

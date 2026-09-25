@@ -29,6 +29,7 @@ RELEASES = [  # oldest first: (version, side, label lines, leader length)
     ("1.13", "L", ["ASCII UML heads up and down:", "/_\\   <>   *"], 12),
     ("1.14", "R", ["bigger repairs: boxes grow,", "split lines join up"], 16),
     ("1.15", "L", ["on npm: the same module", "in WebAssembly"], 14),
+    ("1.16", "R", ["trees and mind maps fold,", "SVGs half the size"], 14),
 ]
 NEXT = [("R", ["your idea next?", "open an issue"], 16)]
 S = 44                                    # the spine's column

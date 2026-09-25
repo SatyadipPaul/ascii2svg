@@ -1,0 +1,6 @@
+app@1.0.0
+├─┬ express@4.19.2
+│ ├── body-parser@1.20.2
+│ └─┬ send@0.18.0
+│   └── mime@1.6.0
+└── lodash@4.17.21
