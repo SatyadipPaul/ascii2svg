@@ -1087,8 +1087,12 @@ def test_skill_points_to_the_guide_and_ships_it():
     import zipfile
     skill = open(os.path.join(ROOT, "SKILL.md"), encoding="utf-8").read()
     assert "references/composing.md" in skill and "|--` file trees are left exactly" not in skill
-    subprocess.run([sys.executable, os.path.join(ROOT, "tools", "package_skill.py")], check=True, capture_output=True)
-    names = zipfile.ZipFile(os.path.join(ROOT, "dist", "ascii2svg.skill")).namelist()
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:                 # never into dist/: the release uploads dist/* to PyPI
+        out = os.path.join(tmp, "ascii2svg.skill")
+        subprocess.run([sys.executable, os.path.join(ROOT, "tools", "package_skill.py"), out], check=True, capture_output=True)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
     assert names == ["ascii2svg/SKILL.md", "ascii2svg/scripts/ascii2svg.py", "ascii2svg/references/composing.md"], names
 
 
