@@ -16,6 +16,10 @@ IMAGES = [
     ("docs/examples/how-it-works.txt", "docs/how-it-works.svg", LIVE),
     ("docs/examples/workflow.txt", "docs/workflow.svg", LIVE),
     ("tests/fixtures/complex_unicode.txt", "docs/architecture.svg", LIVE),
+    ("tests/fixtures/complex_unicode.txt", "docs/highlight.svg", LIVE + [   # one request's path; the rest dims
+        "--highlight", "Mobile / Web App,API Gateway,Router,Order Service (Spring Boot),Controller layer,"
+        "OrderController,Domain layer,PricingEngine,Infra layer,OrderRepository,Data & messaging,Oracle",
+        "--title", "POST /api/v1/orders, highlighted"]),
     ("tests/fixtures/complex_unicode.txt", "docs/architecture.html",
      ["--theme", "auto", "--color", "--animate", "scroll", "--title", "Order platform architecture"]),
     ("docs/examples/llm-output.txt", "docs/llm-before.svg", ["--theme", "auto", "--color"]),

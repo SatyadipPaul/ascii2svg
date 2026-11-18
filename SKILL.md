@@ -136,6 +136,14 @@ Most people won't name options. Choose from the destination; if it isn't clear, 
   in a browser, as a `-o NAME.html` page or in an `<object>`; as an `<img>` it is the full tree. If the
   report says `folds: 0`, no tree was found: draw branches with `├──` / `└──` (or `|--` / `` `-- ``) and
   no arrowheads, parent above or left of its children, and check `diagram.tree` with `--describe`.
+- "Show how a request flows", "focus on X": `--highlight "A,B,C"` with box names from `--check`
+  (titles, or first line of text). Named boxes, the lines between them and their labels stay bright;
+  the rest fades. Name each box on the path, including containers it passes through; a named
+  container lights only its own frame and words. If `tips` says a name matched nothing, fix the name.
+- "Make the boxes clickable", "link to the docs": `--boxes '{"API": {"link": "https://...",
+  "tooltip": "..."}}'` (http(s), mailto or relative links only). Say that links work in a browser,
+  page or `<object>`, not in an `<img>` such as a GitHub README.
+- Brand colours or a thicker line: `--tokens '{"accent": "#hex", "stroke": 1.8}'`; `--schema` lists them.
 - Tell the user what you picked in one line, e.g. "animated, colour, follows dark mode",
   so they can ask for something else.
 
@@ -146,7 +154,8 @@ Most people won't name options. Choose from the destination; if it isn't clear, 
 `--color / --no-color` · `--theme light|dark|auto` · `--animate [draw|flow|scroll]` · `--html` ·
 `--style glow|shadow|flat` · `--square` · `--png [PATH]` · `--strict` · `--unescape` ·
 `--repair` · `--all-blocks` · `--block N` · `--accent #HEX` · `--font NAME` · `--width PX` ·
-`--tab-size N` · `--title TEXT` · `--max-rows` / `--max-cols` (default 1000 × 400).
+`--tab-size N` · `--title TEXT` · `--max-rows` / `--max-cols` (default 1000 × 400) ·
+`--highlight NAMES` · `--boxes JSON|FILE` · `--tokens JSON|FILE` · `--names`.
 `--mcp` runs it as an MCP server (tools `render_diagram`, `check_diagram`) if the user wants it
 wired into their editor: `claude mcp add ascii2svg -- ascii2svg --mcp`.
 `--schema` prints all of this, and the report fields, as JSON.

@@ -241,6 +241,16 @@ A few things are good to know:
   `-o tree.html`, or embed it with `<object>`. As an `<img>` (GitHub, most wikis) it shows the whole
   tree, unfolded. Click a node or its ⊖ to fold, or Tab to it and press Enter; hold Shift to fold or
   open everything below it. `--fold 1` starts with only the first level open.
+- **Show one path through a big diagram** with `--highlight "Web,API,DB"`: those boxes, the
+  lines between them and the labels on those lines stay bright, and the rest fades. Use the box
+  names `--check` lists (a box's title, or its first line of text). A container you name lights up
+  its frame and its own words; name the boxes inside it too if you want them bright.
+- **Make a box clickable** or give it a tooltip: `--boxes '{"API": {"link": "https://...", "tooltip":
+  "REST, v2"}}'`. Like folding, this works in a browser, a page or an `<object>`, not as an `<img>`.
+  `"tint": "#ffe8cc"` gives one box its own colour.
+- **Match your brand** with `--tokens brand.json`, for example `{"accent": "#e8590c", "stroke": 1.8,
+  "font_size": 15, "dark": {"bg": "#000000"}}`. Colours at the top apply to light and dark; put them
+  under `"light"` or `"dark"` for one theme only. `ascii2svg --schema` lists every token.
 - **Pasting into a design tool** (Inkscape, Figma)? Add `--portable`: every character gets its own
   text element, which those tools place most reliably. Browsers don't need it.
 
@@ -370,9 +380,13 @@ console.log(report.summary);
 ```
 
 The options are the same as the command line's: `preset`, `color`, `theme`, `animate`, `style`,
-`square`, `html`, `repair`, `describe` and so on. The JavaScript version runs the same Python
+`square`, `html`, `repair`, `describe`, `highlight`, `boxes`, `tokens` and so on. The JavaScript version runs the same Python
 code inside WebAssembly, so its output is identical. The first call takes a second or two to
 start Python; after that, each diagram takes milliseconds.
+
+**One diagram, several looks** (Python): `d = ascii2svg.parse(text)` reads it once, then
+`d.svg(preset="readme")`, `d.svg(theme="dark")` and `d.describe()` reuse that reading. In a Jupyter
+notebook, `d` on its own line shows the drawing.
 
 **Every diagram in a markdown file:**
 
