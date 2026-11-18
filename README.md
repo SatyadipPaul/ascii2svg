@@ -44,6 +44,8 @@ so what you drew is exactly what you get. And the banner at the top of this page
 - **Fixes LLM diagrams** // `--repair` lines up the walls, connectors and arrowheads a chat model got one column wrong, without touching a word.
 - **Alive** // lines draw themselves, pulses flow along arrows, tall diagrams unfold as you scroll. Nothing moves for readers who ask for reduced motion.
 - **Trees that fold** // call trees, file trees, `npm ls` / `cargo tree` output and mind maps become an SVG whose branches fold when clicked, with a colour per branch. No JSON, no DSL: the text you already have.
+- **Show one path** // `--highlight "Web,API,DB"` keeps those boxes and the lines between them bright and dims the rest. Boxes can link somewhere and show a tooltip.
+- **Make it yours** // design tokens tune colours, line width, font size and pulse speed, per light and dark theme, all checked before they reach the SVG.
 - **Small** // one element per word, not per letter, and one path per line style: files are about half the size they were in 1.15.
 - **More than boxes** // flowcharts, sequence and state diagrams, C4, UML, ER crow's feet, Gantt and bar charts, diamonds, dashed lines.
 - **Agent-native** // one JSON report for every outcome, hints that say exactly what to move, an MCP server and a Claude skill.
@@ -259,6 +261,29 @@ The animation is careful about where it runs:
 
 </details>
 
+## Highlight a path, link the boxes, tune the look
+
+<p align="center"><a href="https://satyadippaul.github.io/ascii2svg/highlight.svg"><img src="https://satyadippaul.github.io/ascii2svg/highlight.svg" width="760" alt="The order-platform architecture diagram with one request's path highlighted: Mobile app, API Gateway, Router, OrderController, PricingEngine, OrderRepository and Oracle stay bright with the arrows between them, every other box and line fades"></a>
+<br><sub>The README's architecture diagram, with one request's path highlighted. Same text, one flag.</sub></p>
+
+```bash
+ascii2svg arch.txt -o post-order.svg --preset readme \
+  --highlight "Mobile / Web App,API Gateway,Router,OrderController,PricingEngine,OrderRepository,Oracle"
+ascii2svg arch.txt -o arch.svg --boxes '{"API Gateway": {"link": "https://wiki.example.com/gateway", "tooltip": "Kong, 3 pods"}}'
+ascii2svg arch.txt -o arch.svg --color --tokens brand.json     # {"accent": "#e8590c", "stroke": 1.8, "dark": {"bg": "#000000"}}
+```
+
+| Option | What it does |
+|---|---|
+| `--highlight NAMES` | Keeps the named boxes, the lines that run between them and the labels on those lines bright; everything else fades and pulses run only on the bright path. A named container lights its own frame and words, not every box inside it. |
+| `--boxes JSON\|FILE` | Per box: `link` (http(s), mailto or a relative path; `javascript:` and `data:` are refused), `tooltip`, `tint` (`#hex` or `{"light": .., "dark": ..}`). Links and tooltips work where the SVG is a page or an `<object>`, not inside `<img>`. |
+| `--tokens JSON\|FILE` | `ink`, `bg`, `accent`, `neutral`, `hover`, `glow`, `hues`, `branch`, `stroke`, `font_size`, `flow_speed`, `flow_rest`. Colours at the top apply to both themes, under `"light"` or `"dark"` to one. Every value is checked; `--schema` lists them all. |
+| `--names` | Puts `data-name="API"` on each box, so your own CSS or scripts can find it. |
+
+**Box names** are the names `--describe` reports: a box's title on its top edge, or else its first
+line of text. A name that matches nothing changes nothing, and the report's `tips` lists the
+names there are. Characters never move: the 1:1 self-check runs on every one of these.
+
 ## How it compares
 
 | | **ascii2svg** | Diagram DSLs (Mermaid, PlantUML) | A screenshot of the text |
@@ -352,6 +377,17 @@ page, report = ascii2svg.render(text, color=True, animate="scroll", html=True)  
 
 `render()` takes the same options as the CLI and returns the markup plus the same report as
 `--json`. It raises `ValueError` for empty or oversized input and for unknown options.
+
+To draw one diagram in several looks, read it once with `parse()`: each look after the first
+skips the reading (about half the work). In Jupyter a `Diagram` shows itself as its SVG.
+
+```python
+d = ascii2svg.parse(text, repair=True)          # clean-up, repair, lines and warnings, once
+d.warnings, d.repair, d.describe()              # the same as the report's
+light = d.svg(preset="readme")
+focus = d.svg(preset="readme", highlight=["API", "DB"])
+markup, report = d.render(theme="dark")         # exactly what ascii2svg.render(text, ...) returns
+```
 
 </details>
 
@@ -526,6 +562,7 @@ def render_ascii_diagram(diagram, output_path, preset="readme", describe=False):
 - [x] On npm: `@satyadip28/asciitosvg`, the same module in WebAssembly, byte-identical by test
 - [x] Trees and mind maps that fold (`--interactive`, `--preset explore`), a colour per branch, ASCII `tree` output, `--describe` trees
 - [x] SVGs about half the size: a `<text>` per word, one path per line style, a lighter glow
+- [x] About twice as fast, with byte-identical output; `parse()` once and draw in any look; highlight a path, link boxes, design tokens
 
 Everything planned has shipped. Have an idea, or a diagram that doesn't render the way you meant?
 [Open an issue](https://github.com/SatyadipPaul/ascii2svg/issues).

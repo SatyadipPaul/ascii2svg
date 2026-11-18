@@ -1,21 +1,28 @@
-# 1.17.0: paste any text tree, and it folds
+# 1.18.0: twice as fast, highlight a path, link the boxes, tune the look
 
-Paste what `tree`, `npm ls`, `cargo tree`, `pipdeptree`, `mvn dependency:tree`, `gradle dependencies`, `pstree` or Windows `tree` print, exactly as printed, and get a tree whose branches fold, with a colour per branch. No JSON, no special syntax.
+The same drawings, byte for byte, in about half the time. And three new ways to make a diagram say more: show one path through it, make its boxes clickable, and match your brand.
 
 ```bash
 pip install -U ascii2svg
-npm install @satyadip28/asciitosvg@1.17.0
+npm install @satyadip28/asciitosvg@1.18.0
 ```
 
 ## New
 
-- **Maven trees.** `mvn dependency:tree` output (`+- name`, `\- name`, with or without the `[INFO]` prefix) is now read as a tree. The one-dash branch counts only after `+` or `\`, so text such as `|- x` or `a +- b` stays text.
-- **Playground: paste any text tree.** A new picker group has 9 real outputs from 8 tools. Pasting a tree, or picking one of these examples, turns on Fold and Colour by itself, with a short note; typing, flowcharts and shared links are left as they are. [Try it](https://satyadippaul.github.io/ascii2svg/playground.html).
-- **Website:** the front page shows a mind map you can fold right on the page.
+- **Highlight a path.** `--highlight "Web,API,DB"` keeps those boxes, the lines between them and the labels on those lines bright, and fades the rest; pulses run only on the bright path. Names are the ones `--describe` reports. A named container lights only its own frame and words, so a path can run through containers. [See it](https://satyadippaul.github.io/ascii2svg/highlight.svg).
+- **Links, tooltips and tints per box.** `--boxes '{"API": {"link": "https://...", "tooltip": "REST, v2", "tint": "#ffe8cc"}}'`. Links are http(s), mailto or relative only; `javascript:` and `data:` are refused. They work where the SVG is a page or an `<object>`, not inside `<img>`.
+- **Design tokens.** `--tokens brand.json` sets `ink`, `bg`, `accent`, `neutral`, `hover`, `glow`, box `hues`, tree `branch` colours, `stroke`, `font_size`, `flow_speed` and `flow_rest`, for both themes or for light and dark separately. Every value is checked before it reaches the SVG; `--schema` lists them all.
+- **`--names`** puts `data-name` on each box, for your own CSS or scripts.
+- **`ascii2svg.parse(text)`** reads a diagram once; `d.svg(**look)`, `d.render(**look)` and `d.describe()` reuse that reading. Drawing 5 looks of each diagram is 2.8x faster than 1.17. A `Diagram` shows itself inline in Jupyter.
+- The MCP `render_diagram` tool and the npm package take `highlight`, `boxes`, `tokens` and `names` too.
 
-## Fixed
+## Faster
 
-- **No stub left behind when an `npm ls` branch folds.** In `├─┬ express`, the `┬` stays on express's row, but its stroke down to express's children now folds away with them.
-- **Playground on phones:** the example picker no longer makes the page scroll sideways.
+About 2x faster on everyday diagrams, and 4x faster for `--repair` with `--describe` on large ones (1,200 boxes: 4.0 s to 0.9 s). Nothing you see changed: 870 renders (every test diagram and example, in every preset and option set) are byte-identical to 1.17.0, and so is every image on the website.
 
-79 tests over 43 test diagrams, plus the npm package's parity tests (every render byte-identical to Python). CI covers Python 3.9–3.13 and Node 20/24 on Linux, Windows and macOS.
+- The parser visits only the cells that hold the characters each pass looks for, instead of scanning the whole grid a dozen times.
+- Finding which box sits inside which no longer compares every box with every other.
+- Repair keeps the grid's size up to date instead of recounting every cell on each step.
+- `tools/bench.py` runs the old and new engine in turns and compares every output; CI fails on a slow-down or any change in output.
+
+85 tests over 43 test diagrams, plus the npm package's parity tests (every render byte-identical to Python, now including the new options). CI covers Python 3.9–3.13 and Node 20/24 on Linux, Windows and macOS.
