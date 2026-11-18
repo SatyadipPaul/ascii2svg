@@ -18,11 +18,11 @@ npm install @satyadip28/asciitosvg@1.18.0
 
 ## Faster
 
-About 2x faster on everyday diagrams, and 4x faster for `--repair` with `--describe` on large ones (1,200 boxes: 4.0 s to 0.9 s). Nothing you see changed: 870 renders (every test diagram and example, in every preset and option set) are byte-identical to 1.17.0, and so is every image on the website.
+About 2x faster on everyday diagrams, and 4x faster for `--repair` with `--describe` on large ones (1,200 boxes: 4.0 s to 0.9 s). Nothing you see changed: 1,080 renders (every test diagram and example, in every preset and option set) are byte-identical to 1.17.0 apart from the version stamp, and so is every image on the website.
 
 - The parser visits only the cells that hold the characters each pass looks for, instead of scanning the whole grid a dozen times.
 - Finding which box sits inside which no longer compares every box with every other.
 - Repair keeps the grid's size up to date instead of recounting every cell on each step.
 - `tools/bench.py` runs the old and new engine in turns and compares every output; CI fails on a slow-down or any change in output.
 
-85 tests over 43 test diagrams, plus the npm package's parity tests (every render byte-identical to Python, now including the new options). CI covers Python 3.9–3.13 and Node 20/24 on Linux, Windows and macOS.
+87 tests over 43 test diagrams, plus the npm package's parity tests (every render byte-identical to Python, now including the new options). CI covers Python 3.9–3.13 and Node 20/24 on Linux, Windows and macOS.
