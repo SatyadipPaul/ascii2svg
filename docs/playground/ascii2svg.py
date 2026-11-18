@@ -12,6 +12,8 @@ No required dependencies (uses `wcwidth` for character widths if installed).
 from __future__ import annotations
 
 import argparse
+import bisect
+import functools
 import html
 import json
 import re
@@ -29,6 +31,7 @@ except ImportError:  # zero-dependency fallback
     WIDTH_SOURCE = "builtin"
 
 
+@functools.lru_cache(maxsize=4096)
 def _joins(ch: str) -> bool:
     """Code points that belong to the previous character on screen."""
     return (unicodedata.category(ch) in ("Mn", "Me") or ch in "\u200d\ufe0e\ufe0f"
@@ -36,6 +39,8 @@ def _joins(ch: str) -> bool:
 
 
 def clusters(line: str) -> list[str]:
+    if line.isascii() or not any(map(_joins, set(line))):  # nothing joins: one cluster per code point
+        return list(line)
     out: list[str] = []
     for ch in line:
         if out and (_joins(ch) or out[-1].endswith("\u200d")):
@@ -45,7 +50,10 @@ def clusters(line: str) -> list[str]:
     return out
 
 
+@functools.lru_cache(maxsize=8192)
 def width_of(cluster: str) -> int:
+    if cluster.isascii():
+        return 1
     if _wcswidth is not None:
         w = _wcswidth(cluster)
     else:
@@ -58,6 +66,7 @@ def width_of(cluster: str) -> int:
 _SPACES = dict.fromkeys(map(ord, "\u00a0\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
                                  "\u2007\u2008\u2009\u200a\u202f\u205f"), " ")
 _DROP = dict.fromkeys(map(ord, "\u200b\u2060\ufeff"), None)   # ZWJ/ZWNJ are kept on purpose
+_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f]")              # exactly Unicode category Cc
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 _FENCE = re.compile(r"^\s*(```+|~~~+)")
 
@@ -104,7 +113,7 @@ def prepare_ex(text: str, tab_size: int = 4):
             line = new
             notes.append({"change": "non-breaking or unusual spaces -> space", "line": n})
         new = line.translate(_DROP)
-        new = "".join(ch for ch in new if unicodedata.category(ch) != "Cc")
+        new = _CONTROL.sub("", new)
         if new != line:
             line = new
             notes.append({"change": "removed invisible or control characters", "line": n})
@@ -149,8 +158,13 @@ def build_grid(lines: list[str]):
     cells: dict = {}
     ncols = 0
     for r, line in enumerate(lines):
+        parts = clusters(line)
+        if all(width_of(x) == 1 for x in set(parts)):    # the usual row: one cell per cluster
+            cells.update({(r, c): (x, 1) for c, x in enumerate(parts)})
+            ncols = max(ncols, len(parts))
+            continue
         c = 0
-        for cl in clusters(line):
+        for cl in parts:
             w = width_of(cl)
             cells[(r, c)] = (cl, w)
             if w == 2:
@@ -167,6 +181,7 @@ ARMS = {k: frozenset(v) for k, v in {
     "═": "LR", "║": "UD", "╔": "RD", "╗": "LD", "╚": "UR", "╝": "UL", "╪": "UDLR",
     "╌": "LR", "╎": "UD", "┄": "LR", "┆": "UD", "┈": "LR", "┊": "UD",
     "╴": "L", "╶": "R", "╵": "U", "╷": "D"}.items()}
+ARM_ORDER = {k: tuple(sorted(v)) for k, v in ARMS.items()}   # sorted(ARMS[t]), worked out once
 # half lines: the base of a two-cell ASCII UML head ('<|', '<>'), running on toward its connector
 HALF_AWAY = {"R": "╶", "L": "╴", "D": "╷", "U": "╵"}         # the half line on side X of a head points away
 HALF_FAMILY = {"╶": "─", "╴": "─", "╵": "│", "╷": "│"}         # read back from the SVG, a half line is a line
@@ -241,11 +256,44 @@ def _alnum(t: str) -> bool:
     return t.isalnum() or t == "_"
 
 
+def _runs(cells):
+    """Sorted (a, b) cells -> maximal runs (a, first b, last b) of consecutive b."""
+    out = []
+    for a, b in cells:
+        if out and out[-1][0] == a and out[-1][2] == b - 1:
+            out[-1][2] = b
+        else:
+            out.append([a, b, b])
+    return [tuple(x) for x in out]
+
+
+def _char_index(chars):
+    """at(chars_wanted) -> the cells holding any of them, in reading order (row, then column).
+
+    The parser makes a dozen passes over the grid, and each one only cares about a few characters;
+    visiting just those cells, in the same order, gives the same result in a fraction of the time."""
+    by: dict = {}
+    for k in sorted(chars):
+        by.setdefault(chars[k], []).append(k)
+    memo: dict = {}
+
+    def at(wanted):
+        key = frozenset(wanted)
+        if key not in memo:
+            lists = [by[t] for t in set(wanted) if t in by]
+            memo[key] = lists[0] if len(lists) == 1 else sorted(k for part in lists for k in part)
+        return memo[key]
+    return at
+
+
 def interpret(cells, nrows, ncols):
     """Decide which ASCII characters are lines. Unsure -> keep as text (fail-safe).
 
     Returns ({(r, c): drawn_unicode_char}, stats)."""
-    ch = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    chars = {k: t for k, (t, _) in cells.items()}
+    _get = chars.get
+    ch = lambda r, c: _get((r, c), " ")
+    at = _char_index(chars)                                 # each pass visits only the cells it can match
     struct: set = set()
 
     def wall_at(r, c):
@@ -286,8 +334,8 @@ def interpret(cells, nrows, ncols):
 
     # 1) closed boxes: '+' corners, '-' edges (a title may sit on the top edge), '|' walls;
     #    rounded corners are a dot on top and a quote or backtick below
-    for (r, c) in sorted(cells):
-        if ch(r, c) not in {"+"} | ROUND_TOP or ch(r, c + 1) != "-":
+    for (r, c) in at({"+"} | ROUND_TOP):
+        if ch(r, c + 1) != "-":
             continue
         for c2 in range(c + 2, ncols):
             t2 = ch(r, c2)
@@ -370,7 +418,7 @@ def interpret(cells, nrows, ncols):
 
     # 1b) ER connectors between walls that are drawn (or already Unicode lines)
     er = {}
-    for (r, c) in sorted(cells):
+    for (r, c) in sorted(set(at(ARMS)) | (struct & chars.keys())):
         if ((r, c) in struct or ch(r, c) in ARMS) and wall_at(r, c):
             found = er_run(r, c, 1)
             if found:
@@ -394,7 +442,7 @@ def interpret(cells, nrows, ncols):
         return vwall(r, c + d) or (ch(r, c + d) == " " and vwall(r, c + 2 * d))
 
     uml = {}
-    for (r, c) in sorted(cells):
+    for (r, c) in sorted(set(at("<*")) | {(r, c - 1) for r, c in at(">") if (r, c - 1) in chars}):
         t, t2 = ch(r, c), ch(r, c + 1)
         if (r, c) in struct or (r, c + 1) in struct:
             continue
@@ -417,7 +465,7 @@ def interpret(cells, nrows, ncols):
         return (t in "|:" and (r, c) not in struct) or (t in ARMS and {"U", "D"} <= ARMS[t])
 
     uml_arm = {}                                            # a vertical head's cell -> the side its line is on
-    for (r, c) in sorted(cells):
+    for (r, c) in at("*<_"):
         t = ch(r, c)
         if (r, c) in struct or (r, c) in uml or _alnum(ch(r, c - 1)) or _alnum(ch(r, c + 2 if t == "<" else c + 1)):
             continue
@@ -437,27 +485,8 @@ def interpret(cells, nrows, ncols):
     struct.update(uml)
 
     # 2) connectors grow outward from structure until nothing changes
-    hruns, vruns = [], []
-    for r in range(nrows):
-        c = 0
-        while c < ncols:
-            if ch(r, c) == "-" and (r, c) not in struct:
-                a = c
-                while ch(r, c) == "-" and (r, c) not in struct:
-                    c += 1
-                hruns.append((r, a, c - 1))
-            else:
-                c += 1
-    for c in range(ncols):
-        r = 0
-        while r < nrows:
-            if ch(r, c) == "|" and (r, c) not in struct:
-                a = r
-                while ch(r, c) == "|" and (r, c) not in struct:
-                    r += 1
-                vruns.append((c, a, r - 1))
-            else:
-                r += 1
+    hruns = _runs([k for k in at("-") if k not in struct])
+    vruns = _runs(sorted((c, r) for r, c in at("|") if (r, c) not in struct))
     def bend(r, c):
         """A rounded bend on a connector: a dot with '|' (or a 'v' head) below, a quote or backtick with
         '|' (or a '^' head) above, and a '-' on exactly one side (the other side blank, an arrowhead
@@ -475,15 +504,19 @@ def interpret(cells, nrows, ncols):
             return None
         return {v, sides[0]}
 
-    bends = {k: bend(*k) for k in sorted(cells)}
+    bends = {k: bend(*k) for k in at(ROUNDC)}
     bends = {k: a for k, a in bends.items() if a}
 
     # dashed and dotted: '-.-.-' / '.....' (any dot makes the run dotted), '- - -' (spaced dashes),
     # and ':' down a column; they join like '-' and '|' runs do
     dash = {}
     druns, sruns, cruns = [], [], []
-    for r in range(nrows):
-        line = "".join(ch(r, c) or " " for c in range(ncols))
+    text_rows: dict = {}                                    # row -> its cells, for a regex over the whole row
+    for (r, c), t in chars.items():
+        if c < ncols:
+            text_rows.setdefault(r, [" "] * ncols)[c] = t or " "
+    for r in sorted({r for r, _ in at("-.")}):
+        line = "".join(text_rows[r])
         for m in re.finditer(r"[-.]{3,}", line):
             a, b = m.start(), m.end() - 1
             a += (r, a) in bends
@@ -494,20 +527,11 @@ def interpret(cells, nrows, ncols):
         for m in re.finditer(r"-(?: -){2,}", line):
             if all((r, c) not in struct for c in range(m.start(), m.end())):
                 sruns.append((r, m.start(), m.end() - 1))
-    for c in range(ncols):
-        r = 0
-        while r < nrows:
-            if ch(r, c) == ":" and (r, c) not in struct:
-                a = r
-                while ch(r, c) == ":" and (r, c) not in struct:
-                    r += 1
-                if r - a >= 2:
-                    cruns.append((c, a, r - 1))
-            else:
-                r += 1
-    pluses = [k for k, (t, _) in sorted(cells.items()) if t == "+" and k not in struct]
+    cruns = [run for run in _runs(sorted((c, r) for r, c in at(":") if (r, c) not in struct))
+             if run[2] - run[1] >= 1]                       # two or more in a column
+    pluses = [k for k in at("+") if k not in struct]
 
-    heads = [k for k, (t, _) in sorted(cells.items()) if t in ASCII_HEADS and k not in struct]
+    heads = [k for k in at(ASCII_HEADS) if k not in struct]
 
     def head_ok(r, c):
         t = ch(r, c)
@@ -622,7 +646,7 @@ def interpret(cells, nrows, ncols):
         return (r, x) if alnum and OPP[d] in arms_of(r, x) else None
 
     floating, seen = set(), set()
-    for start in sorted(cells):
+    for start in at("-|"):
         if start in seen or not arms_of(*start) or ch(*start) not in "-|":
             continue
         group, todo, ok = set(), [start], True
@@ -793,7 +817,7 @@ def interpret(cells, nrows, ncols):
     def slash(r, c):
         return ch(r, c) in "/\\" and not _alnum(ch(r, c - 1)) and not _alnum(ch(r, c + 1))
 
-    for (r, c) in sorted(cells):
+    for (r, c) in at(("/", "\\", "")):                     # '' (a wide character's 2nd cell) is "in" any str
         t = ch(r, c)
         if slash(r, c):
             dc = -1 if t == "/" else 1                      # where the line goes one row down
@@ -813,7 +837,7 @@ def interpret(cells, nrows, ncols):
         enough = k >= 3 or (k == 2 and ch(r, c) in "+\\")
         return k - 1 if enough and ch(r, c + k) == " " and name not in (" ", "") and name not in "|+`\\-" else 0
 
-    for (r0, c) in sorted(cells):
+    for (r0, c) in at(("|", "+", "`", "\\", "")):
         above, left = ch(r0 - 1, c), ch(r0 - 1, c - 1)
         if ((r0, c) in drawn or ch(r0, c) not in "|+`\\" or not branch(r0, c) or above in (" ", "")
                 or above in "|+`\\-" or (c > 0 and left not in (" ", "|", "-"))):
@@ -837,7 +861,7 @@ def interpret(cells, nrows, ncols):
             drawn[(r, c)] = "│" if not n else "└" if t in "`\\" else "├"
             for x in range(c + 1, c + 1 + n):
                 drawn[(r, x)] = "─"
-    kept = sum(1 for k, (t, _) in cells.items() if t in "|+" and k not in drawn)
+    kept = sum(1 for k in at(("|", "+", "")) if k not in drawn)
     kept += sum(b - a + 1 for r, a, b in hruns if b > a and (r, a) not in drawn)
     return drawn, {"ascii_drawn_as_lines": len(drawn), "ascii_line_like_kept_as_text": kept}
 
@@ -873,41 +897,61 @@ THEMES["light"]["branch"], THEMES["dark"]["branch"] = BRANCH_HUES["light"], BRAN
 FLOW_SPEED, FLOW_REST = 150.0, 0.9          # pulse speed along a connector (px/s), pause between pulses (s)
 
 
-def find_boxes(get, nrows, ncols):
+def find_boxes(get, nrows, ncols, chars=None):
+    """Closed Unicode boxes (r1, c1, r2, c2), outermost first. `chars` ({cell: char}, agreeing with
+    `get`) lets the search start from the top-left corners only, instead of every cell."""
     boxes = []
-    for r in range(nrows):
-        for c in range(ncols):
-            t = get(r, c)
-            if t not in TL:
-                continue
-            side = set("║╟╢╪") if t == "╔" else set("│├┤┼╎┆┊") | set(FEET)
-            c2 = None
-            for x in range(c + 1, ncols):
-                tx = get(r, x)
-                if tx in TR:
-                    c2 = x
-                    break
-                if tx in TL or tx in "│║":
-                    break
-            if c2 is None:
-                continue
-            r2 = r + 1
-            while get(r2, c) in side and get(r2, c2) in side:
-                r2 += 1
-            if r2 == r + 1 or get(r2, c) not in BL or get(r2, c2) not in BR:
-                continue
-            if all(get(r2, x) in BOTTOM_OK for x in range(c + 1, c2)):
-                boxes.append((r, c, r2, c2))
-    inside = lambda a, b: a != b and b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
-    return sorted(boxes, key=lambda b: (sum(inside(b, o) for o in boxes), b))
+    tops = (sorted(k for k, t in chars.items() if t in TL) if chars is not None
+            else [(r, c) for r in range(nrows) for c in range(ncols) if get(r, c) in TL])
+    for r, c in tops:
+        t = get(r, c)
+        side = set("║╟╢╪") if t == "╔" else set("│├┤┼╎┆┊") | set(FEET)
+        c2 = None
+        for x in range(c + 1, ncols):
+            tx = get(r, x)
+            if tx in TR:
+                c2 = x
+                break
+            if tx in TL or tx in "│║":
+                break
+        if c2 is None:
+            continue
+        r2 = r + 1
+        while get(r2, c) in side and get(r2, c2) in side:
+            r2 += 1
+        if r2 == r + 1 or get(r2, c) not in BL or get(r2, c2) not in BR:
+            continue
+        if all(get(r2, x) in BOTTOM_OK for x in range(c + 1, c2)):
+            boxes.append((r, c, r2, c2))
+    nest = _containers(boxes)
+    return sorted(boxes, key=lambda b: (len(nest[b]), b))
+
+
+def _containers(boxes):
+    """Box -> the boxes that contain it, in the order given. A container spans the box's top row,
+    so only the boxes on that row are compared (not every box with every other)."""
+    on_row: dict = {}
+    for i, (r1, _, r2, _) in enumerate(boxes):
+        for r in range(r1, r2 + 1):
+            on_row.setdefault(r, []).append(i)
+    out = {}
+    for b in boxes:
+        out[b] = [boxes[i] for i in on_row.get(b[0], ()) if boxes[i] != b and boxes[i][0] <= b[0]
+                  and boxes[i][1] <= b[1] and b[2] <= boxes[i][2] and b[3] <= boxes[i][3]]
+    return out
+
+
+def _charmap(cells):
+    """{cell: (text, width)} -> {cell: text}: one dict lookup per character test."""
+    return {k: t for k, (t, _) in cells.items()}
 
 
 def box_tints(boxes):
     """Tint class per box. Each top-level group (a box directly inside the outermost
     container, or a lone box) gets its own hue; containers get the light shade, leaves the stronger one."""
-    inside = lambda a, b: a != b and b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
-    parents = {b: [o for o in boxes if inside(b, o)] for b in boxes}
-    has_kids = {b: any(inside(o, b) for o in boxes) for b in boxes}
+    parents = _containers(boxes)
+    containers = {p for ps in parents.values() for p in ps}
+    has_kids = {b: b in containers for b in boxes}
     group = {}
     for b in boxes:
         depth = len(parents[b])
@@ -1030,11 +1074,14 @@ def tree_model(cells, nrows, ncols):
     "arm_gate": {(cell, side): id}, "rows": [...]}; "gate" says which node, when folded, hides a cell (its
     parent's id), "arm_gate" hides one arm of a cell (the ┬ in '├─┬ label' keeps its row). Empty
     when nothing tree-like is drawn (fewer than two branches, or no node with two children)."""
-    get = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    chars = _charmap(cells)
+    _get = chars.get
+    get = lambda r, c: _get((r, c), " ")
     is_text = lambda t: (t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG
                          and t not in BLOCKS and t not in MARKS)
     empty = {"nodes": [], "gate": {}, "arm_gate": {}, "rows": [], "hue": {}, "arm_hue": {}, "pure": False}
-    boxes = find_boxes(get, nrows, ncols)
+    boxes = find_boxes(get, nrows, ncols, chars)
+    arm_cells = sorted(k for k, t in chars.items() if t in ARMS)       # the only cells a branch can be
     area = lambda b: (b[2] - b[0]) * (b[3] - b[1])
     border = {}
     for b in sorted(boxes, key=area, reverse=True):                 # the smallest box owns a shared edge
@@ -1096,14 +1143,14 @@ def tree_model(cells, nrows, ncols):
         return ("port", i, "in" if a in "RD" else "out", n)
 
     cut = set()                                       # '├─┬ label': the trunk under the ┬ belongs to the label
-    for k in sorted(cells):
+    for k in arm_cells:
         t = get(*k)
         if line(k) and ARMS[t] == frozenset("LRD"):
             hit = reach(k, "R")
             if hit and hit[0] == "port" and nodes[hit[1]]["kind"] == "text":
                 cut.add(k)
     seen, groups = set(), []
-    for k0 in sorted(cells):
+    for k0 in arm_cells:
         if k0 in seen or not line(k0):
             continue
         todo, group, ports, flow = [k0], [], [], False
@@ -1111,7 +1158,7 @@ def tree_model(cells, nrows, ncols):
         while todo:
             k = todo.pop()
             group.append(k)
-            for a in sorted(ARMS[get(*k)]):
+            for a in ARM_ORDER[get(*k)]:
                 if k in cut and a == "D":
                     continue
                 hit = reach(k, a)
@@ -1215,7 +1262,7 @@ def tree_model(cells, nrows, ncols):
             hue.update(dict.fromkeys(group, branch[nid[p]]))
             continue
         cells_in = set(group)                           # from the root: a branch's own stretch takes its colour
-        near = lambda k: [step(k, a) for a in sorted(ARMS[get(*k)]) if step(k, a) in cells_in
+        near = lambda k: [step(k, a) for a in ARM_ORDER[get(*k)] if step(k, a) in cells_in
                           and OPP[a] in ARMS[get(*step(k, a))] and not (k in cut and a == "D")]
         start = [k for k in group for a in ARMS[get(*k)]
                  if (reach(k, a) or ("",))[0] == "port" and reach(k, a)[1] == p]
@@ -1253,15 +1300,12 @@ def tree_model(cells, nrows, ncols):
         hit = reach(k, "R")
         if hit and hit[1] in nid and kids.get(hit[1]):
             arm_gate[(k, "D")] = nid[hit[1]]
-    rows = []
-    for r in range(nrows):
-        hard = set()
-        for c in range(ncols):
-            t = get(r, c)
-            if t in (" ", "") or (t in PASS_THROUGH and (r, c) not in border):
-                continue
-            hard.add(gate.get((r, c), -1))
-        rows.append(sorted(hard))
+    hard = [set() for _ in range(nrows)]
+    for (r, c), t in chars.items():
+        if t in (" ", "") or (t in PASS_THROUGH and (r, c) not in border):
+            continue
+        hard[r].add(gate.get((r, c), -1))
+    rows = [sorted(h) for h in hard]
     return {"nodes": out, "gate": gate, "arm_gate": arm_gate, "rows": rows, "hue": hue, "arm_hue": arm_hue,
             "pure": pure}
 
@@ -1397,7 +1441,9 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
 
     Animation only ever starts from an earlier state and ends on the static drawing, so a
     renderer that ignores CSS/SMIL animation shows exactly what the self-check verified."""
-    get = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    chars = _charmap(cells)
+    _get = chars.get
+    get = lambda r, c: _get((r, c), " ")
     segs = {st: {"h": {}, "v": {}} for st in ("s", "d", "2", "3", "4")}      # single, double, dashed x2/x3/x4
     curves, heads, texts, blocks, marks = [], [], [], [], []
     forest = tree_model(cells, nrows, ncols) if (interactive or color) else None
@@ -1463,7 +1509,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         return None
     diag = {"/": set(), "\\": set()}
     parts = {(r, c + s) for (r, c), (t, _) in cells.items() if t == "△" and tri3(r, c) for s in (-1, 1)}
-    parts |= {(r, c + DIRS[twin(r, c)][1]) for (r, c), (t, _) in cells.items() if twin(r, c)}
+    parts |= {(r, c + DIRS[twin(r, c)][1]) for (r, c), (t, _) in cells.items() if t in ("◇", "◆") and twin(r, c)}
     round_ok = not square and not any(t in ROUNDED for t, _ in cells.values())
     anim = animate != "none"
     timed = animate in ("draw", "flow")              # "scroll" leaves the timing to the host page
@@ -1487,10 +1533,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     def add(st, d, key, a, b):
         segs[st][d].setdefault((here[0], key), []).append((a, b))
 
-    for (r, c) in sorted(cells):
+    for (r, c) in sorted(k for k, (t, w) in cells.items() if w and t != " "):
         t, w = cells[(r, c)]
-        if w == 0 or t == " ":
-            continue
         here[0] = group_of(r, c)
         x0, y0 = PAD + c * CW, PAD + r * CH
         cx, cy = x0 + CW / 2, y0 + CH / 2
@@ -1513,7 +1557,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                 elif not back(r, c, "L") and not back(r, c, "R") and link(r, c, "U") and link(r, c, "D"):
                     tick = "LR"
             own = here[0]
-            for a in sorted(arms):
+            for a in ARM_ORDER[t]:
                 st = st_h if a in "LR" else st_v
                 nb = (r + DIRS[a][0], c + DIRS[a][1])
                 if own[1] == -1 and ((r, c), a) in arm_hues:        # a junction's arm takes the branch it leads to
@@ -1594,10 +1638,15 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
 
     # boxes: glow / shadow, then fill, then plates behind titles on the top edge
     under = []
-    boxes = find_boxes(get, nrows, ncols)
+    boxes = find_boxes(get, nrows, ncols, chars)
     tints = box_tints(boxes) if color else {}
     is_text = lambda t: (t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG
                          and t not in BLOCKS and t not in MARKS)
+    text_on: dict = {}                                     # row -> [(col, width)] of text cells: what a glow must clear
+    if style == "glow" and boxes:
+        for (rr, cc), (t, tw) in sorted(cells.items()):
+            if is_text(t):
+                text_on.setdefault(rr, []).append((cc, tw))
     for b in boxes:
         r1, c1, r2, c2 = b
         x1, y1 = PAD + c1 * CW + CW / 2, PAD + r1 * CH + CH / 2
@@ -1608,9 +1657,11 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         if style == "glow":
             reach = GLOW_R                                  # shrink so glow never sits behind a label
             for rr in range(r1 - 1, r2 + 2):
-                for cc in range(c1 - 2, c2 + 2):
-                    t, tw = cells.get((rr, cc), (" ", 1))
-                    if not is_text(t) or (rr == r1 and c1 < cc < c2):
+                row = text_on.get(rr, ())
+                for cc, tw in row[bisect.bisect_left(row, (c1 - 2, -1)):]:
+                    if cc >= c2 + 2:
+                        break
+                    if rr == r1 and c1 < cc < c2:
                         continue
                     tx0, ty0 = PAD + cc * CW, PAD + rr * CH
                     tx1, ty1 = tx0 + tw * CW, ty0 + CH
@@ -1711,6 +1762,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
 
     def mark_shapes():
         """UML triangles and diamonds, ER rings and crow's feet. Joining strokes are `ext`."""
+        if not marks:
+            return []
         o, border = [], box_border(boxes)
         reach = lambda r, c, a: (not back(r, c, a) and line_like(r + DIRS[a][0], c + DIRS[a][1])) or \
             (r + DIRS[a][0], c + DIRS[a][1]) in border     # a diamond touches the box it sits on
@@ -2267,7 +2320,7 @@ def self_check(svg, drawn_cells, original_cells):
     got = read_back(svg)
     corner_family = {"┌": "╭", "┐": "╮", "└": "╰", "┘": "╯"}
     want = {k: t for k, (t, w) in drawn_cells.items() if w and t != " "}
-    for k in sorted(set(got) | set(want)):
+    for k in sorted(k for k in got.keys() | want.keys() if got.get(k, " ") != want.get(k, " ")):
         g, w = got.get(k, " "), want.get(k, " ")
         if g != w and not (w in ROUNDED and corner_family.get(g) == w) and HALF_FAMILY.get(w) != g:
             problems.append({"row": k[0] + 1, "col": k[1] + 1, "expected": w, "svg_has": g})
@@ -2321,23 +2374,23 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
     partner is one cell off to the side, one that stops just short of a line or box, and a line
     that runs into a corner or junction without an arm toward it. One warning per character.
     Each has a stable `code`, 1-based `row`/`col`, the source `line`, and a concrete `hint`."""
-    get = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    chars = _charmap(cells)
+    _get = chars.get
+    get = lambda r, c: _get((r, c), " ")
     at = lambda r, c: f"line {r + origin[0] + 1} col {c + origin[1] + 1}"      # where it is in the input
     rows = {}
     for (r, c), (t, _) in sorted(cells.items()):
         rows.setdefault(r, []).append(t)
     line = lambda r: "".join(rows.get(r, ())).rstrip()                        # only built for real warnings
     out, by_cell = [], {}
-    for (r, c) in sorted(cells):
+    for (r, c) in sorted(k for k, t in chars.items() if t in ARMS):
         t = get(r, c)
-        if t not in ARMS:
-            continue
         joined = lambda s: get(r + DIRS[s][0], c + DIRS[s][1]) in ARMS and OPP[s] in ARMS[get(r + DIRS[s][0], c + DIRS[s][1])]
         if t in DASHED and any(get(r + 2 * DIRS[a][0], c + 2 * DIRS[a][1]) in DASHED for a in ARMS[t]):
             continue                                      # '- - -': the gaps are the dashes' spacing
         if t == "─" and {get(r, c - 1), get(r, c + 1)} & {"┼"} and not (joined("L") and joined("R")):
             continue                                      # one side of a '-+-' tick across a line
-        for a in sorted(ARMS[t]):
+        for a in ARM_ORDER[t]:
             if t == "┼" and not joined(a) and not joined(OPP[a]):
                 continue                                  # a tick across a line (ER '||'), not two stubs
             dr, dc = DIRS[a]
@@ -2370,7 +2423,7 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
             if len(out) >= limit:
                 return out
     border = None
-    for (r, c) in sorted(cells):                          # an arrowhead that stops short of its box
+    for (r, c) in sorted(k for k, t in chars.items() if t in HEADS):   # an arrowhead that stops short of its box
         t = get(r, c)
         if t not in HEADS or (r, c) in by_cell or len(out) >= limit:
             continue
@@ -2385,7 +2438,7 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
         if not 3 <= k <= 10:
             continue                                      # touching, or one space off: fine
         if border is None:
-            border = box_border(find_boxes(get, nrows, ncols))
+            border = box_border(find_boxes(get, nrows, ncols, chars))
         if (r + k * dr, c + k * dc) in border:
             out.append({"row": r + 1, "col": c + 1, "char": t, "line": line(r), "code": "short_arrow",
                         "issue": f"the arrow stops {k - 1} cells short of the box it points at",
@@ -2397,12 +2450,14 @@ def connector_warnings(cells, nrows, ncols, limit=50, origin=(0, 0)):
 def box_warnings(cells, drawn, origin=(0, 0)):
     """ASCII boxes that start (+---+ with a wall below) but were never drawn because they don't close.
     Says exactly which wall or edge breaks, and where."""
-    ch = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    chars = _charmap(cells)
+    _get = chars.get
+    ch = lambda r, c: _get((r, c), " ")
     at = lambda r, c: f"line {r + origin[0] + 1} col {c + origin[1] + 1}"
     nrows = max((r for r, _ in cells), default=-1) + 1
     out = []
-    for (r, c) in sorted(cells):
-        if ch(r, c) != "+" or (r, c) in drawn or ch(r, c + 1) != "-" or ch(r, c - 1) == "-":
+    for (r, c) in sorted(k for k, t in chars.items() if t == "+"):
+        if (r, c) in drawn or ch(r, c + 1) != "-" or ch(r, c - 1) == "-":
             continue
         c2 = c + 1
         while ch(r, c2) == "-":
@@ -2462,6 +2517,7 @@ class _Grid:
     def __init__(self, cells):
         self.cells = dict(cells)
         self.edits = []
+        self._nrows = self._ncols = None                   # worked out once, then kept up to date by put()
 
     def ch(self, r, c):
         return self.cells.get((r, c), (" ", 1))[0]
@@ -2470,18 +2526,30 @@ class _Grid:
         return self.cells.get((r, c), (" ", 1)) == (" ", 1)
 
     def put(self, r, c, t):
+        old = self.cells.get((r, c))
         self.cells[(r, c)] = (t, 1)
+        if self._nrows is not None and r >= self._nrows:
+            self._nrows = r + 1
+        if self._ncols is not None:
+            if old is not None and old[1] > 1:
+                self._ncols = None                          # a wide character went: the width may shrink
+            elif c >= self._ncols:
+                self._ncols = c + 1
 
     def note(self, r, c, fix):
         self.edits.append({"row": r + 1, "col": c + 1, "fix": fix})
 
     @property
     def nrows(self):
-        return max((r for r, _ in self.cells), default=-1) + 1
+        if self._nrows is None:
+            self._nrows = max((r for r, _ in self.cells), default=-1) + 1
+        return self._nrows
 
     @property
     def ncols(self):
-        return max((c + max(w, 1) for (_, c), (_, w) in self.cells.items()), default=0)
+        if self._ncols is None:
+            self._ncols = max((c + max(w, 1) for (_, c), (_, w) in self.cells.items()), default=0)
+        return self._ncols
 
 
 def _box_candidates(g):
@@ -2798,7 +2866,7 @@ def _repair_connector_once(g):
     cells, nrows, ncols = g.cells, g.nrows, g.ncols
     drawn, _ = interpret(cells, nrows, ncols)
     get = lambda r, c: drawn.get((r, c), cells.get((r, c), (" ", 1))[0])
-    border = box_border(find_boxes(get, nrows, ncols))
+    border = box_border(find_boxes(get, nrows, ncols, {**_charmap(cells), **drawn}))
     is_text = lambda t: t not in (" ", "") and t not in ARMS and t not in HEADS
     axis = {"U": "│", "D": "│", "L": "─", "R": "─"}
     for (r, c) in sorted(cells):
@@ -2806,7 +2874,7 @@ def _repair_connector_once(g):
         if t not in ARMS or t in DASHED:
             continue                                        # a dashed line's gaps are meant to be there
         raw = g.ch(r, c)
-        for a in sorted(ARMS[t]):
+        for a in ARM_ORDER[t]:
             dr, dc = DIRS[a]
             nr, nc = r + dr, c + dc
             if get(nr, nc) != " " or is_text(get(r + 2 * dr, c + 2 * dc)):
@@ -2920,11 +2988,17 @@ def describe(cells, nrows, ncols):
 
     Lets an agent check that the picture means what it intended, e.g. that an arrow really
     runs from "API" to "DB"."""
-    get = lambda r, c: cells.get((r, c), (" ", 1))[0]
+    chars = _charmap(cells)
+    _get = chars.get
+    get = lambda r, c: _get((r, c), " ")
     is_text = lambda t: (t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG
                          and t not in BLOCKS and t not in MARKS)
-    boxes = sorted(find_boxes(get, nrows, ncols))
-    inside = lambda a, b: a != b and b[0] <= a[0] and b[1] <= a[1] and a[2] <= b[2] and a[3] <= b[3]
+    boxes = sorted(find_boxes(get, nrows, ncols, chars))
+    nest = _containers(boxes)                             # box -> the boxes around it
+    inner = {b: [] for b in boxes}                         # box -> every box inside it
+    for k, around in nest.items():
+        for p in around:
+            inner[p].append(k)
     ids = {b: f"b{i}" for i, b in enumerate(boxes, 1)}
     squash = lambda s: " ".join(s.split())
 
@@ -2949,19 +3023,22 @@ def describe(cells, nrows, ncols):
     info = {}
     for b in boxes:
         r1, c1, r2, c2 = b
-        kids = {(r, c) for k in boxes if inside(k, b) for r in range(k[0], k[2] + 1) for c in range(k[1], k[3] + 1)}
+        kids = {(r, c) for k in inner[b] for r in range(k[0], k[2] + 1) for c in range(k[1], k[3] + 1)}
         title = row_text(r1, c1 + 1, c2 - 1)
         text = [t for t in (row_text(r, c1 + 1, c2 - 1, kids) for r in range(r1 + 1, r2)) if t]
-        parents = [p for p in boxes if inside(b, p)]
+        parents = nest[b]
         parent = min(parents, key=lambda p: (p[2] - p[0]) * (p[3] - p[1])) if parents else None
         info[b] = {"id": ids[b], "name": title or (text[0] if text else ""), "title": title or None,
                    "text": text, "row": r1 + 1, "col": c1 + 1, "rows": r2 - r1 + 1, "cols": c2 - c1 + 1,
                    "parent": ids[parent] if parent else None}
 
-    borders = {b: box_border([b]) for b in boxes}
+    border_of: dict = {}                                  # cell -> the boxes whose border it is on
+    for b in boxes:
+        for k in box_border([b]):
+            border_of.setdefault(k, []).append(b)
 
     def on_border(cell):
-        hits = [b for b in boxes if cell in borders[b]]
+        hits = border_of.get(cell, ())
         return min(hits, key=lambda b: (b[2] - b[0]) * (b[3] - b[1])) if hits else None
 
     def endpoint(cell, step):
@@ -3529,6 +3606,12 @@ def _failed(source, msg):
             "error": msg, "source": source}
 
 
+@functools.lru_cache(maxsize=1)
+def _defaults():
+    """Every CLI option's default, worked out once (building the parser costs more than a small render)."""
+    return dict(vars(build_parser().parse_args([])))
+
+
 def render(text: str, *, preset: str | None = None, style: str | None = None, square: bool | None = None,
            theme: str | None = None, color: bool | None = None, animate: str | None = None,
            html: bool | None = None, accent: str | None = None, font: str | None = None,
@@ -3543,7 +3626,7 @@ def render(text: str, *, preset: str | None = None, style: str | None = None, sq
     check report["status"] ("ok" / "warnings"; "self_check_failed" means do not use the output).
     Raises ValueError for empty or oversized input and for invalid options.
     """
-    args = build_parser().parse_args([])
+    args = argparse.Namespace(**_defaults())
     looks = {"preset": preset, "style": style, "square": square, "theme": theme, "color": color,
              "animate": animate, "html": html, "interactive": interactive}
     if fold is not None and (not isinstance(fold, int) or fold < 0):
