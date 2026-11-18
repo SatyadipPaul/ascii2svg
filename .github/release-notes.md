@@ -9,7 +9,7 @@ npm install @satyadip28/asciitosvg@1.18.0
 
 ## New
 
-- **Highlight a path.** `--highlight "Web,API,DB"` keeps those boxes, the lines between them and the labels on those lines bright, and fades the rest; pulses run only on the bright path. Names are the ones `--describe` reports. A named container lights only its own frame and words, so a path can run through containers. [See it](https://satyadippaul.github.io/ascii2svg/highlight.svg).
+- **Highlight a path.** `--highlight "Web,API,DB"` keeps those boxes, the stretches of line on a path between them and the labels on those lines bright, and fades the rest (a branch to a box you didn't name fades too); pulses run only on the bright path. Names are the ones `--describe` reports. A named container lights only its own frame and words, so a path can run through containers. [See it](https://satyadippaul.github.io/ascii2svg/highlight.svg).
 - **Links, tooltips and tints per box.** `--boxes '{"API": {"link": "https://...", "tooltip": "REST, v2", "tint": "#ffe8cc"}}'`. Links are http(s), mailto or relative only; `javascript:` and `data:` are refused. They work where the SVG is a page or an `<object>`, not inside `<img>`.
 - **Design tokens.** `--tokens brand.json` sets `ink`, `bg`, `accent`, `neutral`, `hover`, `glow`, box `hues`, tree `branch` colours, `stroke`, `font_size`, `flow_speed` and `flow_rest`, for both themes or for light and dark separately. Every value is checked before it reaches the SVG; `--schema` lists them all.
 - **`--names`** puts `data-name` on each box, for your own CSS or scripts.

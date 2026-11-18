@@ -1239,7 +1239,7 @@ def test_highlight_keeps_the_path_bright_and_dims_the_rest():
     for word in ("JWT AuthFilter", "OrderValidator", "TaxCalculator", "Kafka", "Redis", "ORDER PLATFORM", "Query Service"):
         assert word in dim, word
     heads = re.findall(r'<polygon points="[^"]+" class="head"([^/]*)/>', svg)
-    assert sum("data-dim" not in h for h in heads) == 6       # Mobile->API, the 2 routes, ->Pricing, ->Repo, ->Oracle
+    assert sum("data-dim" not in h for h in heads) == 5       # Mobile->API, ->Order Service, ->Pricing, ->Repo, ->Oracle
     # nothing matches: nothing dims, and the tip lists the names there are
     svg, report = a2s.render(ARCH, highlight=["Nope"])
     assert "data-dim" not in svg and any("'Nope'" in t and "'Cache'" in t for t in report["tips"])
@@ -1320,6 +1320,45 @@ def test_cli_and_mcp_take_the_new_options():
     assert report["status"] == "ok" and "data-dim" in report["svg"] and "<title>hi</title>" in report["svg"]
     tool = next(t for t in a2s.MCP_TOOLS if t["name"] == "render_diagram")
     assert {"highlight", "boxes", "tokens", "names"} <= set(tool["inputSchema"]["properties"])
+
+
+def test_highlight_lights_paths_not_whole_networks():
+    # found by an independent review: a shared network lit branches into dim boxes
+    root = os.path.dirname(HERE)
+    flow = open(os.path.join(root, "docs", "examples", "decision-flow.txt"), encoding="utf-8").read()
+    for names, bright in ((["3-D Secure", "Decline"], {"3-D Secure", "fail", "Decline"}),
+                          (["Fraud score", "Approve"], {"Fraud score", "score < 30", "Approve"})):
+        svg, report = a2s.render(flow, highlight=names)
+        lit = {html.unescape(t) for t in re.findall(r'<text (?![^>]*data-dim)[^>]*>([^<]*)</text>', svg)}
+        assert report["roundtrip"] == "exact" and lit == bright, (names, lit)
+    c4 = fx("c4_dashed.txt")                                # an arrow entering a container through its frame
+    for names, bright in ((["Customer", "Internet Banking [system]"],
+                           {"Customer", "[person]", "uses", "Internet Banking", "[system]"}),
+                          (["Internet Banking [system]"], {"Internet Banking", "[system]"}),
+                          (["Web App", "API"], {"Web App", "[React]", "HTTPS", "API", "[Java/Spring]"})):
+        lit = set(re.findall(r'<text (?![^>]*data-dim)[^>]*>([^<]*)</text>', a2s.render(c4, highlight=names)[0]))
+        assert lit == bright, (names, lit)
+
+
+def test_review_findings_on_the_new_options_stay_fixed():
+    svg = a2s.render(ARCH, theme="auto", boxes={"API": {"tint": {"dark": "#000000"}}})[0]
+    assert "fill:None" not in svg and svg.count(".fill.x0{fill:#000000}") == 1   # light keeps the usual fill
+    svg = a2s.render(ARCH, boxes={"API": {"tooltip": "a￾b￿c\ud800d"}})[0]
+    import xml.dom.minidom
+    xml.dom.minidom.parseString(svg.encode("utf-8"))        # still well-formed XML
+    assert "<title>abcd</title>" in svg
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        src = os.path.join(d, "a.txt")
+        open(src, "w", encoding="utf-8").write(ARCH)
+        code, out, _ = cli(src, "--json", "--tokens", "[1]")
+        assert code == 1 and "tokens must be an object" in json.loads(out)["error"]
+        bad = os.path.join(d, "bad.json")
+        open(bad, "wb").write(b"\xff\xfe{")
+        code, out, _ = cli(src, "--json", "--tokens", bad)
+        assert code == 1 and json.loads(out)["error"].startswith("--tokens:")
+        code, _, err = cli(src, "--highlight", "Nope")          # without --json the tip still reaches the user
+        assert code == 0 and "tip: no box is named 'Nope'" in err
 
 
 if __name__ == "__main__":

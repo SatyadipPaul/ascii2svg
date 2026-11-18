@@ -1385,8 +1385,8 @@ def _stroke_css(css, tok):
 
 def _custom_css(t, name, tints, links):
     """Per-theme CSS for boxes tinted by hand (.fill.x0, .fill.x1, ...) and for linked boxes."""
-    css = "".join(f".fill.x{i}{{fill:{c if isinstance(c, str) else c.get(name, c.get('light'))}}}"
-                  for i, c in enumerate(tints))
+    pick = lambda c: c if isinstance(c, str) else c.get(name)    # no tint for this theme: the usual fill
+    css = "".join(f".fill.x{i}{{fill:{pick(c)}}}" for i, c in enumerate(tints) if pick(c))
     if links:
         acc = t["accent"]
         css += (f"a:hover>.a2s-link,a:focus-visible>.a2s-link{{fill:{acc};fill-opacity:.1}}"
@@ -1494,7 +1494,8 @@ def check_boxes(boxes):
             elif k == "tooltip":
                 if not isinstance(v, str) or len(v) > 500:
                     raise ValueError(f"boxes[{name!r}].tooltip must be text of up to 500 characters")
-                clean[k] = _CONTROL.sub("", v)
+                clean[k] = "".join(ch for ch in _CONTROL.sub("", v)         # only what XML can hold
+                                   if not (0xD800 <= ord(ch) <= 0xDFFF or ord(ch) in (0xFFFE, 0xFFFF)))
             elif k == "tint":
                 if isinstance(v, dict) and v and set(v) <= {"light", "dark"}:
                     clean[k] = {t: _hex(c, f"boxes[{name!r}].tint.{t}") for t, c in v.items()}
@@ -1545,26 +1546,27 @@ def _box_names(get, boxes):
 
 
 def _dimmed(chars, boxes, box_name, lit):
-    """The cells to dim when the boxes named in `lit` are highlighted: everything but those boxes, the
-    connectors that run only between them (or join two of them), and labels set into those connectors."""
+    """What dims when the boxes named in `lit` are highlighted -> (cells, {(cell, arm): dimmed}).
+
+    Bright: the named boxes (a named container: its frame and its own words, not the boxes inside it),
+    the stretches of line on a path between two named boxes, and the labels set beside those
+    stretches. A line touching just one box stays bright when that box is named. Where a line crosses
+    a frame (┼ ╪), the frame's arms follow the frame and the line's arms follow the line."""
     want = set(lit)
     on = {b for b in boxes if box_name.get(b) in want}
     nest = _containers(boxes)
     linkish = lambda t: t in ARMS or t in HEADS or t in MARKS or t in DIAG
-    bright = set()
-    for b in on:                                            # a named box: its frame and its own words; not the boxes
-        r1, c1, r2, c2 = b                                  # in it (they light up when named) nor lines (below)
-        inner = [k for k in boxes if b in nest[k]]
-        bright.update(k for k in box_border([b]) if len(ARMS.get(chars.get(k, " "), ())) < 4)   # not a crossing
-        bright.update((r, c) for r in range(r1 + 1, r2) for c in range(c1 + 1, c2)
-                      if not linkish(chars.get((r, c), " "))
-                      and not any(k[0] <= r <= k[2] and k[1] <= c <= k[3] for k in inner))
-    owner = {}                                              # a border cell -> the smallest box it belongs to
+    crossing = lambda k: len(ARMS.get(chars.get(k, " "), ())) == 4
+    owner, frames = {}, {}                                  # border cell -> its smallest box; crossing -> boxes
     for b in sorted(boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]), reverse=True):
         for k in box_border([b]):
-            if len(ARMS.get(chars.get(k, " "), ())) < 4:   # a line crossing a frame (┼ ╪) runs straight on
+            if crossing(k):
+                frames.setdefault(k, []).append(b)          # a line crossing a frame runs straight on
+            else:
                 owner[k] = b
     conn = {k for k, t in chars.items() if linkish(t) and k not in owner}
+    is_text = lambda t: (t not in (" ", "") and not linkish(t) and t not in BLOCKS)
+    word = lambda r, x: is_text(chars.get((r, x), " "))
 
     def leaves(k, d):                                       # the shape at k carries a line out toward d
         t = chars[k]
@@ -1574,12 +1576,10 @@ def _dimmed(chars, boxes, box_name, lit):
             return d in (HEADS[t], TAIL[t])
         return True
 
-    is_text = lambda t: (t not in (" ", "") and not linkish(t) and t not in BLOCKS)
     def home(r, c):
         """The smallest box whose inside holds (r, c), or None."""
         inside = [b for b in boxes if b[0] < r < b[2] and b[1] < c < b[3]]
         return min(inside, key=lambda b: (b[2] - b[0]) * (b[3] - b[1])) if inside else None
-    word = lambda r, x: is_text(chars.get((r, x), " "))
 
     def label(r, c):
         """The words around (r, c) on its row, gaps of up to two spaces allowed: a label by a line."""
@@ -1592,40 +1592,87 @@ def _dimmed(chars, boxes, box_name, lit):
                     return x
                 x += gap * d
         return [(r, x) for x in range(reach(c, -1), reach(c, 1) + 1)]
+
+    def labels(cells):
+        """The labels beside these line cells: --HTTP--> , or just beside, above or below; in the same
+        box as the line, and never a box's title."""
+        out = set()
+        for r, c in cells:
+            for dr, dc in ((0, -3), (0, -2), (0, -1), (0, 1), (0, 2), (0, 3), (-1, 0), (1, 0)):
+                k = (r + dr, c + dc)
+                if k in out or not word(*k):
+                    continue
+                found = label(*k)
+                if all(x not in owner and home(*x) == home(r, c) for x in found):
+                    out.update(found)
+        return out
+
+    shafts = lambda cells: [k for k in cells if chars[k] not in HEADS]   # labels sit by a line, not its head
+    line_words = labels(shafts(conn))                       # a line's label goes with its line, not its box
+    bright = set()
+    for b in on:
+        r1, c1, r2, c2 = b
+        inner = [k for k in boxes if b in nest[k]]
+        bright.update(k for k in box_border([b]) if not crossing(k))
+        bright.update((r, c) for r in range(r1 + 1, r2) for c in range(c1 + 1, c2)
+                      if not linkish(chars.get((r, c), " ")) and (r, c) not in line_words
+                      and not any(k[0] <= r <= k[2] and k[1] <= c <= k[3] for k in inner))
     seen = set()
     for k0 in sorted(conn):
         if k0 in seen:
             continue
         seen.add(k0)
-        group, touched, todo = [], set(), [k0]
+        group, ports, todo, links = [], {}, [k0], {}
         while todo:
             k = todo.pop()
             group.append(k)
+            links[k] = []
+            if chars[k] in HEADS:                           # entering a box through its frame, then pointing in
+                inside, behind = home(*k), (k[0] - DIRS[HEADS[chars[k]]][0], k[1] - DIRS[HEADS[chars[k]]][1])
+                if inside and (owner.get(behind) == inside or inside in frames.get(behind, ())):
+                    ports.setdefault(inside, set()).add(k)
             for d, (dr, dc) in DIRS.items():
                 n = (k[0] + dr, k[1] + dc)
-                if not leaves(k, d):
-                    continue
+                if not leaves(k, d) or (k in frames and n in owner and owner[n] in frames[k]):
+                    continue                                # a crossing runs through its frame, not into it
                 if n in owner:
-                    touched.add(owner[n])
-                elif n in conn and n not in seen and leaves(n, OPP[d]):
-                    seen.add(n)
-                    todo.append(n)
-        ends = {b for b in touched if not any(b in nest[k] for k in touched)}   # not a box it only passes through
-        hits = len(ends & on)
-        if not (hits >= 2 or (hits and ends <= on)):
+                    ports.setdefault(owner[n], set()).add(k)
+                elif n in conn and leaves(n, OPP[d]):
+                    links[k].append(n)
+                    if n not in seen:
+                        seen.add(n)
+                        todo.append(n)
+        ends = {b for b in ports if not any(b in nest[k] for k in ports)}   # not a box it only passes through
+        named = sorted(ends & on)
+        if len(named) == 1 and ends == set(named):
+            path = set(group)                               # a line from a named box to nowhere else
+        elif len(named) >= 2:
+            path = set()
+            for i, a in enumerate(named):                   # the shortest stretch from each named end to the others
+                prev = {k: None for k in ports[a]}
+                queue = list(ports[a])
+                for k in queue:
+                    for n in links.get(k, ()):
+                        if n not in prev:
+                            prev[n] = k
+                            queue.append(n)
+                for b in named[i + 1:]:
+                    k = next((p for p in queue if p in ports[b]), None)
+                    while k is not None:
+                        path.add(k)
+                        k = prev[k]
+        else:
             continue
-        bright.update(group)
-        for r, c in group:                                  # its labels: --HTTP--> , beside it, above or below
-            for dr, dc in ((0, -3), (0, -2), (0, -1), (0, 1), (0, 2), (0, 3), (-1, 0), (1, 0)):
-                k = (r + dr, c + dc)
-                if k in bright or not word(*k):
-                    continue
-                cells = label(*k)                           # in the same box as the line, and not a box's title
-                if all(x not in owner and home(*x) == home(r, c) for x in cells):
-                    bright.update(cells)
-    return {k for k, t in chars.items() if t not in (" ", "") and k not in bright} | \
+        bright.update(path)
+        bright.update(labels(shafts(path)))
+    arm_dim = {}                                            # a frame crossing: each arm takes its owner's state
+    for k, bs in frames.items():
+        across = "LR" if any(k[0] in (b[0], b[2]) for b in bs) else "UD"
+        for a in "UDLR":
+            arm_dim[(k, a)] = not any(b in on for b in bs) if a in across else k not in bright
+    cells = {k for k, t in chars.items() if t not in (" ", "") and k not in bright} | \
         {k for k, t in chars.items() if t == "" and (k[0], k[1] - 1) not in bright}
-
+    return cells, arm_dim
 
 
 def check_style(accent=None, font=None, width=None):
@@ -1719,7 +1766,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     lit = check_highlight(highlight)
     found = find_boxes(get, nrows, ncols, chars)
     box_name = _box_names(get, found) if (per_box or lit or names) else {}
-    dim = _dimmed(chars, found, box_name, lit) if set(lit) & set(box_name.values()) else set()   # no match: dim nothing
+    dim, arm_dim = _dimmed(chars, found, box_name, lit) if set(lit) & set(box_name.values()) else (set(), {})
     group_of = lambda r, c: (gates.get((r, c), -1), hues.get((r, c), -1), (r, c) in dim)
     ga = lambda g: ((f' data-g="{g[0]}"' if g[0] != -1 else "") + (f' data-h="{g[1]}"' if g[1] != -1 else "")
                     + (' data-dim="1"' if g[2] else ""))
@@ -1835,6 +1882,8 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                     here[0] = own
                 if ((r, c), a) in arm_gates:
                     here[0] = (arm_gates[((r, c), a)], here[0][1], here[0][2])
+                if ((r, c), a) in arm_dim:                  # a line crossing a frame: the frame's arms, the line's
+                    here[0] = (here[0][0], here[0][1], arm_dim[((r, c), a)])
                 if a in tick:
                     if a == "D":
                         add(st, "v", cx, cy - 5, cy + 5)
@@ -3666,17 +3715,22 @@ def _json_option(value, flag):
     """--tokens / --boxes: inline JSON, or the path of a .json file."""
     if value is None:
         return None
-    text = value
-    if not value.lstrip().startswith("{"):
-        try:
-            with open(_fs(value), encoding="utf-8") as f:
-                text = f.read()
-        except OSError as e:
-            raise ValueError(f"{flag}: cannot read {value!r} ({e.strerror}); pass JSON or a .json file") from None
+    try:
+        return json.loads(value)                            # inline JSON first, then a file
+    except json.JSONDecodeError as e:
+        inline = e
+    if value.lstrip()[:1] in ("{", "["):
+        raise ValueError(f"{flag}: not valid JSON ({inline.msg} at line {inline.lineno} col {inline.colno})")
+    try:
+        with open(_fs(value), encoding="utf-8") as f:
+            text = f.read()
+    except (OSError, UnicodeDecodeError) as e:
+        why = getattr(e, "strerror", None) or "not UTF-8 text"
+        raise ValueError(f"{flag}: cannot read {value!r} ({why}); pass JSON or a .json file") from None
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        raise ValueError(f"{flag}: not valid JSON ({e.msg} at line {e.lineno} col {e.colno})") from None
+        raise ValueError(f"{flag}: {value} is not valid JSON ({e.msg} at line {e.lineno} col {e.colno})") from None
 
 
 def resolve_look(args):
@@ -4363,6 +4417,8 @@ def main(argv=None) -> int:
             if not args.output:
                 sys.stdout.write(out)
             print(f"ascii2svg: {report['summary']}", file=sys.stderr)
+            for tip in report.get("tips", []):              # e.g. a --highlight name that matched nothing
+                print(f"ascii2svg: tip: {tip}", file=sys.stderr)
             if code == 2:
                 print("ascii2svg: SELF-CHECK FAILED - the SVG does not match the input 1:1", file=sys.stderr)
         return code

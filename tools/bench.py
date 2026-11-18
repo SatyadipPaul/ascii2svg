@@ -14,6 +14,7 @@ import argparse
 import glob
 import importlib.util
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -92,7 +93,8 @@ def main():
         for _ in range(a.repeat):                           # taking turns: both meet the same machine noise
             t_old = min(t_old, best(lambda: run(old, inputs, kw), 1))
             t_new = min(t_new, best(lambda: run(new, inputs, kw), 1))
-        same = all(x[0] == y[0] and {k: v for k, v in x[1].items() if k != "version"}
+        stamp = lambda svg: re.sub(r'data-generator="ascii2svg [^"]*"', "", svg)   # the version stamp differs
+        same = all(stamp(x[0]) == stamp(y[0]) and {k: v for k, v in x[1].items() if k != "version"}
                    == {k: v for k, v in y[1].items() if k != "version"}
                    for x, y in zip(run(new, inputs, kw), run(old, inputs, kw)))
         print(f"{label:44} {t_old * 1000:8.1f}ms {t_new * 1000:8.1f}ms {t_old / t_new:7.1f}x  {'yes' if same else 'NO'}")

@@ -267,8 +267,9 @@ The animation is careful about where it runs:
 <br><sub>The README's architecture diagram, with one request's path highlighted. Same text, one flag.</sub></p>
 
 ```bash
-ascii2svg arch.txt -o post-order.svg --preset readme \
-  --highlight "Mobile / Web App,API Gateway,Router,OrderController,PricingEngine,OrderRepository,Oracle"
+ascii2svg arch.txt -o post-order.svg --preset readme --highlight "Mobile / Web App,API Gateway,Router,\
+Order Service (Spring Boot),Controller layer,OrderController,Domain layer,PricingEngine,Infra layer,\
+OrderRepository,Data & messaging,Oracle"     # each box on the path, with the containers it runs through
 ascii2svg arch.txt -o arch.svg --boxes '{"API Gateway": {"link": "https://wiki.example.com/gateway", "tooltip": "Kong, 3 pods"}}'
 ascii2svg arch.txt -o arch.svg --color --tokens brand.json     # {"accent": "#e8590c", "stroke": 1.8, "dark": {"bg": "#000000"}}
 ```

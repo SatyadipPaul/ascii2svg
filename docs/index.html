@@ -78,8 +78,9 @@ cargo tree | ascii2svg - -o deps.svg --preset explore --fold 1  # open with only
      link somewhere and show a tooltip, and design tokens match your colours, line width and font size.</p>
   <div class="wide"><img src="highlight.svg" width="888" style="width:100%;height:auto" loading="lazy"
        alt="The order-platform architecture diagram with one request's path highlighted: Mobile app, API Gateway, Router, OrderController, PricingEngine, OrderRepository and Oracle stay bright, every other box and line fades"></div>
-<pre>ascii2svg arch.txt -o post-order.svg --preset readme \
-  --highlight "Mobile / Web App,API Gateway,Router,OrderController,PricingEngine,OrderRepository,Oracle"</pre>
+<pre>ascii2svg arch.txt -o post-order.svg --preset readme --highlight "Mobile / Web App,API Gateway,Router,\
+Order Service (Spring Boot),Controller layer,OrderController,Domain layer,PricingEngine,Infra layer,\
+OrderRepository,Data &amp; messaging,Oracle"</pre>
 
   <h2>Type this…</h2>
 <pre>+------------+     +------------+     +------------+     +-------------+
