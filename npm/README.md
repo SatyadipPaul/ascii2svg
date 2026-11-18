@@ -35,7 +35,9 @@ markup;                 // the SVG, or a web page with { html: true }
 The options match the CLI and the Python `render()`: `preset` (`readme`, `slides`, `chat`,
 `print`, `dark`, `page`, `explore`), `style`, `square`, `theme`, `color`, `animate`, `html`, `accent`,
 `font`, `width`, `title`, `tabSize`, `describe`, `unescape`, `strict`, `repair`, `interactive`
-(trees and mind maps fold when clicked), `fold` (start folded at this depth) and `portable`. Bad input or options
+(trees and mind maps fold when clicked), `fold` (start folded at this depth), `portable`, `tokens` (tune
+colours, line width, font size and pulse speed), `boxes` (a link, tooltip or tint per box name), `highlight`
+(keep some boxes and the lines between them bright, dim the rest) and `names` (`data-name` on each box). Bad input or options
 reject with an `Error` whose message says what's wrong. `check(text)` resolves to the report
 with its boxes and edges. `version()` resolves to the ascii2svg version inside.
 

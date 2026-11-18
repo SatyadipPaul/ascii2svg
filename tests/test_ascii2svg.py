@@ -1175,6 +1175,153 @@ def test_repair_stops_when_a_fix_would_undo_an_earlier_one():
     assert flip["n"] == 2 and edits == [] and cells[(0, 0)] == ("x", 1), (flip, edits)
 
 
+ARCH = ("+------+    +-----+    +----+\n| Web  |--->| API |--->| DB |\n+------+    +-----+    +----+\n"
+        "               |\n               v\n           +-------+\n           | Cache |\n           +-------+\n")
+
+
+def _dimmed_text(svg):
+    """Text drawn dimmed, and text drawn bright."""
+    dim = " ".join(t for t in re.findall(r'<text [^>]*data-dim="1"[^>]*>([^<]*)</text>', svg))
+    lit = " ".join(t for t in re.findall(r'<text (?![^>]*data-dim)[^>]*>([^<]*)</text>', svg))
+    return dim, lit
+
+
+def test_parse_once_draws_exactly_what_render_does():
+    looks = [{}, {"preset": "readme"}, {"preset": "explore", "fold": 1}, {"theme": "dark", "describe": True},
+             {"preset": "print", "strict": True}, {"highlight": ["Web", "API"], "names": True}]
+    for name in ["ascii_basic.txt", "complex_unicode.txt", "tree_npm_ls.txt", "llm_output.txt"]:
+        text = fx(name)
+        for read in ({}, {"repair": True}):
+            d = a2s.parse(text, **read)
+            for look in looks:
+                assert d.render(**look) == a2s.render(text, **read, **look), (name, read, look)
+            assert d.describe() == a2s.render(text, describe=True, **read)[1]["diagram"]
+            assert d.svg() == a2s.render(text, **read)[0] and d._repr_svg_() == d.svg()
+            assert d.html(theme="auto").startswith("<!doctype html>")
+    d = a2s.parse(fx("llm_output.txt"), repair=True)
+    assert d.repair["edits"] and d.text == d.repair["text"] and isinstance(d.warnings, list)
+    d.render()[1]["warnings"].append("x")                   # a report is the caller's to change
+    assert "x" not in d.render()[1]["warnings"]
+
+
+def test_new_options_left_empty_change_nothing():
+    for name in ["complex_unicode.txt", "uml.txt", "tree_unix.txt"]:
+        for preset in (None, "readme", "explore"):
+            plain = a2s.render(fx(name), preset=preset)
+            assert a2s.render(fx(name), preset=preset, tokens={}, boxes={}, highlight=[]) == plain
+
+
+def test_highlight_keeps_the_path_bright_and_dims_the_rest():
+    svg, report = a2s.render(ARCH, preset="readme", highlight=["Web", "API", "DB"])
+    assert report["roundtrip"] == "exact" and report["status"] == "ok"
+    dim, lit = _dimmed_text(svg)
+    assert "Cache" in dim and "Cache" not in lit and all(w in lit for w in ("Web", "API", "DB"))
+    assert "[data-dim]{opacity:.2}" in svg and 'class="pulse" data-dim="1"' in svg   # the pulse to Cache stops
+    assert a2s.render(ARCH, highlight="Web, API ,DB")[0] == a2s.render(ARCH, highlight=["Web", "API", "DB"])[0]
+    # a label on the loop between two bright boxes stays bright; a loop to a dim box dims with it
+    readme = open(os.path.join(os.path.dirname(HERE), "README.md"), encoding="utf-8").read()
+    flow = readme.split("### Type this")[1].split("```")[1]     # the README's first example
+    dim, lit = _dimmed_text(a2s.render(flow, highlight=["Idea", "Draft", "Review"])[0])
+    assert "needs changes" in lit and "Publish" in dim
+    dim, lit = _dimmed_text(a2s.render(flow, highlight=["Review", "Publish"])[0])
+    assert "needs changes" in dim and "Review" in lit
+    # through containers: a named container lights its frame and words, not the boxes or lines inside it;
+    # a line that only passes through named containers is judged by the boxes at its two ends
+    path = ["Mobile / Web App", "API Gateway", "Router", "Order Service (Spring Boot)", "Controller layer",
+            "OrderController", "Domain layer", "PricingEngine", "Infra layer", "OrderRepository",
+            "Data & messaging", "Oracle"]
+    svg, report = a2s.render(fx("complex_unicode.txt"), color=True, highlight=path)
+    dim, lit = _dimmed_text(svg)
+    assert report["roundtrip"] == "exact"
+    for word in ("Router", "OrderController", "PricingEngine", "OrderRepository", "Oracle", "HTTPS", "POST /api/v1/orders",
+                 "route by path"):
+        assert word in lit, word
+    for word in ("JWT AuthFilter", "OrderValidator", "TaxCalculator", "Kafka", "Redis", "ORDER PLATFORM", "Query Service"):
+        assert word in dim, word
+    heads = re.findall(r'<polygon points="[^"]+" class="head"([^/]*)/>', svg)
+    assert sum("data-dim" not in h for h in heads) == 6       # Mobile->API, the 2 routes, ->Pricing, ->Repo, ->Oracle
+    # nothing matches: nothing dims, and the tip lists the names there are
+    svg, report = a2s.render(ARCH, highlight=["Nope"])
+    assert "data-dim" not in svg and any("'Nope'" in t and "'Cache'" in t for t in report["tips"])
+    # a name with a comma in it needs the list form
+    how = open(os.path.join(os.path.dirname(HERE), "docs", "examples", "how-it-works.txt"), encoding="utf-8").read()
+    name = a2s.parse(how).describe()["boxes"][1]["name"]
+    assert "," in name and "data-dim" in a2s.render(how, highlight=[name])[0]
+
+
+def test_box_links_tooltips_and_tints_are_safe():
+    opts = {"API": {"link": "https://example.com/api?a=1&b=2", "tooltip": "REST <v2> & \"more\""},
+            "DB": {"tooltip": "Postgres"}, "Web": {"tint": {"light": "#ffe8cc", "dark": "#5c3a12"}}}
+    svg, report = a2s.render(ARCH, theme="auto", boxes=opts)
+    assert report["roundtrip"] == "exact"
+    assert '<a href="https://example.com/api?a=1&amp;b=2" target="_top"><title>REST &lt;v2&gt; &amp; "more"</title>' in svg
+    assert '<g class="a2s-tip"><title>Postgres</title>' in svg
+    assert re.search(r'class="fill x0"', svg) and ".fill.x0{fill:#ffe8cc}" in svg and ".fill.x0{fill:#5c3a12}" in svg
+    assert svg.index(".fill.x0{fill:#5c3a12}") > svg.index("@media (prefers-color-scheme:dark)")
+    for bad in ("javascript:alert(1)", "JaVaScRiPt:x", "data:text/html,x", "vbscript:x", 'https://x" onload="y',
+                "https://x y", "<b>", "\\\\server\\share", ""):
+        try:
+            a2s.render(ARCH, boxes={"API": {"link": bad}})
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted link {bad!r}")
+    for ok in ("docs/api.md", "#api", "../api.html?x=a:b", "mailto:team@example.com", "HTTPS://EXAMPLE.COM"):
+        assert "<a href" in a2s.render(ARCH, boxes={"API": {"link": ok}})[0]
+    for bad in ({"API": {"colour": "#fff"}}, {"API": {"tint": "red"}}, {"API": {"tint": {"dim": "#fff"}}},
+                {"API": "https://x"}, {"API": {"tooltip": "x" * 501}}, ["API"]):
+        try:
+            a2s.render(ARCH, boxes=bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted boxes={bad!r}")
+    svg, report = a2s.render(ARCH, boxes={"Nope": {"tooltip": "x"}}, names=True)
+    assert any("'Nope'" in t for t in report["tips"]) and svg.count("data-name=") == 4
+    assert 'data-name="Cache"' in svg
+
+
+def test_tokens_tune_the_look_and_reject_anything_else():
+    tok = {"accent": "#e8590c", "ink": "#222", "stroke": 2.1, "font_size": 15, "flow_speed": 300, "flow_rest": 0,
+           "hues": [["#fff4e6", "#ffe8cc"]], "dark": {"bg": "#000000", "ink": "#f1f3f5"}}
+    svg, report = a2s.render(ARCH, preset="readme", tokens=tok)
+    assert report["roundtrip"] == "exact"
+    assert ".sgl{stroke-width:2.1" in svg and ".dbl{stroke-width:7.5" in svg and "text{font:15px" in svg
+    assert svg.count(".fill.t0l{fill:#ffe8cc}") == 2 and ".fill.t5l{fill:#ffe8cc}" in svg     # both themes; repeated
+    assert "#e8590c" in svg and svg.index("#f1f3f5") > svg.index("@media (prefers-color-scheme:dark)")
+    assert "#000000" not in svg.split("@media")[0].replace('fill="#ffffff"', "")
+    assert a2s.render(ARCH, preset="readme", tokens={"flow_rest": 0})[0] != a2s.render(ARCH, preset="readme")[0]
+    for bad in ({"accent": "orange"}, {"accent": "#e8590c;}svg{display:none"}, {"stroke": 0}, {"stroke": True},
+                {"stroke": "2"}, {"font_size": 100}, {"cell": 10}, {"hues": [["#fff"]]}, {"hues": [["#fff", "#eee"]] * 7},
+                {"light": {"stroke": 2}}, {"light": "#fff"}, "accent=#fff"):
+        try:
+            a2s.render(ARCH, tokens=bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted tokens={bad!r}")
+    assert "flow_speed" in a2s.schema()["tokens"]["numbers"] and "link" in a2s.schema()["box_options"]
+
+
+def test_cli_and_mcp_take_the_new_options():
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        src, tok = os.path.join(d, "a.txt"), os.path.join(d, "t.json")
+        open(src, "w", encoding="utf-8").write(ARCH)
+        open(tok, "w", encoding="utf-8").write('{"accent": "#e8590c"}')
+        code, out, _ = cli(src, "--json", "--brief", "--tokens", tok, "--highlight", "Web,API",
+                           "--boxes", '{"API": {"link": "https://example.com"}}', "--names")
+        assert code == 0 and json.loads(out)["status"] == "ok"
+        code, out, _ = cli(src, "--color", "--tokens", tok, "--highlight", "Web,API", "--names")
+        assert "#e8590c" in out and "data-dim" in out and "data-name" in out
+        for args in (("--tokens", "{bad json"), ("--tokens", os.path.join(d, "missing.json")),
+                     ("--boxes", '{"API": {"link": "javascript:x"}}'), ("--tokens", '{"stroke": 9}')):
+            code, out, _ = cli(src, "--json", *args)
+            assert code == 1 and json.loads(out)["status"] == "usage_error", args
+    report = a2s._mcp_call("render_diagram", {"diagram": ARCH, "highlight": ["Web", "API"],
+                                             "boxes": {"API": {"tooltip": "hi"}}, "tokens": {"stroke": 2}})
+    assert report["status"] == "ok" and "data-dim" in report["svg"] and "<title>hi</title>" in report["svg"]
+    tool = next(t for t in a2s.MCP_TOOLS if t["name"] == "render_diagram")
+    assert {"highlight", "boxes", "tokens", "names"} <= set(tool["inputSchema"]["properties"])
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0

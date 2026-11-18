@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import bisect
+import copy
 import functools
 import html
 import json
@@ -1331,9 +1332,9 @@ def text_runs(texts, gate_of=lambda r, c: None):
     return out
 
 
-def _layout_css(mode, font=None):
+def _layout_css(mode, font=None, tok=None):
     """mode: none | timed (plays on load) | scroll (a host page adds .a2s-on as things scroll into view)."""
-    css = (".sgl{stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;fill:none}"
+    css = _stroke_css(".sgl{stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;fill:none}"
            ".dbl{stroke-width:5;stroke-linecap:round;stroke-linejoin:round;fill:none}"
            ".dbl-gap{stroke-width:2;stroke-linecap:round;stroke-linejoin:round;fill:none}"
            ".head{stroke-width:1;stroke-linejoin:round}"
@@ -1343,7 +1344,7 @@ def _layout_css(mode, font=None):
            ".uml{stroke-width:1.2;stroke-linejoin:round}.ring{stroke-width:1.3}"
            ".foot{fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}"
            ".blk{shape-rendering:crispEdges}.k3{fill-opacity:.75}.k2{fill-opacity:.5}.k1{fill-opacity:.28}"
-           ".fill{transition:fill .25s}text,line,path,polygon,circle,.blk{pointer-events:none}")
+           ".fill{transition:fill .25s}text,line,path,polygon,circle,.blk{pointer-events:none}", tok or {})
     if mode == "none":
         return css
     on = ".a2s-on" if mode == "scroll" else ""
@@ -1370,8 +1371,261 @@ def _layout_css(mode, font=None):
     return css + "@media (prefers-reduced-motion:reduce){*{animation:none!important}.pulse{display:none}}"
 
 
+def _stroke_css(css, tok):
+    """The line widths and font size from the tokens; without them the CSS is left exactly as it is."""
+    if "stroke" in tok:
+        k = tok["stroke"] / 1.4                             # every width keeps its ratio to the plain line's 1.4
+        for cls, wd in ((".sgl", 1.4), (".dbl", 5), (".dbl-gap", 2), (".uml", 1.2), (".ring", 1.3), (".foot", 1.4)):
+            css = css.replace(f"{cls}{{" + ("fill:none;" if cls == ".foot" else "") + f"stroke-width:{wd:g}",
+                              f"{cls}{{" + ("fill:none;" if cls == ".foot" else "") + f"stroke-width:{wd * k:.3g}", 1)
+    if "font_size" in tok:
+        css = css.replace(f"text{{font:{FS}px", f"text{{font:{tok['font_size']:g}px", 1)
+    return css
+
+
+def _custom_css(t, name, tints, links):
+    """Per-theme CSS for boxes tinted by hand (.fill.x0, .fill.x1, ...) and for linked boxes."""
+    css = "".join(f".fill.x{i}{{fill:{c if isinstance(c, str) else c.get(name, c.get('light'))}}}"
+                  for i, c in enumerate(tints))
+    if links:
+        acc = t["accent"]
+        css += (f"a:hover>.a2s-link,a:focus-visible>.a2s-link{{fill:{acc};fill-opacity:.1}}"
+                f"a:focus-visible>.a2s-link{{stroke:{acc};stroke-width:2}}")
+    return css
+
+
 _HEX = re.compile(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})")
 _FONT = re.compile(r"[\w\s,'\"-]+")
+
+# ─── tuning: tokens, per-box options, highlight ─────────────────────────────
+TOKEN_COLOURS = {"ink": "lines and text", "bg": "background", "accent": "arrows, pulses and focus",
+                 "neutral": "box fill with --color when a box has no group", "hover": "a box under the pointer",
+                 "glow": "the glow's colour"}
+TOKEN_LISTS = {"hues": "box tints with --color: [[container, leaf], ...], 1-6 pairs, repeated to fill 6",
+               "branch": "tree branch colours with --color: [[line, label tint], ...], 1-6 pairs"}
+TOKEN_NUMBERS = {"stroke": (0.5, 4.0, "line width in px (default 1.4); double lines and marks keep their ratio"),
+                 "font_size": (8, 24, "text size in px (default 14); characters stay in their cells"),
+                 "flow_speed": (20, 2000, "pulse speed along a connector in px/s (default 150)"),
+                 "flow_rest": (0, 10, "pause between pulses in seconds (default 0.9)")}
+BOX_OPTIONS = {"link": "URL the box opens: http(s), mailto or a relative path",
+               "tooltip": "text shown when the pointer rests on the box",
+               "tint": "#hex fill, or {light: #hex, dark: #hex}"}
+
+
+def _hex(v, what):
+    if not (isinstance(v, str) and _HEX.fullmatch(v)):
+        raise ValueError(f"{what} must be a hex colour like #0969da, not {v!r}")
+    return v
+
+
+def _palette(d, what):
+    """The colour part of the tokens (shared by both themes, or one theme's)."""
+    out = {}
+    for k, v in d.items():
+        if k in TOKEN_COLOURS:
+            out[k] = _hex(v, f"{what}{k}")
+        elif k in TOKEN_LISTS:
+            if not (isinstance(v, (list, tuple)) and 1 <= len(v) <= 6
+                    and all(isinstance(p, (list, tuple)) and len(p) == 2 for p in v)):
+                raise ValueError(f"{what}{k} must be 1 to 6 pairs of hex colours, e.g. [[\"#f1f8ff\", \"#dbeeff\"]]")
+            pairs = [(_hex(a, f"{what}{k}"), _hex(b, f"{what}{k}")) for a, b in v]
+            out[k] = [pairs[i % len(pairs)] for i in range(len(THEMES["light"][k if k == "hues" else "branch"]))]
+        else:
+            raise ValueError(f"unknown token {what}{k!r}; tokens are: "
+                             + ", ".join([*TOKEN_COLOURS, *TOKEN_LISTS, *TOKEN_NUMBERS, "light", "dark"]))
+    return out
+
+
+def check_tokens(tokens):
+    """Validate look tokens -> {"light": {...}, "dark": {...}, numbers}. Raises ValueError.
+
+    Colour tokens at the top level apply to both themes; under "light" or "dark" to that theme only.
+    Everything ends up in the SVG's CSS, so every value is checked against a strict pattern."""
+    if not tokens:
+        return {}
+    if not isinstance(tokens, dict):
+        raise ValueError("tokens must be an object, e.g. {\"accent\": \"#e8590c\", \"stroke\": 1.8}")
+    shared = {k: v for k, v in tokens.items() if k not in TOKEN_NUMBERS and k not in ("light", "dark")}
+    out = {"light": _palette(shared, ""), "dark": _palette(shared, "")}
+    for name in ("light", "dark"):
+        if name in tokens:
+            if not isinstance(tokens[name], dict):
+                raise ValueError(f"tokens.{name} must be an object of colours")
+            out[name].update(_palette(tokens[name], f"{name}."))
+    for k, (lo, hi, _) in TOKEN_NUMBERS.items():
+        if k in tokens:
+            v = tokens[k]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi:
+                raise ValueError(f"token {k} must be a number from {lo:g} to {hi:g}, not {v!r}")
+            out[k] = float(v)
+    return out
+
+
+_SCHEME = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*):")
+
+
+def check_link(link):
+    """http(s), mailto, or a relative URL; never javascript: or data:. Raises ValueError."""
+    if not isinstance(link, str) or not link or len(link) > 2000:
+        raise ValueError("a box link must be a URL of up to 2000 characters")
+    if any(ch.isspace() or ord(ch) < 32 or ch in "\"'<>\\`" for ch in link):
+        raise ValueError(f"a box link can't contain spaces, quotes, < > or backslashes: {link!r}")
+    m = _SCHEME.match(link)
+    if m and m.group(1).lower() not in ("http", "https", "mailto"):
+        raise ValueError(f"a box link must be http(s), mailto or a relative path, not {m.group(1)}: ({link!r})")
+    return link
+
+
+def check_boxes(boxes):
+    """Validate per-box options -> {name: {link?, tooltip?, tint?}}. Raises ValueError."""
+    if not boxes:
+        return {}
+    if not isinstance(boxes, dict):
+        raise ValueError("boxes must map a box name to its options, e.g. {\"API\": {\"link\": \"https://...\"}}")
+    out = {}
+    for name, opt in boxes.items():
+        key = " ".join(str(name).split())
+        if not key or not isinstance(opt, dict):
+            raise ValueError(f"boxes[{name!r}] must be an object with any of: {', '.join(BOX_OPTIONS)}")
+        clean = {}
+        for k, v in opt.items():
+            if k == "link":
+                clean[k] = check_link(v)
+            elif k == "tooltip":
+                if not isinstance(v, str) or len(v) > 500:
+                    raise ValueError(f"boxes[{name!r}].tooltip must be text of up to 500 characters")
+                clean[k] = _CONTROL.sub("", v)
+            elif k == "tint":
+                if isinstance(v, dict) and v and set(v) <= {"light", "dark"}:
+                    clean[k] = {t: _hex(c, f"boxes[{name!r}].tint.{t}") for t, c in v.items()}
+                else:
+                    clean[k] = _hex(v, f"boxes[{name!r}].tint")
+            else:
+                raise ValueError(f"unknown box option {k!r} for {name!r}; options are: {', '.join(BOX_OPTIONS)}")
+        out[key] = clean
+    return out
+
+
+def check_highlight(highlight):
+    """Box names to keep bright: a list, or one comma-separated string. Raises ValueError."""
+    if not highlight:
+        return []
+    items = highlight.split(",") if isinstance(highlight, str) else highlight
+    if not isinstance(items, (list, tuple)) or not all(isinstance(n, str) for n in items):
+        raise ValueError("highlight must be box names: a list, or one string separated by commas")
+    return [n for n in (" ".join(x.split()) for x in items) if n]
+
+
+def _box_texts(get, boxes):
+    """Box -> (title on its top edge, [rows of text inside it, not counting boxes within it])."""
+    is_text = lambda t: (t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG
+                         and t not in BLOCKS and t not in MARKS)
+    squash = lambda s: " ".join(s.split())
+    nest = _containers(boxes)
+    inner = {b: [] for b in boxes}
+    for k, around in nest.items():
+        for p in around:
+            inner[p].append(k)
+
+    def row_text(r, c1, c2, skip=()):
+        return squash("".join(get(r, c) if is_text(get(r, c)) and (r, c) not in skip else " "
+                              for c in range(c1, c2 + 1) if get(r, c) != ""))
+    out = {}
+    for b in boxes:
+        r1, c1, r2, c2 = b
+        kids = {(r, c) for k in inner[b] for r in range(k[0], k[2] + 1) for c in range(k[1], k[3] + 1)}
+        title = row_text(r1, c1 + 1, c2 - 1)
+        out[b] = (title, [t for t in (row_text(r, c1 + 1, c2 - 1, kids) for r in range(r1 + 1, r2)) if t])
+    return out
+
+
+def _box_names(get, boxes):
+    """Box -> its name, as --describe reports it: the title, else the first row of text."""
+    return {b: title or (text[0] if text else "") for b, (title, text) in _box_texts(get, boxes).items()}
+
+
+def _dimmed(chars, boxes, box_name, lit):
+    """The cells to dim when the boxes named in `lit` are highlighted: everything but those boxes, the
+    connectors that run only between them (or join two of them), and labels set into those connectors."""
+    want = set(lit)
+    on = {b for b in boxes if box_name.get(b) in want}
+    nest = _containers(boxes)
+    linkish = lambda t: t in ARMS or t in HEADS or t in MARKS or t in DIAG
+    bright = set()
+    for b in on:                                            # a named box: its frame and its own words; not the boxes
+        r1, c1, r2, c2 = b                                  # in it (they light up when named) nor lines (below)
+        inner = [k for k in boxes if b in nest[k]]
+        bright.update(k for k in box_border([b]) if len(ARMS.get(chars.get(k, " "), ())) < 4)   # not a crossing
+        bright.update((r, c) for r in range(r1 + 1, r2) for c in range(c1 + 1, c2)
+                      if not linkish(chars.get((r, c), " "))
+                      and not any(k[0] <= r <= k[2] and k[1] <= c <= k[3] for k in inner))
+    owner = {}                                              # a border cell -> the smallest box it belongs to
+    for b in sorted(boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]), reverse=True):
+        for k in box_border([b]):
+            if len(ARMS.get(chars.get(k, " "), ())) < 4:   # a line crossing a frame (┼ ╪) runs straight on
+                owner[k] = b
+    conn = {k for k, t in chars.items() if linkish(t) and k not in owner}
+
+    def leaves(k, d):                                       # the shape at k carries a line out toward d
+        t = chars[k]
+        if t in ARMS:
+            return d in ARMS[t]
+        if t in HEADS:
+            return d in (HEADS[t], TAIL[t])
+        return True
+
+    is_text = lambda t: (t not in (" ", "") and not linkish(t) and t not in BLOCKS)
+    def home(r, c):
+        """The smallest box whose inside holds (r, c), or None."""
+        inside = [b for b in boxes if b[0] < r < b[2] and b[1] < c < b[3]]
+        return min(inside, key=lambda b: (b[2] - b[0]) * (b[3] - b[1])) if inside else None
+    word = lambda r, x: is_text(chars.get((r, x), " "))
+
+    def label(r, c):
+        """The words around (r, c) on its row, gaps of up to two spaces allowed: a label by a line."""
+        blank = lambda x: chars.get((r, x), " ") in (" ", "")
+
+        def reach(x, d):
+            while True:
+                gap = next((g for g in (1, 2, 3) if word(r, x + g * d) and all(blank(x + i * d) for i in range(1, g))), 0)
+                if not gap:
+                    return x
+                x += gap * d
+        return [(r, x) for x in range(reach(c, -1), reach(c, 1) + 1)]
+    seen = set()
+    for k0 in sorted(conn):
+        if k0 in seen:
+            continue
+        seen.add(k0)
+        group, touched, todo = [], set(), [k0]
+        while todo:
+            k = todo.pop()
+            group.append(k)
+            for d, (dr, dc) in DIRS.items():
+                n = (k[0] + dr, k[1] + dc)
+                if not leaves(k, d):
+                    continue
+                if n in owner:
+                    touched.add(owner[n])
+                elif n in conn and n not in seen and leaves(n, OPP[d]):
+                    seen.add(n)
+                    todo.append(n)
+        ends = {b for b in touched if not any(b in nest[k] for k in touched)}   # not a box it only passes through
+        hits = len(ends & on)
+        if not (hits >= 2 or (hits and ends <= on)):
+            continue
+        bright.update(group)
+        for r, c in group:                                  # its labels: --HTTP--> , beside it, above or below
+            for dr, dc in ((0, -3), (0, -2), (0, -1), (0, 1), (0, 2), (0, 3), (-1, 0), (1, 0)):
+                k = (r + dr, c + dc)
+                if k in bright or not word(*k):
+                    continue
+                cells = label(*k)                           # in the same box as the line, and not a box's title
+                if all(x not in owner and home(*x) == home(r, c) for x in cells):
+                    bright.update(cells)
+    return {k for k, t in chars.items() if t not in (" ", "") and k not in bright} | \
+        {k for k, t in chars.items() if t == "" and (k[0], k[1] - 1) not in bright}
+
 
 
 def check_style(accent=None, font=None, width=None):
@@ -1436,8 +1690,11 @@ def _colour_css(t, color, anim):
 
 def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII diagram",
                theme="light", color=False, animate="none", accent=None, font=None, width=None,
-               interactive=False, fold=None, runs=True):
+               interactive=False, fold=None, runs=True, tokens=None, boxes=None, highlight=None, names=False):
     """cells: {(r, c): (text, width)} where line cells already hold Unicode line characters.
+
+    tokens: look tuning (check_tokens); boxes: {box name: {link, tooltip, tint}}; highlight: box names
+    to keep bright (the rest dims); names: put data-name on each box's shapes, for your own CSS/JS.
 
     Animation only ever starts from an earlier state and ends on the static drawing, so a
     renderer that ignores CSS/SMIL animation shows exactly what the self-check verified."""
@@ -1457,10 +1714,20 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     arm_hues = forest["arm_hue"] if tree_nodes else {}
     box_hue = {tuple(n["cells"][0]) + tuple(n["cells"][-1]): n["branch"] for n in tree_nodes
                if n["kind"] == "box" and n["branch"] is not None}
-    group_of = lambda r, c: (gates.get((r, c), -1), hues.get((r, c), -1))
-    ga = lambda g: (f' data-g="{g[0]}"' if g[0] != -1 else "") + (f' data-h="{g[1]}"' if g[1] != -1 else "")
+    tok = check_tokens(tokens)
+    per_box = check_boxes(boxes)
+    lit = check_highlight(highlight)
+    found = find_boxes(get, nrows, ncols, chars)
+    box_name = _box_names(get, found) if (per_box or lit or names) else {}
+    dim = _dimmed(chars, found, box_name, lit) if set(lit) & set(box_name.values()) else set()   # no match: dim nothing
+    group_of = lambda r, c: (gates.get((r, c), -1), hues.get((r, c), -1), (r, c) in dim)
+    ga = lambda g: ((f' data-g="{g[0]}"' if g[0] != -1 else "") + (f' data-h="{g[1]}"' if g[1] != -1 else "")
+                    + (' data-dim="1"' if g[2] else ""))
+    if dim:
+        gate_attr = lambda c, r: ((f' data-g="{gates[(r, c)]}"' if (r, c) in gates else "")
+                                  + (' data-dim="1"' if (r, c) in dim else ""))
     roots = {k for n in tree_nodes if n["depth"] == 0 and n["kind"] == "text" for k in n["cells"]}
-    here = [(-1, -1)]                               # the fold gate and branch colour of the cell being drawn
+    here = [(-1, -1, False)]                        # the fold gate, branch colour and dimming of the cell drawn
 
     def back(r, c, a):
         """The neighbour on side a has a line arm reaching back to (r, c)."""
@@ -1561,13 +1828,13 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                 st = st_h if a in "LR" else st_v
                 nb = (r + DIRS[a][0], c + DIRS[a][1])
                 if own[1] == -1 and ((r, c), a) in arm_hues:        # a junction's arm takes the branch it leads to
-                    here[0] = (own[0], arm_hues[((r, c), a)])
+                    here[0] = (own[0], arm_hues[((r, c), a)], own[2])
                 elif own[1] == -1 and nb in hues and len(arms) > 2:
-                    here[0] = (own[0], hues[nb])
+                    here[0] = (own[0], hues[nb], own[2])
                 else:
                     here[0] = own
                 if ((r, c), a) in arm_gates:
-                    here[0] = (arm_gates[((r, c), a)], here[0][1])
+                    here[0] = (arm_gates[((r, c), a)], here[0][1], here[0][2])
                 if a in tick:
                     if a == "D":
                         add(st, "v", cx, cy - 5, cy + 5)
@@ -1638,8 +1905,12 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
 
     # boxes: glow / shadow, then fill, then plates behind titles on the top edge
     under = []
-    boxes = find_boxes(get, nrows, ncols, chars)
+    boxes = found
     tints = box_tints(boxes) if color else {}
+    custom = {b: per_box[box_name[b]] for b in boxes if box_name.get(b) in per_box}
+    tint_key = lambda o: json.dumps(o["tint"], sort_keys=True)
+    tint_list = sorted({tint_key(o) for o in custom.values() if "tint" in o})   # each tint once: classes x0, x1, ...
+    tint_of = {b: f"x{tint_list.index(tint_key(o))}" for b, o in custom.items() if "tint" in o}
     is_text = lambda t: (t not in (" ", "") and t not in ARMS and t not in HEADS and t not in DIAG
                          and t not in BLOCKS and t not in MARKS)
     text_on: dict = {}                                     # row -> [(col, width)] of text cells: what a glow must clear
@@ -1678,10 +1949,11 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
             for off, op in SHADOW:
                 under.append(f'<rect x="{x1 + off:g}" y="{y1 + off:g}" width="{w:g}" height="{h:g}" '
                              f'rx="{rad:g}" class="shadow" fill-opacity="{op}"{tm}/>')
-        if style != "flat" or color:
-            cls = f"fill {tints[b]}" if color else "fill"
+        nm = f' data-name="{html.escape(box_name.get(b, ""))}"' if names else ""
+        if style != "flat" or color or b in tint_of:
+            cls = (f"fill {tints[b]}" if color else "fill") + (f" {tint_of[b]}" if b in tint_of else "")
             bh = f' data-h="{box_hue[b]}"' if b in box_hue else ""      # a box in a tree takes its branch's tint
-            under.append(f'<rect x="{x1:g}" y="{y1:g}" width="{w:g}" height="{h:g}" rx="{rad:g}" class="{cls}"{bh}{tm}/>')
+            under.append(f'<rect x="{x1:g}" y="{y1:g}" width="{w:g}" height="{h:g}" rx="{rad:g}" class="{cls}"{bh}{nm}{tm}/>')
             run = None
             for c in range(c1 + 1, c2 + 1):
                 t = get(r1, c)
@@ -1692,6 +1964,15 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
                     under.append(f'<rect x="{PAD + run * CW:g}" y="{PAD + r1 * CH:g}" '
                                  f'width="{(c - run) * CW:g}" height="{CH:g}" class="plate"{tm}/>')
                     run = None
+        opt = custom.get(b, {})
+        if "link" in opt or "tooltip" in opt:           # a clear shape over the box takes the click and the hover
+            tip = f"<title>{html.escape(opt['tooltip'], quote=False)}</title>" if "tooltip" in opt else ""
+            hit = (f'<rect x="{x1:g}" y="{y1:g}" width="{w:g}" height="{h:g}" rx="{rad:g}" class="a2s-link"'
+                   f'{nm}{gate_attr(c1, r1)}/>')
+            if "link" in opt:
+                under.append(f'<a href="{html.escape(opt["link"])}" target="_top">{tip}{hit}</a>')
+            else:
+                under.append(f'<g class="a2s-tip">{tip}{hit}</g>')
 
     for n in tree_nodes:                            # a tree's root and main branches sit on a tinted pill
         if n["kind"] != "text" or n["depth"] > 1 or (n["depth"] == 0 and not n["children"]):
@@ -1877,7 +2158,7 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
         tm = timing(PAD + r * CH + 0.15 * speed) + gate_attr(c, r)
         body.append('<line x1="%g" y1="%g" x2="%g" y2="%g" class="sgl shaft"%s/>' % (*sh, tm))
         body.append('<polygon points="%s" class="head"%s/>' % (" ".join(f"{x:g},{y:g}" for x, y in pts), tm))
-    key = (lambda r, c: (gate_of(r, c), (r, c) in roots)) if runs else (lambda r, c: (r, c))   # runs=False: one per cell
+    key = (lambda r, c: (gate_of(r, c), (r, c) in roots, (r, c) in dim)) if runs else (lambda r, c: (r, c))   # runs=False: one per cell
     for r, run in text_runs(texts, key):
         cls = " ".join(([f"r{r}"] if timed else []) + (["a2s-root"] if (r, run[0][0]) in roots else []))
         row_cls = f' class="{cls}"' if cls else ""        # one delay per row (a class), not per character
@@ -1891,27 +2172,41 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
     begin = "indefinite" if animate == "scroll" else f"{sweep + 0.9:.2f}s"      # scroll: the page starts them
     for pts in routes:
         length = sum(abs(bx - ax) + abs(by - ay) for (ax, ay), (bx, by) in zip(pts, pts[1:]))
-        travel = max(length / FLOW_SPEED, 0.4)
-        dur = travel + FLOW_REST
+        travel = max(length / tok.get("flow_speed", FLOW_SPEED), 0.4)
+        dur = travel + tok.get("flow_rest", FLOW_REST)
+        ends = {(int((y - PAD) // CH), int((x - PAD) // CW)) for x, y in (pts[0], pts[-1])}
+        off = ' data-dim="1"' if ends & dim else ""     # with highlight, pulses run on the bright path only
         f = travel / dur
         d = "M" + "L".join(f"{x:g} {y:g}" for x, y in pts)
-        body.append(f'<g class="pulse" opacity="0"><circle r="5.5" class="halo"/><circle r="2.6"/>'
+        body.append(f'<g class="pulse"{off} opacity="0"><circle r="5.5" class="halo"/><circle r="2.6"/>'
                     f'<animateMotion path="{d}" dur="{dur:.2f}s" begin="{begin}" repeatCount="indefinite" '
                     f'calcMode="linear" keyPoints="0;1;1" keyTimes="0;{f:.3f};1"/>'
                     f'<animate attributeName="opacity" values="0;1;1;0;0" '
                     f'keyTimes="0;{0.08 * f:.3f};{0.85 * f:.3f};{f:.3f};1" dur="{dur:.2f}s" begin="{begin}" '
                     f'repeatCount="indefinite"/></g>')
 
-    tune = lambda t: dict(t, accent=accent) if accent else t
-    pal = tune(THEMES["light" if theme == "auto" else theme])
-    css = _layout_css("timed" if timed else animate if anim else "none", font) + rows_css + _colour_css(pal, color, anim)
+    def tune(name):                                     # a theme's palette, with the tokens and accent applied
+        t = {**THEMES[name], **tok.get(name, {})}
+        return dict(t, accent=accent) if accent else t
+
+    links = any("link" in o or "tooltip" in o for o in custom.values())
+    extra = lambda t, name: _custom_css(t, name, [json.loads(k) for k in tint_list], links)
+    pal = tune("light" if theme == "auto" else theme)
+    css = (_layout_css("timed" if timed else animate if anim else "none", font, tok) + rows_css
+           + _colour_css(pal, color, anim))
     css += _branch_css(pal) if tree_nodes else ""
     if folding:
         css += FOLD_CSS + _fold_colour_css(pal)
+    css += extra(pal, "light" if theme == "auto" else theme)
+    if links:
+        css += ".a2s-link{fill:transparent;pointer-events:all;cursor:pointer}.a2s-tip .a2s-link{cursor:help}"
+    if dim:
+        css += "[data-dim]{opacity:.2}.pulse[data-dim]{display:none}"
     if theme == "auto":
-        dark = tune(THEMES["dark"])
+        dark = tune("dark")
         css += "@media (prefers-color-scheme:dark){" + _colour_css(dark, color, anim)
-        css += (_branch_css(dark) if tree_nodes else "") + (_fold_colour_css(dark) if folding else "") + "}"
+        css += (_branch_css(dark) if tree_nodes else "") + (_fold_colour_css(dark) if folding else "")
+        css += extra(dark, "dark") + "}"
     W, H = ncols * CW + 2 * PAD, nrows * CH + 2 * PAD
     ow, oh = (width, round(H * width / W, 2)) if width else (W, H)      # --width scales; the viewBox stays
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W:g} {H:g}" width="{ow:g}" '
@@ -1920,7 +2215,10 @@ def render_svg(cells, nrows, ncols, style="glow", square=False, title="ASCII dia
            f'data-generator="ascii2svg {__version__}"><title>{html.escape(title)}</title>'
            f'<style>{css}</style><rect width="100%" height="100%" fill="{pal["bg"]}" class="bg"/>'
            + "".join(body) + (fold_script(forest, fold) if folding else "") + "</svg>\n")
-    return svg, {"boxes": len(boxes), "text_cells": len(texts), "arrowheads": len(heads) + sum(k in ("tri", "dia", "tri3", "pair") for *_, k in marks),
+    asked = list(per_box) + [n for n in lit if n not in per_box]
+    unmatched = [n for n in asked if n not in set(box_name.values())]
+    return svg, {"unmatched": unmatched, "names": sorted({n for n in box_name.values() if n}),
+                 "boxes": len(boxes), "text_cells": len(texts), "arrowheads": len(heads) + sum(k in ("tri", "dia", "tri3", "pair") for *_, k in marks),
                  "flows": len(routes), "folds": sum(1 for n in forest["nodes"] if n["children"]) if forest else 0}
 
 
@@ -2995,21 +3293,8 @@ def describe(cells, nrows, ncols):
                          and t not in BLOCKS and t not in MARKS)
     boxes = sorted(find_boxes(get, nrows, ncols, chars))
     nest = _containers(boxes)                             # box -> the boxes around it
-    inner = {b: [] for b in boxes}                         # box -> every box inside it
-    for k, around in nest.items():
-        for p in around:
-            inner[p].append(k)
     ids = {b: f"b{i}" for i, b in enumerate(boxes, 1)}
     squash = lambda s: " ".join(s.split())
-
-    def row_text(r, c1, c2, skip=()):
-        out = []
-        for c in range(c1, c2 + 1):
-            t = get(r, c)
-            if t == "":
-                continue                                  # second half of a wide character
-            out.append(t if is_text(t) and (r, c) not in skip else " ")
-        return squash("".join(out))
 
     def text_run(r, c):
         """The words around (r, c) on one row, allowing single spaces between them."""
@@ -3021,11 +3306,10 @@ def describe(cells, nrows, ncols):
         return squash("".join(get(r, x) for x in range(a, b + 1)))
 
     info = {}
+    texts = _box_texts(get, boxes)                        # the same names highlight and boxes= use
     for b in boxes:
         r1, c1, r2, c2 = b
-        kids = {(r, c) for k in inner[b] for r in range(k[0], k[2] + 1) for c in range(k[1], k[3] + 1)}
-        title = row_text(r1, c1 + 1, c2 - 1)
-        text = [t for t in (row_text(r, c1 + 1, c2 - 1, kids) for r in range(r1 + 1, r2)) if t]
+        title, text = texts[b]
         parents = nest[b]
         parent = min(parents, key=lambda p: (p[2] - p[0]) * (p[3] - p[1])) if parents else None
         info[b] = {"id": ids[b], "name": title or (text[0] if text else ""), "title": title or None,
@@ -3347,6 +3631,18 @@ def build_parser():
     p.add_argument("--accent", metavar="#HEX", help="accent colour for arrows and animation (default #0969da)")
     p.add_argument("--font", metavar="FAMILY", help="font family to try first, e.g. \"JetBrains Mono\"")
     p.add_argument("--width", type=int, metavar="PX", help="scale the output to this width in pixels")
+    p.add_argument("--tokens", metavar="JSON|FILE",
+                   help="tune the look: colours, line width, font size, pulse speed, e.g. "
+                        "'{\"accent\": \"#e8590c\", \"stroke\": 1.8, \"dark\": {\"bg\": \"#000000\"}}' or a .json file; "
+                        "see --schema for every token")
+    p.add_argument("--boxes", metavar="JSON|FILE",
+                   help="per-box options by box name: link, tooltip, tint, e.g. "
+                        "'{\"API\": {\"link\": \"https://example.com/api\", \"tooltip\": \"REST, v2\"}}' (links work "
+                        "where the SVG is a page or <object>, not inside <img>)")
+    p.add_argument("--highlight", metavar="NAMES",
+                   help="keep these boxes (comma-separated names) and the lines between them bright; dim the rest")
+    p.add_argument("--names", action="store_true",
+                   help="put data-name=\"<box name>\" on each box's shapes, for your own CSS or scripts")
     p.add_argument("--describe", action="store_true",
                    help="add the diagram's structure to the report: boxes, and which box each arrow connects")
     p.add_argument("--brief", action="store_true", help="keep the JSON small: never embed the markup")
@@ -3364,6 +3660,23 @@ def build_parser():
                    help="run as an MCP server on stdin/stdout (tools: render_diagram, check_diagram)")
     p.add_argument("--version", action="version", version=f"ascii2svg {__version__}")
     return p
+
+
+def _json_option(value, flag):
+    """--tokens / --boxes: inline JSON, or the path of a .json file."""
+    if value is None:
+        return None
+    text = value
+    if not value.lstrip().startswith("{"):
+        try:
+            with open(_fs(value), encoding="utf-8") as f:
+                text = f.read()
+        except OSError as e:
+            raise ValueError(f"{flag}: cannot read {value!r} ({e.strerror}); pass JSON or a .json file") from None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"{flag}: not valid JSON ({e.msg} at line {e.lineno} col {e.colno})") from None
 
 
 def resolve_look(args):
@@ -3406,7 +3719,12 @@ def schema():
             "mcp": "ascii2svg --mcp serves tools render_diagram and check_diagram over stdio",
             "options": opts, "presets": PRESETS, "exit_codes": {str(k): v for k, v in EXIT_CODES.items()},
             "warning_codes": WARNING_CODES, "report_fields": REPORT_FIELDS,
-            "library": "ascii2svg.render(text, **options) -> (markup, report)"}
+            "tokens": {"colours": TOKEN_COLOURS, "colour_lists": TOKEN_LISTS,
+                       "numbers": {k: {"min": lo, "max": hi, "help": h} for k, (lo, hi, h) in TOKEN_NUMBERS.items()},
+                       "per_theme": "colour tokens under \"light\" or \"dark\" apply to that theme only"},
+            "box_options": BOX_OPTIONS,
+            "library": "ascii2svg.render(text, **options) -> (markup, report); "
+                       "d = ascii2svg.parse(text) once, then d.svg(**look) / d.render(**look) for each look"}
 
 
 # Where files really are. The npm package runs this module in Pyodide (CPython on WebAssembly),
@@ -3505,25 +3823,26 @@ def _jobs(args):
     return jobs
 
 
-def run_one(args, raw, notes, base=0):
-    """Render one diagram. Returns (exit_code, report, svg, static_svg_for_png, is_diagram)."""
+def _read(raw, notes=(), *, unescape=False, tab_size=4, max_rows=1000, max_cols=400, repair=False, base=0):
+    """Everything about a diagram that doesn't depend on its look: the clean-up, the grid, the repair,
+    which characters are lines, and the warnings. Drawing it (_draw) can then happen in any look."""
     notes = list(notes)
-    if args.unescape:
-        new = unescape(raw)
+    if unescape:
+        new = globals()["unescape"](raw)
         if new != raw:
             raw = new
             notes.append({"change": "unescaped \\n, \\t, \\\" and \\\\ sequences"})
-    lines, more, origin = prepare_ex(raw, args.tab_size)
+    lines, more, origin = prepare_ex(raw, tab_size)
     notes += more
     if not lines:
         raise ValueError("the diagram is empty")
     cells, nrows, ncols = build_grid(lines)
-    if nrows > args.max_rows or ncols > args.max_cols:
-        raise ValueError(f"diagram is {nrows} rows x {ncols} columns; limit is {args.max_rows} x "
-                         f"{args.max_cols} (raise with --max-rows / --max-cols)")
+    if nrows > max_rows or ncols > max_cols:
+        raise ValueError(f"diagram is {nrows} rows x {ncols} columns; limit is {max_rows} x "
+                         f"{max_cols} (raise with --max-rows / --max-cols)")
     fixes = None
-    if args.repair:
-        fixed, edits = repair(cells)
+    if repair:
+        fixed, edits = globals()["repair"](cells)
         if edits:
             cells, nrows, ncols = build_grid(grid_text(fixed).split("\n"))
         fixes = {"edits": [{"line": base + origin["line"] + e["row"], "col": origin["col"] + e["col"],
@@ -3532,7 +3851,23 @@ def run_one(args, raw, notes, base=0):
             fixes["text"] = grid_text(cells)
     drawn, info = interpret(cells, nrows, ncols)
     draw_cells = {k: ((drawn[k], w) if k in drawn else (t, w)) for k, (t, w) in cells.items()}
-    style = dict(accent=args.accent, font=args.font, width=args.width)
+    where = (base + origin["line"], origin["col"])
+    warnings = input_warnings(raw, cells, info, drawn, where) + connector_warnings(
+        draw_cells, nrows, ncols, origin=(base + origin["line"], origin["col"]))
+    for w in warnings:                                     # where to fix it in the file you were given
+        w["source_line"] = base + origin["line"] + w["row"]
+        w["source_col"] = origin["col"] + w["col"]
+    is_diagram = any(t in ARMS or t in HEADS or t in DIAG or t in BLOCKS for t, _ in draw_cells.values())
+    return {"cells": cells, "draw_cells": draw_cells, "nrows": nrows, "ncols": ncols, "info": info,
+            "notes": notes, "warnings": warnings, "fixes": fixes, "is_diagram": is_diagram, "describe": None}
+
+
+def _draw(st, args):
+    """Draw a read diagram in one look. Returns (exit_code, report, svg, static_svg_for_png, is_diagram)."""
+    cells, draw_cells, nrows, ncols = st["cells"], st["draw_cells"], st["nrows"], st["ncols"]
+    style = dict(accent=args.accent, font=args.font, width=args.width, tokens=getattr(args, "tokens", None),
+                 boxes=getattr(args, "boxes", None), highlight=getattr(args, "highlight", None),
+                 names=getattr(args, "names", False))
     svg, stats = render_svg(draw_cells, nrows, ncols, args.style, args.square, args.title,
                             args.theme, args.color, args.animate, **style,
                             interactive=args.interactive, fold=args.fold, runs=not args.portable)
@@ -3542,35 +3877,41 @@ def run_one(args, raw, notes, base=0):
         still = render_svg(draw_cells, nrows, ncols, args.style, args.square, args.title,   # one <text> per cell
                            "light" if args.theme == "auto" else args.theme, args.color, **style, runs=False)[0]
         problems += self_check(still, draw_cells, cells)
-    where = (base + origin["line"], origin["col"])
-    warnings = input_warnings(raw, cells, info, drawn, where) + connector_warnings(
-        draw_cells, nrows, ncols, origin=(base + origin["line"], origin["col"]))
-    for w in warnings:                                     # where to fix it in the file you were given
-        w["source_line"] = base + origin["line"] + w["row"]
-        w["source_col"] = origin["col"] + w["col"]
+    warnings = [dict(w) for w in st["warnings"]]
     report = {"ok": not problems, "rows": nrows, "cols": ncols, "style": args.style, "theme": args.theme,
               "color": args.color, "animate": args.animate, "html": args.html, "preset": args.preset,
               "interactive": args.interactive, "boxes": stats["boxes"], "arrowheads": stats["arrowheads"],
               "flows": stats["flows"], "folds": stats["folds"] if args.interactive else 0,
               "text_cells": stats["text_cells"], "bytes": len(svg.encode("utf-8")),
-              **info, "roundtrip": "exact" if not problems else "MISMATCH",
-              "normalized": notes, "warnings": warnings, "tips": [], "width_source": WIDTH_SOURCE,
-              "version": __version__}
+              **st["info"], "roundtrip": "exact" if not problems else "MISMATCH",
+              "normalized": [dict(n) for n in st["notes"]], "warnings": warnings, "tips": [],
+              "width_source": WIDTH_SOURCE, "version": __version__}
     if nrows > 45 and args.animate in ("draw", "flow") and not args.html:
         report["tips"].append("tall diagram: the lower part finishes drawing before the reader scrolls "
                               "to it; for a web page use --animate scroll -o NAME.html (or --preset page)")
     if args.interactive and not stats["folds"]:
         report["tips"].append("--interactive: no tree found, so nothing folds; draw branches with plain lines "
                               "(├── └── or a box's ┬ fanning out) and no arrowheads")
-    if fixes is not None:
-        report["repair"] = fixes
+    if stats.get("unmatched"):
+        report["tips"].append(f"no box is named {', '.join(repr(n) for n in stats['unmatched'])}; box names are "
+                              f"their titles (or first line of text): {', '.join(repr(n) for n in stats['names'][:12])}")
+    if st["fixes"] is not None:
+        report["repair"] = copy.deepcopy(st["fixes"])
     if args.describe:
-        report["diagram"] = describe(draw_cells, nrows, ncols)
-    is_diagram = any(t in ARMS or t in HEADS or t in DIAG or t in BLOCKS for t, _ in draw_cells.values())
+        if st["describe"] is None:
+            st["describe"] = describe(draw_cells, nrows, ncols)
+        report["diagram"] = copy.deepcopy(st["describe"])
     if problems:
         report["self_check_problems"] = problems[:50]
-        return 2, report, svg, still, is_diagram
-    return (3 if args.strict and warnings else 0), report, svg, still, is_diagram
+        return 2, report, svg, still, st["is_diagram"]
+    return (3 if args.strict and warnings else 0), report, svg, still, st["is_diagram"]
+
+
+def run_one(args, raw, notes, base=0):
+    """Render one diagram. Returns (exit_code, report, svg, static_svg_for_png, is_diagram)."""
+    st = _read(raw, notes, unescape=args.unescape, tab_size=args.tab_size, max_rows=args.max_rows,
+               max_cols=args.max_cols, repair=args.repair, base=base)
+    return _draw(st, args)
 
 
 def run(args) -> tuple[int, dict, str, str]:
@@ -3612,20 +3953,10 @@ def _defaults():
     return dict(vars(build_parser().parse_args([])))
 
 
-def render(text: str, *, preset: str | None = None, style: str | None = None, square: bool | None = None,
-           theme: str | None = None, color: bool | None = None, animate: str | None = None,
-           html: bool | None = None, accent: str | None = None, font: str | None = None,
-           width: int | None = None, title: str = "ASCII diagram", tab_size: int = 4,
-           describe: bool = False, unescape: bool = False, strict: bool = False,
-           repair: bool = False, interactive: bool | None = None, fold: int | None = None,
-           portable: bool = False) -> tuple[str, dict]:
-    """Render a diagram. Returns (markup, report): an SVG, or a web page with html=True.
-
-    Options match the CLI; unset look options come from `preset`, then the defaults
-    (glow, light, no colour, no animation). The report is what the CLI prints with --json:
-    check report["status"] ("ok" / "warnings"; "self_check_failed" means do not use the output).
-    Raises ValueError for empty or oversized input and for invalid options.
-    """
+def _look(*, preset=None, style=None, square=None, theme=None, color=None, animate=None, html=None,
+          accent=None, font=None, width=None, title="ASCII diagram", describe=False, strict=False,
+          interactive=None, fold=None, portable=False, tokens=None, boxes=None, highlight=None, names=False):
+    """Validate the look options -> the settings _draw uses. Raises ValueError."""
     args = argparse.Namespace(**_defaults())
     looks = {"preset": preset, "style": style, "square": square, "theme": theme, "color": color,
              "animate": animate, "html": html, "interactive": interactive}
@@ -3639,14 +3970,106 @@ def render(text: str, *, preset: str | None = None, style: str | None = None, sq
             raise ValueError(f"{name} must be one of {', '.join(allowed[name])}")
         setattr(args, name, value)
     check_style(accent, font, width)
-    args.accent, args.font, args.width = accent, font, width
-    args.text, args.title, args.tab_size = text, title, tab_size
-    args.describe, args.unescape, args.strict, args.repair = describe, unescape, strict, repair
+    check_tokens(tokens), check_boxes(boxes), check_highlight(highlight)
+    args.accent, args.font, args.width, args.title = accent, font, width, title
+    args.tokens, args.boxes, args.highlight, args.names = tokens, boxes, highlight, bool(names)
+    args.describe, args.strict = describe, strict
     resolve_look(args)
     if args.animate == "scroll" and not args.html:
         raise ValueError("animate='scroll' needs html=True (an SVG shown as an image can't see the page scroll)")
-    code, report, svg, _, _ = run_one(args, text, [])
-    return (to_html(svg, args.title, args.theme) if args.html else svg), _finish(report, code)
+    return args
+
+
+class Diagram:
+    """A diagram read once, ready to draw in any look: ascii2svg.parse(text).
+
+    Reading (clean-up, repair, finding the lines and the warnings) is about half the work of a render;
+    each look after the first pays only for the drawing and its 1:1 self-check.
+
+        d = ascii2svg.parse(text, repair=True)
+        d.warnings, d.repair, d.describe()
+        svg = d.svg(preset="readme", highlight=["API", "DB"])
+        markup, report = d.render(theme="dark")     # exactly what ascii2svg.render() returns
+
+    In Jupyter, a Diagram shows itself as its SVG."""
+
+    def __init__(self, state, read):
+        self._st, self._read = state, read
+
+    rows = property(lambda self: self._st["nrows"])
+    cols = property(lambda self: self._st["ncols"])
+    warnings = property(lambda self: [dict(w) for w in self._st["warnings"]],
+                        doc="Warnings about the text itself (they don't depend on the look).")
+    repair = property(lambda self: copy.deepcopy(self._st["fixes"]),
+                      doc="With repair=True: {edits, text?}; None otherwise.")
+    text = property(lambda self: grid_text(self._st["cells"]), doc="The diagram as it is drawn (after any repair).")
+
+    def render(self, **look):
+        """(markup, report), as ascii2svg.render(text, **look) would return them."""
+        args = _look(**look)
+        code, report, svg, _, _ = _draw(self._st, args)
+        return (to_html(svg, args.title, args.theme) if args.html else svg), _finish(report, code)
+
+    def svg(self, **look):
+        """The SVG in this look (html is ignored)."""
+        return self.render(**{**look, "html": False})[0]
+
+    def html(self, **look):
+        """A standalone web page in this look."""
+        return self.render(**{**look, "html": True})[0]
+
+    def report(self, **look):
+        """The JSON report for this look, without keeping the markup."""
+        return self.render(**look)[1]
+
+    def describe(self):
+        """Boxes (name, title, text, position, parent) and edges: what --describe reports."""
+        if self._st["describe"] is None:
+            self._st["describe"] = describe(self._st["draw_cells"], self.rows, self.cols)
+        return copy.deepcopy(self._st["describe"])
+
+    def _repr_svg_(self):                                   # Jupyter and IPython draw it inline
+        return self.svg()
+
+    def __repr__(self):
+        return f"<ascii2svg.Diagram {self.rows}x{self.cols}, {len(self._st['warnings'])} warnings>"
+
+
+def parse(text: str, *, tab_size: int = 4, unescape: bool = False, repair: bool = False,
+          max_rows: int = 1000, max_cols: int = 400) -> Diagram:
+    """Read a diagram once; draw it in as many looks as you like (see Diagram).
+    Raises ValueError for empty or oversized input."""
+    if not isinstance(text, str):
+        raise TypeError("parse(text): text must be a string")
+    st = _read(text, unescape=unescape, tab_size=tab_size, max_rows=max_rows, max_cols=max_cols, repair=repair)
+    return Diagram(st, {"tab_size": tab_size, "unescape": unescape, "repair": repair})
+
+
+def render(text: str, *, preset: str | None = None, style: str | None = None, square: bool | None = None,
+           theme: str | None = None, color: bool | None = None, animate: str | None = None,
+           html: bool | None = None, accent: str | None = None, font: str | None = None,
+           width: int | None = None, title: str = "ASCII diagram", tab_size: int = 4,
+           describe: bool = False, unescape: bool = False, strict: bool = False,
+           repair: bool = False, interactive: bool | None = None, fold: int | None = None,
+           portable: bool = False, tokens: dict | None = None, boxes: dict | None = None,
+           highlight: list | str | None = None, names: bool = False) -> tuple[str, dict]:
+    """Render a diagram. Returns (markup, report): an SVG, or a web page with html=True.
+
+    Options match the CLI; unset look options come from `preset`, then the defaults
+    (glow, light, no colour, no animation). The report is what the CLI prints with --json:
+    check report["status"] ("ok" / "warnings"; "self_check_failed" means do not use the output).
+    tokens tune the look ({"accent": "#e8590c", "stroke": 1.8, "dark": {"bg": "#000000"}, ...});
+    boxes gives a box, by name, a link, tooltip or tint; highlight keeps the named boxes and the
+    lines between them bright and dims the rest; names puts data-name on each box for your own CSS.
+    To draw one diagram in several looks, parse() it once instead.
+    Raises ValueError for empty or oversized input and for invalid options.
+    """
+    look = dict(preset=preset, style=style, square=square, theme=theme, color=color, animate=animate, html=html,
+                accent=accent, font=font, width=width, title=title, describe=describe, strict=strict,
+                interactive=interactive, fold=fold, portable=portable, tokens=tokens, boxes=boxes,
+                highlight=highlight, names=names)
+    _look(**look)                                           # a bad option is reported before the text is read
+    return parse(text, tab_size=tab_size, unescape=unescape, repair=repair).render(**look)
 
 
 # ─── MCP server (--mcp) ──────────────────────────────────────────────────────
@@ -3688,6 +4111,15 @@ MCP_TOOLS = [
          "fold": {"type": "integer", "description": "With interactive: start with nodes at this depth folded"},
          "portable": {"type": "boolean", "description": "One <text> per character, for design tools such as "
                                                         "Inkscape or Figma (browsers don't need it)"},
+         "highlight": {"type": "array", "items": {"type": "string"},
+                       "description": "Box names to keep bright, with the lines between them; the rest dims. "
+                                      "Names are box titles, as check_diagram reports them"},
+         "boxes": {"type": "object", "description": "Per box name: {link, tooltip, tint}. Links work on a web page "
+                                                    "or <object>, not in <img>"},
+         "tokens": {"type": "object", "description": "Look tuning: ink, bg, accent, neutral, hover, glow (#hex), "
+                                                     "hues, branch ([[#hex, #hex], ...]), stroke, font_size, "
+                                                     "flow_speed, flow_rest; colours under light/dark apply to one theme"},
+         "names": {"type": "boolean", "description": "Put data-name on each box, for the page's own CSS or scripts"},
      }}},
     {"name": "check_diagram",
      "description": "Validate an ASCII/Unicode box diagram without writing anything. Returns 'status', "
@@ -3715,7 +4147,8 @@ def _mcp_call(name, a):
             return report
         path = a.get("output_path")
         kw = {k: a[k] for k in ("preset", "style", "square", "theme", "color", "animate", "accent", "font",
-                                "width", "title", "describe", "repair", "interactive", "fold", "portable")
+                                "width", "title", "describe", "repair", "interactive", "fold", "portable",
+                                "highlight", "boxes", "tokens", "names")
               if a.get(k) is not None}
         html_out = bool(path and path.lower().endswith((".html", ".htm")))
         if html_out or kw.get("preset") == "page" or kw.get("animate") == "scroll":
@@ -3850,6 +4283,8 @@ def main(argv=None) -> int:
     try:
         args = build_parser().parse_args(argv)
         check_style(args.accent, args.font, args.width)
+        args.tokens, args.boxes = _json_option(args.tokens, "--tokens"), _json_option(args.boxes, "--boxes")
+        check_tokens(args.tokens), check_boxes(args.boxes), check_highlight(args.highlight)
     except (UsageError, ValueError) as e:
         return fail(1, "usage_error", str(e), *_usage_hint(str(e)))
     if args.schema:

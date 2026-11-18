@@ -28,6 +28,45 @@ export interface RenderOptions {
   fold?: number;
   /** One <text> per character, for design tools (Inkscape, Figma); browsers don't need it. */
   portable?: boolean;
+  /** Tune the look. Colour tokens at the top apply to both themes; under `light` / `dark` to one. */
+  tokens?: Tokens;
+  /** Per box, by name (its title, as `describe` reports it): a link, a tooltip or a tint. */
+  boxes?: Record<string, BoxOptions>;
+  /** Keep these boxes and the lines between them bright; dim the rest. A list, or names separated by commas. */
+  highlight?: string[] | string;
+  /** Put data-name="<box name>" on each box's shapes, for your own CSS or scripts. */
+  names?: boolean;
+}
+
+/** A hex colour such as "#0969da". */
+export type Hex = string;
+
+export interface Palette {
+  ink?: Hex; bg?: Hex; accent?: Hex; neutral?: Hex; hover?: Hex; glow?: Hex;
+  /** Box tints with color: [container, leaf] pairs, 1 to 6, repeated to fill 6. */
+  hues?: [Hex, Hex][];
+  /** Tree branch colours with color: [line, label tint] pairs, 1 to 6. */
+  branch?: [Hex, Hex][];
+}
+
+export interface Tokens extends Palette {
+  light?: Palette;
+  dark?: Palette;
+  /** Line width in px, 0.5 to 4 (default 1.4). */
+  stroke?: number;
+  /** Text size in px, 8 to 24 (default 14). Characters stay in their cells. */
+  font_size?: number;
+  /** Pulse speed in px/s, 20 to 2000 (default 150). */
+  flow_speed?: number;
+  /** Pause between pulses in seconds, 0 to 10 (default 0.9). */
+  flow_rest?: number;
+}
+
+export interface BoxOptions {
+  /** http(s), mailto or a relative URL. Works where the SVG is a page or <object>, not inside <img>. */
+  link?: string;
+  tooltip?: string;
+  tint?: Hex | { light?: Hex; dark?: Hex };
 }
 
 export interface Warning {
